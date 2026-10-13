@@ -2,7 +2,7 @@
 
 > This file is the current truth, not a transcript (spec §50). Update it on every substantive code, config, schema, deployment or behaviour change. History belongs in `CHANGELOG.md`.
 
-Last updated: 2026-10-12 by frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
+Last updated: 2026-10-12 by pm-agent (Phase 4.2 traceability). Previous: frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
 
 ## Current release
 | | |
@@ -88,16 +88,17 @@ Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Qu
 ## Validation
 | Gate | Status |
 |---|---|
-| 1.3 Schema review | Reviews 1 to 4: **REJECTED**. Fixes are applied; review 5 is pending (the iteration cap for the REPLACE item). |
+| 1.3 Schema review | Reviews 1 to 4 REJECTED; gate closed by the orchestrator on 2026-10-12 under the severity policy (no Blocker/High open). `SCHEMA_REVIEW_5` was not run; QA-4-1/2 were verified against real code at Gate 3.2. |
 | 2.1 Backend tests | 118 passed after Phase 4.1 (107 before) (Python 3.12 and 3.10, macOS). The scanner finds 0 violations in the whole `TAM_Command_Center/` tree. |
 | 2.2 / 2.3 Frontend tests | 118 Vitest tests pass; `tsc --noEmit` clean; `vite build` succeeds. Includes keyboard matrices for `Select` and `AccountPicker`, the Today parity test against the reference SQL, rebase tests, adapter tests, App integration tests and repository guards (no raw colours outside `tokens.css`, `fetch` only in `src/data`, no native select). Verified in the Browser pane at 1440, 1024, 900 and 768 px with no console errors and no page-level horizontal scroll from 768 px. |
-| 3.2 QA integration | not run (verify the QA-4-1/2/3 scanner items here, per `docs/qa/OPEN_ITEMS.md`) |
-| 4.2 Traceability | not run |
+| 3.2 QA integration | `docs/qa/ERROR_LOG_1.md`: **PASS (0 open Blocker/High)**. Phase 4.1 fixes (QA-E1-1/2/3/4/7/8) await a formal QA re-check; PM re-ran all suites (239 pytest, 118 vitest) in 4.2. |
+| 4.2 Traceability | `docs/05_TRACEABILITY.md`: **COMPLETE** (PASS 111, FAIL 0, MISSING 0, DEFERRED 2: US-12.2 AC1/AC2, Phase 4.3). Verified by PM against the live DEV app on a scratch DB. |
 | 4.3 Deployment smoke test | not run |
 | Windows workstation | **untested** |
 | Bloomberg / BLPAPI / TEAM | **untested and out of scope this run** |
 
 ## Next steps
+-1. Phase 4.3: deployment-agent builds the release archive; the smoke test must prove no `*.db`/`dev_data/` in the zip (US-12.2 AC1).
 0. QA re-check of QA-E1-2/3/4/7/8 (Phase 4.1 fixes) at the next gate.
 1. 1.3 QA schema re-review (`docs/qa/SCHEMA_REVIEW_5.md`).
 2. Phase 3.1: build both trees and commit a checkpoint, then 3.2 QA integration.

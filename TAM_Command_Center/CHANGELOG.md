@@ -5,6 +5,7 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 ## [Unreleased] - 0.1.0-dev
 
 ### Added
+- 2026-10-12, pm-agent (Phase 4.2): `docs/05_TRACEABILITY.md`, the requirements traceability matrix. 113 rows (mandatory checks, E1-E12 acceptance criteria, PM decisions) plus the section 52 summary: PASS 111, FAIL 0, MISSING 0, DEFERRED 2 (US-12.2, Phase 4.3). Verified by re-running `pytest server db tests` (239 passed), `tsc` and `vitest` (118 passed), and by driving the live DEV app on a scratch DB. Five Low observations (T-1 to T-5) are listed there. `TAM_PROJECT_STATE.md` validation table brought up to date.
 - 2026-10-12, pm-agent (Phase 1.1): `docs/01_PM_SPEC.md`, covering epics E1-E12, user stories traced to spec sections, the Today ranking rules, screen layouts, component inventory, API contract list, task board T-01 to T-50, and the out-of-scope list for run 1 (spec phases 1-2).
 - 2026-10-12, pm-agent (Phase 1.1): `docs/02_DESIGN_GUIDELINES.md`, covering colour, type, spacing and motion tokens with checked contrast ratios, button states, the custom Select and AccountPicker keyboard contracts, tables, the note vs system-event treatment, overlays and screen states.
 - 2026-10-12, pm-agent: skeletons of `TAM_PROJECT_STATE.md` and `CHANGELOG.md`.
