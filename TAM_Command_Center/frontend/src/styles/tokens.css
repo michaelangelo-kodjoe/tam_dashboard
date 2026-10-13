@@ -1,0 +1,96 @@
+/* Design tokens (docs/02_DESIGN_GUIDELINES.md §1). The ONLY file that contains raw colour values. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --bg: #0b0d10;
+  --surface-1: #11151b;
+  --surface-2: #171c24;
+  --surface-3: #1f2630;
+  --border: #2b3441;
+  --border-strong: #3d4a5c;
+  --border-control: #647186;
+
+  /* text */
+  --text: #e6e9ee;
+  --muted: #9aa3b0;
+  --subtle: #6b7482;
+
+  /* accent */
+  --accent: #fa9a28;
+  --accent-hover: #ffb052;
+  --accent-press: #db8318;
+  --on-accent: #0b0d10;
+  --accent-tint: rgba(250, 154, 40, 0.12);
+
+  /* status */
+  --info: #5aaeff;
+  --success: #3fc77f;
+  --warning: #e8c547;
+  --danger: #ff5c5c;
+  --neutral: #9aa3b0;
+  --info-tint: rgba(90, 174, 255, 0.12);
+  --success-tint: rgba(63, 199, 127, 0.12);
+  --warning-tint: rgba(232, 197, 71, 0.12);
+  --danger-tint: rgba(255, 92, 92, 0.12);
+  --neutral-tint: rgba(154, 163, 176, 0.12);
+
+  --focus: #7cc4ff;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --hover-row: rgba(255, 255, 255, 0.03);
+
+  /* type */
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, 'SF Mono', monospace;
+  --fs-label: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --lh-label: 16px;
+  --lh-sm: 16px;
+  --lh-base: 20px;
+  --lh-md: 20px;
+  --lh-lg: 24px;
+  --lh-xl: 28px;
+
+  /* spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* radius / elevation / motion */
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --dur: 120ms;
+  --ease: ease-out;
+
+  /* layout */
+  --topbar-h: 48px;
+  --rail-w: 208px;
+  --gutter: 24px;
+  --ctrl-h: 32px;
+  --ctrl-h-sm: 28px;
+  --row-h: 32px;
+  --row-h-comfy: 40px;
+  --drawer-w: 480px;
+  --context-w: 320px;
+  --today-side-w: 360px;
+}
+
+@media (max-width: 1279px) {
+  :root { --rail-w: 56px; }
+}
+@media (max-width: 1023px) {
+  :root { --gutter: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur: 0ms; }
+}

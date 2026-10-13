@@ -2,12 +2,12 @@
 
 > This file is the current truth, not a transcript (spec §50). Update it on every substantive code, config, schema, deployment or behaviour change. History belongs in `CHANGELOG.md`.
 
-Last updated: 2026-10-12 by data-architect-agent (Phase 1.2, after QA review 4: scanner only). Previous update: pm-agent (D-11 revised; D-23 to D-25 added; Q-1 to Q-5 confirmed).
+Last updated: 2026-10-12 by frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
 
 ## Current release
 | | |
 |---|---|
-| App version | `0.1.0-dev` (not yet built) |
+| App version | `0.1.0-dev` (frontend and backend built separately; not yet assembled or released) |
 | Channel | dev |
 | Schema version | 1, built in `db/schema.sql` and `db/migrations/0001_initial.sql`. Unreleased. Revised for QA reviews 1 to 4; awaiting `SCHEMA_REVIEW_5`. |
 | Production status | **Not production-ready.** Nothing has been validated on the target Bloomberg Windows workstation (spec §56). |
@@ -27,7 +27,7 @@ Last updated: 2026-10-12 by data-architect-agent (Phase 1.2, after QA review 4: 
 | DEV routes (`/api/dev/*`) | registered | absent |
 | A dev-channel build in PROD mode | n/a | refuses to start |
 
-Status: designed, not implemented.
+Status: **implemented and tested in `server/`** (`server/config.py`, `locking.py`, `runtime.py`). A dev-channel build (`VERSION.txt` says `channel=dev`; a tree with no `VERSION.txt` counts as dev) exits 3 with a clear message unless `TAM_DEV_MODE=1`. A prod-channel build ignores and logs `TAM_DEV_MODE` / `TAM_BAMS_TEST_MODE`. `/api/dev/*` is not registered in PROD and `/openapi.json` is DEV only. A second process on the same DB exits 2 naming the holder's PID and port. A brand-new DEV DB is auto-seeded with the mock data (`TAM_DEV_SEED=0` disables). Untested on Windows (`msvcrt.locking` path and `%LOCALAPPDATA%` are unexercised).
 
 ## Schema
 Built in Phase 1.2, then revised after QA `SCHEMA_REVIEW_1` to `_4` (all REJECTED). PM decisions D-23 and D-24 are implemented in the Today query. The schema has all 16 tables from spec §33, 19 indexes and 51 triggers. The triggers cover:
@@ -57,21 +57,39 @@ Every finding has a disposition in `docs/03_DATA_MODEL.md` §13 to §16. **Await
 | `docs/02_DESIGN_GUIDELINES.md` | Tokens and component rules | present |
 | `docs/03_DATA_MODEL.md` | Data model | present (1.2) |
 | `TAM_Command_Center/db/` | `schema.sql`, `migrations/0001_initial.sql`, `migrate.py` (reference runner and online backup), `queries/*.sql` (reference Today, Activity, Recent and Summary SQL), `seed_mock.py`, `mock_data.json`, `tests/test_db_contract.py` | present (1.2) |
-| `TAM_Command_Center/server/` | FastAPI backend | pending (2.1) |
-| `TAM_Command_Center/frontend/` | React source | pending (2.2) |
-| `TAM_Command_Center/web/` | Compiled frontend | pending (4.1) |
+| `TAM_Command_Center/server/` | FastAPI backend: `config`, `locking`, `logsetup`, `dbkit` (the only DB opener), `backups`, `audit`, `schemas`, `reads` + `infra` + `today` (read repository), `services` (writes and rules), `app` (routes, thin), `runtime`. Run: `python -m server` from `TAM_Command_Center/`. Tests: `pytest server` (107). Deps: `server/requirements.txt`. | present (2.1) |
+| `docs/04_API_CONTRACT.md` | Routes, payloads, error shapes, Today queue item shape | present (frozen for run 1) |
+| `TAM_Command_Center/VERSION.txt` | `version=0.1.0-dev`, `channel=dev`. Deployment overwrites it with `channel=prod` in the release. | present |
+| `TAM_Command_Center/frontend/` | React + TypeScript + Vite source. `src/data/` is the only data boundary: `DataSource` interface, `mock/` (`MockDataSource`, `rebase.ts`, `today.ts`, `derive.ts`) and `ApiDataSource.ts` (aligned to `docs/04_API_CONTRACT.md`). `src/components/ui` is the design system, `src/components/editors` the drawers and Quick Capture, `src/pages` the screens, `src/styles/tokens.css` the only file with raw colours. Commands: `npm run dev`, `npm test`, `npm run build`, `npm run build:api`. | present (2.2, 2.3) |
+| `TAM_Command_Center/web/` | Build output of `frontend/` (`npm run build` writes here; the backend serves it). The default build still selects the mock adapter and copies `mock_data.json` into `web/`. The release build for Phase 4.1 is `npm run build:api` (no mock file). | present (dev build) |
 
 ## Completed behaviour
-Phase 1.1 planning is complete. Phase 1.2 database layer is done: schema v1, the migration runner contract (pre-migration online backup, no-op rerun), a deterministic relative-date mock seed that covers every Today tier, and reference queries. Nothing has been built yet beyond the DB layer.
+**Phase 2.1 backend (2026-10-12):** all PM §6 routes are implemented per `docs/04_API_CONTRACT.md`: health, state, today, activity, tasks, infrastructure, settings, logs, client/contact/task/note CRUD, backups, DEV reseed. Later-phase routes return 501. It reuses `db/migrate.py` and executes `db/queries/*.sql` unmodified (the Today ranking is not reimplemented). Contracts in force:
+- loopback only (Host and Origin guards, strict DEV-only CORS)
+- `channel` is required on every DB open (AST test)
+- no REPLACE (`sql_safety_scan.py` exits 0 on the whole tree)
+- `expected_row_version` mismatch returns 409 with an explicit `row_version + 1` bump
+- data and audit rows share one transaction
+- an online-API `pre-delete` safety backup runs before every delete, and a backup failure aborts the delete
+- structured errors
+- browser-disconnect errors are one debug line with no traceback
+
+Verification: 107 pytest tests pass on Python 3.12 and 3.10; real server runs checked. See the changelog entry for details.
+
+**Phases 2.2 and 2.3 frontend (2026-10-12):** every screen in `docs/01_PM_SPEC.md` §4 is built: shell with nav rail and top bar (DEV and Mock data tags, clock), Today (tiered queue, Upcoming, Recently changed, Account load), Accounts directory, Account Workspace (Overview, Tasks, Activity, Infrastructure, Contacts and the context rail), global Tasks page, Settings (general, runtime, backups, log), placeholder pages for Operations, BAMS and the ChatGPT Bridge, a component sandbox at `/sandbox`, Quick Capture (`N` or `+ Capture`), and the account jump (`Ctrl+K`). The design system is custom CSS on tokens, with a custom `Select` (WAI-ARIA select-only combobox), an `AccountPicker` (editable combobox), segmented control, tabs, data table, dialog and drawer (focus trap, Escape, focus return, dirty guard), toasts and tooltips. Edits send `expected_row_version`; a 409 `stale_write` shows a Reload / Overwrite banner. The app talks to data only through `DataSource`. `MockDataSource` loads `db/mock_data.json`, applies the rebase rule and the frozen BAMS clock, ports the Today ranking (including D-23 and D-24) and implements CRUD, audit, validation, side effects (D-07, D-08), safety-backup records and activity in memory. A parity test proves the TypeScript ranking matches `db/queries/today_queue.sql` row for row on three dates. `ApiDataSource` was exercised against the live DEV backend (read and write paths, primary switch, D-23, stale write and overwrite). Adapter selection: `?data=mock|api` in the URL, `VITE_DATA_SOURCE`, then `DEFAULT_SOURCE` in `src/data/index.ts`. Known gaps are listed in the changelog.
+
+Phase 1.1 planning is complete. Phase 1.2 database layer is done: schema v1, the migration runner contract (pre-migration online backup, no-op rerun), a deterministic relative-date mock seed that covers every Today tier, and reference queries. 
 
 ## Current work item
-Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Quick Capture). Next step: **Phase 1.3, the QA schema gate** (T-05) on `db/` and `docs/03_DATA_MODEL.md`.
+Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Quick Capture). Backend 2.1 (T-10 to T-13) and frontend 2.2/2.3 (T-20 to T-23) are done. Next: Phase 3.1 checkpoint and 3.2 QA integration. The Phase 1.3 schema re-review (`SCHEMA_REVIEW_5`) is still pending.
 
 ## Validation
 | Gate | Status |
 |---|---|
 | 1.3 Schema review | Reviews 1 to 4: **REJECTED**. Fixes are applied; review 5 is pending (the iteration cap for the REPLACE item). |
-| 3.2 QA integration | not run |
+| 2.1 Backend tests | 107 passed (Python 3.12 and 3.10, macOS). The scanner finds 0 violations in the whole `TAM_Command_Center/` tree. |
+| 2.2 / 2.3 Frontend tests | 113 Vitest tests pass; `tsc --noEmit` clean; `vite build` succeeds. Includes keyboard matrices for `Select` and `AccountPicker`, the Today parity test against the reference SQL, rebase tests, adapter tests, App integration tests and repository guards (no raw colours outside `tokens.css`, `fetch` only in `src/data`, no native select). Verified in the Browser pane at 1440, 1024, 900 and 768 px with no console errors and no page-level horizontal scroll from 768 px. |
+| 3.2 QA integration | not run (verify the QA-4-1/2/3 scanner items here, per `docs/qa/OPEN_ITEMS.md`) |
 | 4.2 Traceability | not run |
 | 4.3 Deployment smoke test | not run |
 | Windows workstation | **untested** |
@@ -79,9 +97,9 @@ Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Qu
 
 ## Next steps
 1. 1.3 QA schema re-review (`docs/qa/SCHEMA_REVIEW_5.md`).
-2. Backend and `MockDataSource` must mirror the D-23 and D-24 predicates from `db/queries/today_queue.sql`. The PM items D-11, QA-1-12a and QA-1-12b are resolved.
-3. Re-verify the DB layer on the Windows workstation's Python/SQLite (untested there).
-3. 2.1 backend and 2.2 frontend, in parallel.
+2. Phase 3.1: build both trees and commit a checkpoint, then 3.2 QA integration.
+3. Phase 4.1: serve `web/` from the backend (already supported), switch `DEFAULT_SOURCE` in `src/data/index.ts` to `api` (or build with `npm run build:api`) and re-run QA against the live API. `docs/qa/API_CHANGE_REQUEST.md` holds four additive, non-blocking requests (FE-AC-1 to FE-AC-4).
+4. Re-verify the DB layer, the backend and the frontend on the Windows workstation (untested there).
 
 ## User decisions
 None open. On 2026-10-12 the user confirmed Q-1 to Q-5 (the defaults), which made D-01, D-04, D-07, D-08, D-12 and D-22 in `docs/01_PM_SPEC.md` §0 final.

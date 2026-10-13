@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tam-frontend-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "TAM_Command_Center/frontend", "run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "tam-frontend-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "TAM_Command_Center/frontend", "run", "preview"],
+      "port": 4173
+    }
+  ]
+}

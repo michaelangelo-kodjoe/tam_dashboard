@@ -16,6 +16,40 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
   - `db/tests/test_db_contract.py`: 22 tests.
   - `docs/03_DATA_MODEL.md`.
 
+- 2026-10-12, backend-dev-agent (Phase 2.1, T-10 to T-13):
+  - **API contract:** `docs/04_API_CONTRACT.md` published first and frozen: routes, payloads, error codes, Today queue item shape.
+  - **`server/` (FastAPI, loopback only):**
+    - DEV/PROD modes, ports 8766/8765 and a build-channel guard.
+    - Per-DB single-instance lock.
+    - Rotating file logging. Browser-disconnect errors are logged as one debug line with no traceback.
+    - Migration on start through `db/migrate.py` with a pre-migration online backup.
+    - A new DEV DB is auto-seeded with the mock data.
+  - **Routes:**
+    - `/api/health`, `/api/state`, `/api/today`, `/api/client/{id}/activity` (keyset pagination), `/api/tasks`, `/api/client/{id}/infrastructure`, `/api/settings[/save]` and `/api/logs/recent`.
+    - Client, contact, task and note CRUD, including task archive.
+    - `/api/data/backup[s]`.
+    - DEV-only `/api/dev/reseed`.
+    - 501 stubs for operations, bams, export, import, data/reset, restore, context and chat.
+  - **Rules implemented:** D-07, D-08, D-10, D-11, D-12, D-22, D-23 and D-24 (the last two through the unmodified `today_queue.sql`) and D-25.
+  - **Tests:** `server/tests/` has 107 tests (`test_startup.py`, `test_writes.py`, `test_today.py`).
+
+- 2026-10-12, frontend-dev-agent (Phases 2.2 and 2.3, T-20 to T-23): `frontend/` (React 18, TypeScript, Vite, `lucide-react`, `react-router-dom`; custom CSS only) with build output in `web/`.
+  - **Design system:** `src/styles/tokens.css` (the only file with raw colours), buttons with every state, custom `Select` and `AccountPicker` combobox components, segmented control, tabs, sortable `DataTable` with sticky header and `aria-sort`, `Dialog` and `Drawer` (focus trap, Escape, focus return, scroll lock, "Discard changes?" guard), toasts, tooltips, badges, banners, skeleton rows and `RichText` (the single plain-text render path, D-16). A sandbox page at `/sandbox` renders every button state.
+  - **Screens:** Today, Accounts, Account Workspace (Overview, Tasks, Activity, Infrastructure, Contacts, context rail, collapsible "Account brief" below 1100 px), global Tasks, Settings (general, runtime, backups, recent log), Operations/BAMS/Bridge placeholders, Quick Capture (Task, Client Follow-Up, Meeting/Call/General Note), account jump (`Ctrl+K`) and the `N` shortcut. Editors open from the URL (`?task=`, `?note=`, `?contact=`, `?account=`) so Back closes them and deep links work.
+  - **Data layer:** one `DataSource` interface (`src/data/DataSource.ts`). `MockDataSource` (loads `db/mock_data.json` via `public/`, rebase rule with the exact BAMS offset and the frozen mock clock, Today ranking port with D-23 and D-24, CRUD, audit rows, D-07, D-08, `expected_row_version`, safety-backup records). `ApiDataSource` maps `docs/04_API_CONTRACT.md` to the domain types. A store (`DataProvider` + `useQuery`) refetches on every mutation, keeps earlier data when a refresh fails and flags it stale.
+  - **Tests:** 113 Vitest tests (Select and AccountPicker keyboard matrices, Today parity with `db/queries/today_queue.sql` on three dates, rebase rules, mock CRUD and rules, adapter mapping, App integration for every in-scope [§52] UI flow, repository guards).
+  - Scripts: `npm run dev|build|build:api|test|typecheck`; `scripts/gen_today_parity.py` regenerates the parity fixtures from the reference SQL; `.claude/launch.json` defines the dev and preview servers.
+  - `docs/qa/API_CHANGE_REQUEST.md`: four additive, non-blocking requests (FE-AC-1 to FE-AC-4).
+
+### Known gaps and deviations (frontend, 2026-10-12)
+- `Select`: Escape on a **closed** select is not consumed (the guideline says it is a no-op that does not bubble), so an enclosing dialog or drawer still closes. Escape on an open select is consumed as specified.
+- At 1440 px the account Tasks table (8 columns plus actions, beside the 320 px context rail) scrolls horizontally inside its container. This is allowed by spec §44 but is not ideal.
+- `?note=<id>` deep links find the note by paging the Activity timeline (see FE-AC-1).
+- The default build is the mock build: `web/mock_data.json` is copied into `web/`. Use `npm run build:api` for any release build.
+- `ApiDataSource` was exercised by hand against the live DEV backend (Python 3.12) but there is no automated end-to-end suite yet (QA 3.2). The `?data=api` URL switch is lost on a full page reload.
+- Not tested on Windows or on the Bloomberg workstation. Contrast ratios come from the token table in `02_DESIGN_GUIDELINES.md`; no automated contrast or axe scan was run.
+- Recharts is not installed (D-19: no charts this run).
+
 ### Decisions (Phase 1.2)
 - The PM's default answers to Q-1 to Q-5 are applied as recorded (see `docs/03_DATA_MODEL.md` §1).
 - `audit_events.object_label` was added so Activity sentences survive deletes.
