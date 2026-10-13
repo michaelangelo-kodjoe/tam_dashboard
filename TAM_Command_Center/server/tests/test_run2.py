@@ -404,3 +404,33 @@ def test_tiles_on_seed_and_state_unchanged(seeded):
                 seen_null += 1
     assert seen_spark > 0 and seen_null > 0
     assert all("server_tiles" not in v for v in state["infrastructure"].values())
+
+
+# ------------------------------------------------------------------ auto-seed / reseed equal the CLI seed
+def _cli_seeded_progress(tmp_path, today):
+    import json
+    import sqlite3 as _sq
+    import seed_mock
+    from server.dbkit import load_query
+    path = tmp_path / "cli.db"
+    conn = _sq.connect(path, isolation_level=None)
+    conn.row_factory = _sq.Row
+    seed_mock.load(conn, json.loads(seed_mock.MOCK_JSON.read_text(encoding="utf-8")), today)
+    row = dict(conn.execute(load_query("day_progress.sql"), progress_params(today)).fetchone())
+    conn.close()
+    return row
+
+
+def test_auto_seeded_dev_db_progress_equals_cli_seed(seeded, tmp_path):
+    p = seeded.get("/api/today").json()["progress"]
+    assert p == _cli_seeded_progress(tmp_path, dt.date.today())
+    assert (p["total"], p["done"], p["open"], p["done_other"]) == (27, 8, 19, 2)
+
+
+def test_dev_reseed_route_progress_equals_cli_seed(seeded, tmp_path):
+    seeded.exec("DELETE FROM tasks")                      # make the DB differ from the seed first
+    assert seeded.get("/api/today").json()["progress"]["total"] == 0
+    seeded.ok("/api/dev/reseed", {"confirm": True})
+    p = seeded.get("/api/today").json()["progress"]
+    assert p == _cli_seeded_progress(tmp_path, dt.date.today())
+    assert (p["total"], p["done"]) == (27, 8)
