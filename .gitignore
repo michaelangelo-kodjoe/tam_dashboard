@@ -1,0 +1,8 @@
+.DS_Store
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+.venv/
+node_modules/
+dev_data/
