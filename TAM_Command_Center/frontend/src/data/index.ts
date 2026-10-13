@@ -2,11 +2,12 @@
 // Priority: ?data=mock|api in the URL > sessionStorage (remembered for the tab session) >
 // VITE_DATA_SOURCE > DEFAULT_SOURCE. Phase 4.1 (QA-E1-1): the default is the real API.
 // "mock" is for DEV/demo only: a production build (VITE_DATA_SOURCE=api, see `npm run build:api`)
-// does not ship mock_data.json, so there `?data=mock` is ignored and the API adapter is used.
+// does not ship the mock adapter or its data file, so there `?data=mock` is ignored and the API adapter is used.
 import type { DataSource } from './DataSource';
 import { ApiDataSource } from './ApiDataSource';
 import { MockDataSource } from './mock/MockDataSource';
 
+const MOCK_ALLOWED = import.meta.env.DEV || import.meta.env.VITE_DATA_SOURCE !== 'api';
 const DEFAULT_SOURCE: 'mock' | 'api' = 'api';
 const STORAGE_KEY = 'tam.dataSource';
 
@@ -24,8 +25,8 @@ export function createDataSource(search: string = typeof location !== 'undefined
   const stored = remembered();
   const env = import.meta.env.VITE_DATA_SOURCE as string | undefined;
   let choice = (fromUrl === 'mock' || fromUrl === 'api' ? fromUrl : stored === 'mock' || stored === 'api' ? stored : (env ?? DEFAULT_SOURCE)).toLowerCase();
-  if (choice === 'mock' && env === 'api' && !import.meta.env.DEV) choice = 'api';
-  if (choice !== 'mock') return new ApiDataSource();
+  // Statically false in `build:api` (env is inlined as 'api', DEV is false), so the bundler drops the mock branch and MockDataSource.
+  if (choice !== 'mock' || !MOCK_ALLOWED) return new ApiDataSource();
   const delay = Number(params.get('mockDelay')) || 0;
   const today = params.get('mockToday') ?? undefined;
   return new MockDataSource({ delayMs: delay, today: today && /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : undefined });

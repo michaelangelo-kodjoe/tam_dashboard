@@ -32,8 +32,10 @@ QA-E1-1, -2, -3, -4, -7, -8 verified fixed against the built app and HEAD and cl
 
 | ID | Sev | Owner | Item | Check at |
 |---|---|---|---|---|
-| QA-E2-1 | Low | backend-dev | CORS-rejected preflight (400 text/plain) lacks the security headers/CSP (CORSMiddleware answers before the header middleware) | next gate |
-| QA-E2-2 | Low | backend-dev | `GET /api/note/save` and `/api/note/delete` return 405 without an `Allow` header (note_get special case in `server/app.py`) | next gate |
-| QA-E2-3 | Medium | frontend-dev | Top-bar "+ Capture" button does not prefill the current account (PM US-10.1 AC2); only the `N` key does. `TopBar.tsx` calls `openCapture()` without `clientId` | next gate (fix before release; QA may promote to High if PM ACs are treated as hard requirements) |
+| QA-E2-1 | Low | backend-dev | CORS-rejected preflight (400 text/plain) lacks the security headers/CSP (CORSMiddleware answers before the header middleware) | FIXED 2026-10-12 (backend-dev): now structured 400 `cors_rejected` with security headers; re-verify at next gate |
+| QA-E2-2 | Low | backend-dev | `GET /api/note/save` and `/api/note/delete` return 405 without an `Allow` header (note_get special case in `server/app.py`) | FIXED 2026-10-12 (backend-dev): `Allow: POST` sent; re-verify at next gate |
+| QA-E2-3 | Medium | frontend-dev | Top-bar "+ Capture" button does not prefill the current account (PM US-10.1 AC2); only the `N` key does. `TopBar.tsx` calls `openCapture()` without `clientId` | FIXED 2026-10-12 (frontend-dev): TopBar passes the current `clientId` like the N key; regression tests in `App.test.tsx`; verified in browser on a DEV backend. QA to re-check |
 
-Strict-xfail tests pin QA-E2-1 and QA-E2-2 in `TAM_Command_Center/tests/e2e/test_gate32_retest_e2e.py`; remove the xfail marks when fixed.
+Strict-xfail tests pin QA-E2-1 and QA-E2-2 in `TAM_Command_Center/tests/e2e/test_gate32_retest_e2e.py`; xfail marks removed 2026-10-12 after the QA-E2-1/-2 fixes; the tests now pass.
+
+- T-1 (traceability, Low) FIXED 2026-10-12 (frontend-dev): `build:api` no longer ships the mock adapter, `loadMockFile` or `mock_data.json`. T-2 (Low) not addressed (needs timer/redirect tests, more than a few minutes).

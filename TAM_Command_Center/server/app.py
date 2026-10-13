@@ -6,7 +6,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -49,6 +49,40 @@ SECURITY_HEADERS = {
                                 "img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; "
                                 "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"),
 }
+
+
+class PreflightGuard:
+    """Pure ASGI middleware wrapped around CORSMiddleware (QA-E2-1): a CORS-rejected preflight becomes a structured
+    400 `cors_rejected`, and every response CORSMiddleware answers itself still carries the security headers."""
+
+    def __init__(self, app: Any, origins: List[str]) -> None:
+        self.app, self.origins = app, set(origins)
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        h = {k.lower(): v for k, v in scope.get("headers", [])}
+        origin = h.get(b"origin", b"").decode("latin-1")
+        if (scope["method"] == "OPTIONS" and origin and b"access-control-request-method" in h
+                and origin not in self.origins and "*" not in self.origins):
+            err = AppError("Cross-origin request not allowed.")
+            err.code, err.status = "cors_rejected", 400  # type: ignore[assignment]
+            resp = _json(err.status, err.body())
+            for k, v in SECURITY_HEADERS.items():
+                resp.headers[k] = v
+            resp.headers["Cache-Control"] = "no-store"
+            await resp(scope, receive, send)
+            return
+
+        async def wrapped(msg: Any) -> None:
+            if msg["type"] == "http.response.start":
+                present = {k.lower() for k, _ in msg.get("headers", [])}
+                extra = [(k.lower().encode(), v.encode()) for k, v in SECURITY_HEADERS.items()
+                         if k.lower().encode() not in present]
+                msg = {**msg, "headers": list(msg.get("headers", [])) + extra}
+            await send(msg)
+        await self.app(scope, receive, wrapped)
 
 
 class BodyLimit:
@@ -169,6 +203,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
     if config.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins, allow_methods=["GET", "POST"],
                            allow_headers=["Content-Type"], allow_credentials=False)
+        app.add_middleware(PreflightGuard, origins=config.cors_origins)   # outside CORS: QA-E2-1
     app.add_middleware(BodyLimit, limit=C.MAX_BODY_BYTES)      # outermost: rejects before anything reads the body
 
     # ------------------------------------------------------------ error handlers
@@ -265,9 +300,11 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
         return {"ok": True, **page}
 
     @api.get("/note/{note_id}")
-    def note_get(note_id: str) -> Dict[str, Any]:
+    def note_get(note_id: str) -> Any:
         if note_id in ("save", "delete"):          # write routes: GET is the wrong method, not a missing note
-            raise MethodNotAllowed("Method not allowed on this path.", details={"allowed": ["POST"]})
+            resp = _json(405, MethodNotAllowed("Method not allowed on this path.", details={"allowed": ["POST"]}).body())
+            resp.headers["Allow"] = "POST"                # QA-E2-2
+            return resp
         with rt.db() as conn:
             raw = reads.get_note_raw(conn, note_id)
         if raw is None:

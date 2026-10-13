@@ -63,8 +63,7 @@ def check_headers(r):
     ("GET", "/api/health", {"headers": {"host": "evil.com"}}, 403),
     ("POST", "/api/note/save", {"json": {}, "headers": {"origin": "http://evil.com"}}, 403),
     ("POST", "/api/note/save", {"content": b"x" * (CAP + 1), "headers": {"content-type": "application/json"}}, 413),
-    pytest.param("OPTIONS", "/api/health", {"headers": {"origin": "http://evil.com", "access-control-request-method": "GET"}}, 400,
-                 marks=pytest.mark.xfail(reason="QA-E2-1: CORS-rejected preflight (400 text/plain) lacks the security headers", strict=True)),
+    ("OPTIONS", "/api/health", {"headers": {"origin": "http://evil.com", "access-control-request-method": "GET"}}, 400),
 ])
 def test_headers_everywhere(c, method, path, kw, status):
     r = c.request(method, path, **kw)
@@ -111,7 +110,6 @@ def test_405_and_allow(c):
     assert "Traceback" not in r.text and "/Users/" not in r.text
 
 
-@pytest.mark.xfail(reason="QA-E2-2: GET /api/note/save|delete -> 405 without Allow header (note_get special case)", strict=True)
 @pytest.mark.parametrize("p", ["/api/note/save", "/api/note/delete"])
 def test_405_allow_header_note_write_routes(c, p):
     r = c.get(p)

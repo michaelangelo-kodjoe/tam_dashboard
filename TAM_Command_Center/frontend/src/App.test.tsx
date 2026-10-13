@@ -277,6 +277,30 @@ describe('overlays, Quick Capture and account jump', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('QA-E2-3: the top-bar + Capture button prefills the current account inside a workspace, and N agrees', async () => {
+    const ds = newMock();
+    const acct = (await ds.getState()).accounts.find((a) => a.name.startsWith('Halvorsen'))!;
+    const { user } = await boot(`/accounts/${acct.id}/infrastructure`, ds);
+    await screen.findByRole('heading', { level: 1, name: /Halvorsen/ });
+    await user.click(screen.getByRole('button', { name: /Capture/ }));
+    let dlg = await screen.findByRole('dialog', { name: 'Quick capture' });
+    const field = () => within(dlg).getByRole('combobox', { name: /Account/ });
+    expect((field() as HTMLInputElement).value).toMatch(/Halvorsen/);
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    (document.activeElement as HTMLElement).blur();
+    await user.keyboard('n');
+    dlg = await screen.findByRole('dialog', { name: 'Quick capture' });
+    expect((field() as HTMLInputElement).value).toMatch(/Halvorsen/);
+  });
+
+  it('QA-E2-3: outside a workspace the + Capture button leaves the account empty', async () => {
+    const { user } = await boot('/today');
+    await user.click(await screen.findByRole('button', { name: /Capture/ }));
+    const dlg = await screen.findByRole('dialog', { name: 'Quick capture' });
+    expect((within(dlg).getByRole('combobox', { name: /Account/ }) as HTMLInputElement).value).toBe('');
+  });
+
   it('+ Capture button saves a task with Ctrl+Enter, toasts with a View link, and refreshes Today', async () => {
     const { user } = await boot('/today');
     await screen.findByRole('region', { name: /^Overdue/ });

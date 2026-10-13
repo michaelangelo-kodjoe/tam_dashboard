@@ -5,6 +5,7 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 ## [Unreleased] - 0.1.0-dev
 
 ### Added
+- 2026-10-12, frontend-dev-agent: QA-E2-3 fixed (top-bar + Capture now prefills the current account like the N key; two regression tests). T-1 fixed (`build:api` tree-shakes the mock adapter and `mock_data.json` out of `web/`).
 - 2026-10-12, pm-agent (Phase 4.2): `docs/05_TRACEABILITY.md`, the requirements traceability matrix. 113 rows (mandatory checks, E1-E12 acceptance criteria, PM decisions) plus the section 52 summary: PASS 111, FAIL 0, MISSING 0, DEFERRED 2 (US-12.2, Phase 4.3). Verified by re-running `pytest server db tests` (239 passed), `tsc` and `vitest` (118 passed), and by driving the live DEV app on a scratch DB. Five Low observations (T-1 to T-5) are listed there. `TAM_PROJECT_STATE.md` validation table brought up to date.
 - 2026-10-12, pm-agent (Phase 1.1): `docs/01_PM_SPEC.md`, covering epics E1-E12, user stories traced to spec sections, the Today ranking rules, screen layouts, component inventory, API contract list, task board T-01 to T-50, and the out-of-scope list for run 1 (spec phases 1-2).
 - 2026-10-12, pm-agent (Phase 1.1): `docs/02_DESIGN_GUIDELINES.md`, covering colour, type, spacing and motion tokens with checked contrast ratios, button states, the custom Select and AccountPicker keyboard contracts, tables, the note vs system-event treatment, overlays and screen states.
@@ -147,6 +148,10 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - Indexes `ix_tasks_waiting_next_update`, `ix_server_upgrades_open_date`, `ix_server_upgrades_validation`, `ix_bams_alert_events_active` (QA-1-10).
 
 ### Fixed
+- 2026-10-12, backend-dev-agent (QA-E2-1, QA-E2-2):
+  - **QA-E2-1:** a CORS-rejected preflight now returns a structured 400 `cors_rejected` JSON error, and responses answered by `CORSMiddleware` carry the security headers/CSP (new `PreflightGuard` ASGI middleware in `server/app.py`, outside CORS).
+  - **QA-E2-2:** `GET /api/note/save|delete` 405 now sends `Allow: POST`.
+  - Strict-xfail marks removed from `tests/e2e/test_gate32_retest_e2e.py`.
 - 2026-10-12, backend-dev-agent (Phase 4.1):
   - **FE-AC-1:** `GET /api/note/{id}` returns `{"ok": true, "item": <Note>}`; unknown id is 404 `not_found`; `GET /api/note/save|delete` is 405.
   - **FE-AC-2:** activity note entries carry `client_id` and `created_at`.
