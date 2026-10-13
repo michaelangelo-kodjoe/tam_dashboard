@@ -1,34 +1,21 @@
-# Pinned to the versions installed in .venv and verified by pytest (QA-E1-7, 2026-10-12).
-# Direct dependencies first, then transitive pins for a reproducible install.
+# TAM Command Center runtime requirements. Installs cleanly on Python 3.10-3.12 (Linux, macOS, Windows).
+# Pinned to the versions verified by pytest and audited with pip-audit (QA-E1-7, 2026-10-12).
+# No optional uvicorn[standard] extras (uvloop has no Windows wheels, websockets>=17 needs Python 3.11+).
+# Tests, audit tools and the optional extras live in requirements-dev.txt.
+# BLPAPI is NOT listed: it is workstation-specific and must come from the Bloomberg-provided package.
 fastapi==0.143.0
 uvicorn==0.54.0
 pydantic==2.14.1
-# tests only:
-pytest==9.1.1
-httpx==0.28.1
-# transitive:
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
-certifi==2026.7.22
 click==8.5.0
 h11==0.16.0
-httpcore==1.0.9
-httptools==0.9.0
+exceptiongroup==1.3.1; python_version < "3.11"
 idna==3.20
-iniconfig==2.3.1
 opentelemetry-api==1.45.1
 packaging==26.3
-pluggy==1.6.0
 pydantic_core==2.50.1
-Pygments==2.21.0
-python-dotenv==1.2.4
-PyYAML==6.0.3
 starlette==1.7.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
-uvloop==0.23.0
-watchfiles==1.3.0
-websockets==17.2
-# dev tooling (not shipped): pip-audit and bandit, run with .venv/bin/pip-audit -r server/requirements.txt and .venv/bin/bandit -r server --exclude server/tests
-# installed in the dev venv: bandit==1.9.4, pip-audit==2.10.1

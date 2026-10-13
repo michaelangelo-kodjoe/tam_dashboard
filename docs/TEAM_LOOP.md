@@ -21,6 +21,9 @@ The main Claude session is the **orchestrator**. Subagents cannot spawn each oth
 ## Agents
 `pm-agent` · `data-architect-agent` · `backend-dev-agent` · `frontend-dev-agent` · `qa-guardrail-agent` · `deployment-agent` (all in `.claude/agents/`).
 
+## Mockup gate (added 2026-10-12 at user request) — HARD RULE
+Before ANY UI is built for a phase or feature, the orchestrator must show the user mockups of exactly what will be built and wait for an explicit approval in chat. No frontend implementation, and no packaging/release, starts until then. Mockups are produced by frontend-dev-agent from the PM spec (static HTML/visual mockups, not the real app) and reviewed with the user. The same applies to every later phase (Operations, BAMS, Bulk Upload, ChatGPT Bridge). Packaging/release (phase 4.3) additionally needs the user's explicit go-ahead after they have seen the working app.
+
 ## Phase 1: Requirements & architecture
 1. **1.1** pm-agent → `docs/01_PM_SPEC.md`, `docs/02_DESIGN_GUIDELINES.md`
 2. **1.2** data-architect-agent → `db/schema.sql`, migrations, mock data, `docs/03_DATA_MODEL.md`

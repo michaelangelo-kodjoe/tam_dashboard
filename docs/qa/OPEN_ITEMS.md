@@ -21,7 +21,7 @@ QA-4-1 and QA-4-2 verified against real code and closed (residual contrived evas
 | QA-E1-4 | Low | backend-dev | No request body size cap (20 MB body read, 422) | FIXED 2026-10-12 (Phase 4.1), CLOSED at Gate 3.2 re-test (ERROR_LOG_2) |
 | QA-E1-5 | Low | data-architect | Scanner misses keyword-split concatenation, `\x` escapes, dynamic REPLACE (re-confirmed 3 of 12 corpus cases at ERROR_LOG_2; accepted residue) | next gate |
 | QA-E1-6 | Low | frontend-dev | npm audit: react-router-dom 6.30.6 moderate (shipped; fix is 7.x major); vite/vitest/esbuild dev-only high/critical. Unchanged at ERROR_LOG_2 (8 findings) | next gate |
-| QA-E1-7 | Low | backend-dev / deployment | pip-audit and bandit not installed; requirements unpinned | PARTLY FIXED 2026-10-12: requirements pinned; pip-audit (0 vulns) and bandit (0 High, 8 Medium B608 false positives) run. Deployment owns the release lock. CLOSED at Gate 3.2 re-test (ERROR_LOG_2) |
+| QA-E1-7 | Low | backend-dev / deployment | pip-audit and bandit not installed; requirements unpinned | PARTLY FIXED 2026-10-12: requirements pinned; pip-audit (0 vulns) and bandit (0 High, 8 Medium B608 false positives) run. Deployment owns the release lock. 2026-10-12 backend-dev: requirements split into runtime requirements.txt (installs on Python 3.10-3.12, incl. Windows) and requirements-dev.txt; verified on 3.10 (pip check, DEV /api/state, pytest 267 passed, smoke_release PASS). CLOSED at Gate 3.2 re-test (ERROR_LOG_2) |
 | QA-E1-8 | Low | backend-dev | FE-AC-1..4: routes/fields implemented, consumed by the frontend, documented in `docs/04_API_CONTRACT.md`, `API_CHANGE_REQUEST.md` marked done | FIXED 2026-10-12 (Phase 4.1), CLOSED at Gate 3.2 re-test (ERROR_LOG_2) |
 
 ## Phase 4.1 (backend-dev-agent, 2026-10-12)

@@ -12,8 +12,11 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
   - `README.txt`, `VALIDATION.txt` (honest: untested on Windows and Bloomberg, not production-ready, deferred phases 3-5).
 - `VERSION.txt` is now `0.1.0-rc1` (channel dev in the source tree; the release archive rewrites it to prod).
 
+### Fixed
+- 2026-10-12, backend-dev-agent: requirements split. `server/requirements.txt` is now runtime-only (fastapi, uvicorn, pydantic and their pinned transitive deps; no optional uvicorn extras, no test/audit tools) and installs cleanly on Python 3.10-3.12 on Linux/macOS/Windows. New `server/requirements-dev.txt` (`-r requirements.txt` plus pytest, httpx, pip-audit, bandit and the optional extras; uvloop is skipped on win32 and websockets only on Python 3.11+). Audited pins unchanged; `exceptiongroup==1.3.1` added for Python < 3.11 (anyio dependency). `tools/build_release.py` docstring/header updated; its filter is kept as a guard. Verified on Python 3.10.14: fresh venv `pip install -r server/requirements.txt`, `pip check` clean, DEV server on a scratch DB answers `/api/state` 200, `pytest server db tests` 267 passed, `tools/smoke_release.py` PASS.
+
 ### Found (reported, not fixed; application logic untouched)
-- `server/requirements.txt` pins `websockets==17.2` (Python 3.11+) and `uvloop` (no Windows wheels), so `pip install -r server/requirements.txt` fails on the supported minimum Python 3.10. The release requirements omit the optional uvicorn[standard] extras. Owner: backend-dev-agent (pin or split a runtime file).
+- `server/requirements.txt` pins `websockets==17.2` (Python 3.11+) and `uvloop` (no Windows wheels), so `pip install -r server/requirements.txt` fails on the supported minimum Python 3.10. The release requirements omit the optional uvicorn[standard] extras. FIXED by the requirements split above.
 - A DEV preview cannot run from a prod-channel release by design (TAM_DEV_MODE is ignored there); DEV needs the `--channel dev` package.
 - CRM and Operations guides and the Operations/Bulk Upload/BAMS screenshots required by spec section 56 do not exist yet (phases 3-5).
 
