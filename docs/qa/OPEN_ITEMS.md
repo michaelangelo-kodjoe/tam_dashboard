@@ -32,10 +32,25 @@ QA-E1-1, -2, -3, -4, -7, -8 verified fixed against the built app and HEAD and cl
 
 | ID | Sev | Owner | Item | Check at |
 |---|---|---|---|---|
-| QA-E2-1 | Low | backend-dev | CORS-rejected preflight (400 text/plain) lacks the security headers/CSP (CORSMiddleware answers before the header middleware) | FIXED 2026-10-12 (backend-dev): now structured 400 `cors_rejected` with security headers; re-verify at next gate |
-| QA-E2-2 | Low | backend-dev | `GET /api/note/save` and `/api/note/delete` return 405 without an `Allow` header (note_get special case in `server/app.py`) | FIXED 2026-10-12 (backend-dev): `Allow: POST` sent; re-verify at next gate |
-| QA-E2-3 | Medium | frontend-dev | Top-bar "+ Capture" button does not prefill the current account (PM US-10.1 AC2); only the `N` key does. `TopBar.tsx` calls `openCapture()` without `clientId` | FIXED 2026-10-12 (frontend-dev): TopBar passes the current `clientId` like the N key; regression tests in `App.test.tsx`; verified in browser on a DEV backend. QA to re-check |
+| QA-E2-1 | Low | backend-dev | CORS-rejected preflight (400 text/plain) lacks the security headers/CSP (CORSMiddleware answers before the header middleware) | FIXED 2026-10-12 (backend-dev); CLOSED at Gate 3.2 Run 2 (ERROR_LOG_3, strict test passes) |
+| QA-E2-2 | Low | backend-dev | `GET /api/note/save` and `/api/note/delete` return 405 without an `Allow` header (note_get special case in `server/app.py`) | FIXED 2026-10-12 (backend-dev); CLOSED at Run 2 gate (ERROR_LOG_3) |
+| QA-E2-3 | Medium | frontend-dev | Top-bar "+ Capture" button does not prefill the current account (PM US-10.1 AC2); only the `N` key does. `TopBar.tsx` calls `openCapture()` without `clientId` | FIXED 2026-10-12 (frontend-dev): TopBar passes the current `clientId` like the N key; regression tests in `App.test.tsx`; verified in browser on a DEV backend. CLOSED at Run 2 gate (ERROR_LOG_3, re-checked in the browser) |
 
 Strict-xfail tests pin QA-E2-1 and QA-E2-2 in `TAM_Command_Center/tests/e2e/test_gate32_retest_e2e.py`; xfail marks removed 2026-10-12 after the QA-E2-1/-2 fixes; the tests now pass.
 
 - T-1 (traceability, Low) FIXED 2026-10-12 (frontend-dev): `build:api` no longer ships the mock adapter, `loadMockFile` or `mock_data.json`. T-2 (Low) not addressed (needs timer/redirect tests, more than a few minutes).
+
+## Run 2 gate, ERROR_LOG_3 (2026-10-13): PASS (0 open Blocker/High)
+Verified: Triage Split Today (top 10, chips, `?show=`, keyboard, detail pane without steps/Mark complete, Later tabs), done-today ring against an independent SQL recomputation in three timezones, workspace and Accounts instruments (counts, sparklines, Needs attention order), calm rules, widths 1440/1100/768/390, Run 1 and security regressions. QA-E2-1/-2/-3 closed. New items, all Low:
+
+| ID | Sev | Owner | Item | Check at |
+|---|---|---|---|---|
+| QA-E3-1 | Low | frontend-dev | Accounts "Alerts" cell says "N open" for recovered alerts and always uses a warning dot (also for Critical); the Servers dot-row says "0 with an alert" for an account with an open Info alert (`AccountsPage.tsx:86`) | next gate |
+| QA-E3-2 | Low | pm (guidelines) + frontend-dev | `--subtle` (3.88:1 on surface-1) used for readable text ("No trend data", histogram axis labels); guidelines §1 and §15.4 contradict each other | next gate |
+| QA-E3-3 | Low | pm | Guidelines §15.6 #10 grep text is broader than the code (Run 1 keyframes and one inset box-shadow); reword to Run 2 files and Today steady state. Run 1 animations accepted | next gate |
+| QA-E3-4 | Low | frontend-dev | Alert detail fact reads "Opened ... 2d overdue"; use "2d ago" for Opened | next gate |
+| QA-E3-5 | Low | data-architect | Seed: sparkline latest sample (99) differs from the alert value (97.4); "DEV DEV" in dev-server context | next gate |
+| QA-E3-6 | Low | frontend-dev | Below 768 wide: search placeholder clipped, header Alerts text clipped, lower-case Needs attention reason | next gate |
+| QA-E3-7 | Low | frontend-dev | Midnight-rollover refetch has no vitest (works in browser); page-wide arrow handler stops arrow-key page scrolling on Today (by design D-26) | next gate |
+
+New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run2_e2e.py` (24 cases, three timezones). Still open from earlier: QA-E1-5, QA-E1-6 (Low).
