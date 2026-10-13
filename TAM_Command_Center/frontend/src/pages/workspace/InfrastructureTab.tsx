@@ -5,16 +5,15 @@ import { Panel } from '../../components/ui/Panel';
 import { DataTable, cmpStr, type Column } from '../../components/ui/DataTable';
 import { DateCell, StatusBadge } from '../../components/ui/Badges';
 import { EmptyState, ErrorBanner, SkeletonRows } from '../../components/ui/Feedback';
-import { useApp, useQuery } from '../../store/DataContext';
-import type { AccountSummary, BamsObject, ServerUpgrade } from '../../types';
+import { useApp, type QueryResult } from '../../store/DataContext';
+import type { BamsObject, Infrastructure, ServerUpgrade } from '../../types';
 import { cx } from '../../lib/cx';
 
 /** Read-only this run (D-02, US-9.1). `?server=` highlights and scrolls to matching rows. */
-export function InfrastructureTab({ account }: { account: AccountSummary }) {
+export function InfrastructureTab({ q }: { q: QueryResult<Infrastructure> }) {
   const { today } = useApp();
   const [params] = useSearchParams();
   const server = params.get('server')?.trim().toLowerCase() ?? null;
-  const q = useQuery(`infra:${account.id}`, (ds) => ds.getInfrastructure(account.id));
   const rootRef = useRef<HTMLDivElement>(null);
   const match = (name: string) => !!server && name.trim().toLowerCase() === server;
 

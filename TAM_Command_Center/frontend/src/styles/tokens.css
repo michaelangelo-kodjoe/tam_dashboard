@@ -39,6 +39,11 @@
   --scrim: rgba(0, 0, 0, 0.6);
   --hover-row: rgba(255, 255, 255, 0.03);
 
+  /* solid tint surfaces (guidelines §15.2): the status colour at 12% over --surface-1; no gradients */
+  --surface-warning: #2b2a20;
+  --surface-danger: #2e1e23;
+  --surface-accent: #2d251d;
+
   /* type */
   --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'Cascadia Mono', Consolas, 'SF Mono', monospace;
@@ -68,6 +73,7 @@
   --r-sm: 2px;
   --r-md: 4px;
   --r-lg: 6px;
+  --r-round: 50%; /* status dots, the ring, avatar initials, timeline marker rings only (§15.4) */
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
   --dur: 120ms;
   --ease: ease-out;
@@ -83,6 +89,10 @@
   --drawer-w: 480px;
   --context-w: 320px;
   --today-side-w: 360px;
+  --meter-h: 6px;
+  --spark-h: 30px;
+  --ring-size: 44px;
+  --row-h-triage: 44px;
 }
 
 @media (max-width: 1279px) {

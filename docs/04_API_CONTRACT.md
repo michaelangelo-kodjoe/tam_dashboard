@@ -108,7 +108,8 @@ Returns `{"ok": true, "item": <settings>, "side_effects": []}`. One audit row pe
  "queue":    [ <QueueItem> ... ],      // tiers 1..6 in display order
  "upcoming": [ <QueueItem> ... ],      // tier=null, urgency="upcoming", date ascending
  "recent_changes": [ <RecentChange> ... ],   // newest first, max 20
- "account_load": [ <AccountLoadRow> ... ] }  // max 8 Active accounts
+ "account_load": [ <AccountLoadRow> ... ],   // max 8 Active accounts
+ "progress": { "day": "2026-10-12", "total": 8, "done": 3, "open": 5, "done_other": 1 } }   // Run 2, additive (PM-AC-1), see §9.1
 ```
 Ranking is the reference SQL `db/queries/today_queue.sql` (PM §3.1, D-04, D-05, D-23, D-24), executed unmodified. Each object appears once, in its first qualifying tier; anything in the queue is never in `upcoming`.
 
@@ -293,3 +294,49 @@ If `TAM_Command_Center/web/index.html` exists (compiled frontend), the server se
 - DEV badge: `mode == "DEV"` in `/api/state.runtime` and `/api/health`.
 - A second server on the same DB exits at start (not an API behaviour).
 - Browser disconnects (BrokenPipe/ConnectionReset/WinError 10053/10054) are logged at DEBUG as one line; they never produce error responses.
+
+## 9. Run 2 additions (additive; T-62 to T-64, PM-AC-1..3, D-27 D-29 D-31 D-33)
+
+No frozen field, route or error code changes. No schema change. All three are read-only GETs, loopback-only, `Cache-Control: no-store`, with the usual security headers.
+
+### 9.1 `progress` on `GET /api/today` (PM-AC-1, D-29)
+```json
+"progress": {"day": "2026-10-13", "total": 8, "done": 3, "open": 5, "done_other": 1}
+```
+All five keys are always present; the four counts are integers >= 0. `day` echoes `today`. `total = done + open`, so `done <= total` always. `queue`, `upcoming`, `recent_changes` and `account_load` are unchanged (same items, same order).
+
+Rules (PM §10.2, executed by the reference query `db/queries/day_progress.sql` unmodified): tasks only. Plan task = `due IS NOT NULL AND due <= today`, account Active or none, and either open (status not Complete, not archived) or done today. `done` = plan tasks with status Complete now and a `task`/`completed` audit row inside the local-day window (counted once per task; archived is ignored for done tasks). `open` = open plan tasks. `done_other` = completed today under the same rules but `due > today` or `due` NULL. Tasks on Inactive accounts are excluded from all four. Deleted tasks are not counted.
+
+Day window: the server converts the local midnight of `today` and the local midnight of `today + 1 day` to UTC **separately** (`[start, end)`), so a 23-hour or 25-hour DST day is exact. The timezone is the workstation zone (the same clock as `today`).
+
+### 9.2 `GET /api/accounts/activity-trend?days=14` (PM-AC-2, D-31)
+Query: `days` (optional, default and only accepted value **14**; any other value -> 422 `validation_error`; the query is fixed at 14 buckets), `include_inactive` (optional boolean `true|false`, default `false`).
+```json
+{"ok": true, "today": "2026-10-13", "days": 14,
+ "series": {"<client_id>": [0, 2, 0, 1, 0, 0, 3, 0, 0, 1, 4, 0, 2, 5], "<client_id>": [0, 0, ... 14 ints]}}
+```
+`series` has one key per Active account (all accounts with `include_inactive=true`), each an array of exactly `days` non-negative integers, **oldest first**: index 0 is `today - 13`, index 13 is `today`. A point is the number of Activity-timeline entries (the union in `activity_timeline.sql`: manual notes, listed system events, BAMS alert opened/recovered/closed, no filter) on that local day. Accounts with no activity return 14 zeros. Deleted notes and objects behave as in the Activity timeline. Executed via `db/queries/activity_trend.sql` unmodified; each of the 15 bucket edges is a separately converted local midnight (DST-exact). Series keys are not ordered; use the account list for order.
+
+### 9.3 `server_tiles` on `GET /api/client/{id}/infrastructure` (PM-AC-3, D-31)
+**Naming note:** PM-AC-3 proposed the key `servers`, but `servers` is already a frozen integer (the distinct server count) on this payload, so the array is published as **`server_tiles`**. `servers` (integer) is unchanged. `/api/state` `infrastructure` does **not** carry `server_tiles` (it stays light, §42); only this per-account endpoint does.
+```json
+"server_tiles": [
+  {"name": "bxa-ny-01", "environment": "PROD", "version": "7.1.4", "alert_severity": "Critical",
+   "spark": {"metric": "Disk", "window_hours": 168, "points": [["2026-10-06T12:00:00.000Z", 71.2], ["2026-10-06T18:00:00.000Z", 73.0]]}},
+  {"name": "bxa-ldn-02", "environment": "DEV", "version": null, "alert_severity": null, "spark": null}
+]
+```
+One tile per **distinct server name** (case-insensitive across `bams_objects.name` and `server_upgrades.server_name`), ordered by name (case-insensitive, then exact). The first-seen spelling is used (BAMS object name preferred).
+
+| field | rule |
+|---|---|
+| `name` | server name |
+| `environment` | `PROD` / `DEV` / `null`; same precedence as the `environment_summary` (upgrade rows, most recent release first, else the BAMS object) |
+| `version` | `current_version` of the server's earliest open upgrade (status not Completed/Deferred, by `scheduled_date`, nulls last), else `target_version` of its latest Completed upgrade, else `null` |
+| `alert_severity` | `Critical` / `Warning` / `Info` = worst **open** alert on the server's enabled BAMS metrics, else `null` (healthy) |
+| `spark` | object or `null` |
+
+`spark` metric choice (one metric per server): (1) the metric of the server's highest-severity open alert (ties: earliest `opened_at`, then id); else (2) an enabled metric whose name contains `cpu` (case-insensitive; ties by name, then id); else none. `spark` is `null` when there is no such metric, the server exists only as upgrade records, or the chosen metric has no samples in the window. Never invented.
+
+Window: samples with `sampled_at` in the last 7 days (queried by `metric_id` and a `sampled_at` range only; older rows are never read, §45). `window_hours` = whole hours from the first sample in the window to now, rounded up, capped at 168 (so "CPU 24h" for a day of data, "Disk 7d" at 168). `points` = `[iso_utc, value]` pairs, oldest first, **at most 28**: if the window holds more than 28 samples, the span from the first to the last sample is split into 28 equal-time buckets and each non-empty bucket contributes its maximum value at that sample's timestamp. PROD has no `spark` until the Phase 4 monitor writes samples.
+

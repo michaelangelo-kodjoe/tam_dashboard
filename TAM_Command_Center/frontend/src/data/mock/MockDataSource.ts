@@ -7,6 +7,7 @@ import type {
   AccountLoadRow,
   ActivityEntry,
   ActivityPage,
+  ActivityTrend,
   AppState,
   BackupInfo,
   Contact,
@@ -39,6 +40,7 @@ import {
 } from './derive';
 import { rebaseTables, type MockFile, type Row, type Tables } from './rebase';
 import { rankToday } from './today';
+import { browserLocalMidnight, bucketCounts, dayProgress, trendBounds, type LocalMidnight } from './progress';
 
 export interface MockOptions {
   /** Local calendar date to rebase to. Defaults to the real local date. */
@@ -47,6 +49,10 @@ export interface MockOptions {
   loadNow?: Date;
   /** Artificial latency per call, to see loading states. */
   delayMs?: number;
+  /** Clock for audit timestamps written by mutations. Default: the real clock. Tests inject a fixed one. */
+  now?: () => Date;
+  /** Local midnight of a day as a UTC instant (progress ring and activity trend windows). Default: browser zone. */
+  localMidnight?: LocalMidnight;
   /** Source of the JSON. Tests pass the file object directly. */
   file?: MockFile;
   url?: string;
@@ -139,7 +145,11 @@ export class MockDataSource implements DataSource {
   }
 
   private now(): string {
-    return new Date().toISOString();
+    return (this.opts.now ? this.opts.now() : new Date()).toISOString();
+  }
+
+  private midnight(): LocalMidnight {
+    return this.opts.localMidnight ?? browserLocalMidnight;
   }
 
   // ------------------------------------------------------------------ audit
@@ -246,8 +256,32 @@ export class MockDataSource implements DataSource {
       upcoming,
       recent_changes: this.recentChanges(20),
       account_load: load,
+      progress: dayProgress(this.t, this.today, this.midnight()),
       generated_at: this.now(),
     };
+  }
+
+  async getActivityTrend(days = 14): Promise<ActivityTrend> {
+    await this.enter();
+    const bounds = trendBounds(this.today, days, this.midnight());
+    const byClient = new Map<string, string[]>();
+    const push = (id: string | null, ts: string) => {
+      if (id == null) return;
+      const list = byClient.get(id) ?? [];
+      list.push(ts);
+      byClient.set(id, list);
+    };
+    for (const n of this.t.notes) push(n.client_id, n.timestamp);
+    for (const a of this.t.audit_events) {
+      if (a.object_type === 'server_upgrade' || SYSTEM_AUDIT_ACTIONS[a.object_type]?.includes(a.action)) push(a.client_id, a.timestamp);
+    }
+    for (const b of this.bamsEvents()) push(b.client_id, b.ts);
+    const series: Record<string, number[]> = {};
+    for (const c of this.t.clients) {
+      if (c.status !== 'Active') continue;
+      series[c.id] = bucketCounts(byClient.get(c.id) ?? [], bounds);
+    }
+    return { today: this.today, days, series };
   }
 
   private recentChanges(limit: number): RecentChange[] {

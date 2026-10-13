@@ -24,6 +24,7 @@ from .runtime import Runtime
 from .schemas import (ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
                       SettingsSave, TaskArchive, TaskSave)
 from .today import build_today
+from .trends import TREND_DAYS, activity_trend
 
 log = logging.getLogger("tam.api")
 
@@ -262,7 +263,16 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
     @api.get("/today")
     def today() -> Dict[str, Any]:
         with rt.db() as conn:
-            return {"ok": True, **build_today(conn, rt.today())}
+            return {"ok": True, **build_today(conn, rt.today(), rt.tz)}
+
+    @api.get("/accounts/activity-trend")
+    def accounts_activity_trend(days: int = Query(TREND_DAYS), include_inactive: bool = Query(False)) -> Dict[str, Any]:
+        if days != TREND_DAYS:
+            raise ValidationFailed("Request validation failed.", fields={"days": f"must be {TREND_DAYS}"})
+        today = rt.today()
+        with rt.db() as conn:
+            return {"ok": True, "today": today, "days": TREND_DAYS,
+                    "series": activity_trend(conn, today, rt.tz, include_inactive=include_inactive)}
 
     @api.get("/settings")
     def get_settings() -> Dict[str, Any]:
@@ -316,7 +326,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
         with rt.db() as conn:
             reads.require_client(conn, client_id)
             return {"ok": True, **infra.build_infrastructure(conn, config.channel, client_id=client_id,
-                                                             today=rt.today())[client_id]}
+                                                             today=rt.today(), server_tiles=True)[client_id]}
 
     # ------------------------------------------------------------ writes
     @api.post("/client/save")

@@ -6,9 +6,9 @@
 // calls fetch. NOT yet exercised against the live backend (Phase 4.1); contract-shaped
 // payloads are covered by ApiDataSource.test.ts.
 import type {
-  Account, AccountInput, AccountSummary, ActivityEntry, ActivityPage, AppState, BackupInfo, BamsObject, Contact,
+  Account, AccountInput, AccountSummary, ActivityEntry, ActivityPage, ActivityTrend, AppState, BackupInfo, BamsObject, Contact,
   ContactInput, Freshness, Infrastructure, InfrastructureSummary, MutationResult, Note, NoteInput, QueueItem, RecentChange,
-  Runtime, ServerUpgrade, Settings, Task, TaskInput, TaskQuery, TodayData,
+  Runtime, ServerTile, ServerUpgrade, Settings, Task, TaskInput, TaskQuery, TodayData, TodayProgress,
 } from '../types';
 import { DataSourceError, type ActivityQuery, type DataSource, type ErrorCode } from './DataSource';
 
@@ -20,12 +20,20 @@ interface WireAccount extends Omit<Account, never> {
 }
 interface WireInfra {
   client_id?: string;
-  servers: number;
+  servers: number; // distinct server count (frozen); the tiles are `server_tiles` (contract §9.3)
+  server_tiles?: WireServerTile[];
   active_alerts: number;
   environment_summary: Record<string, number | string[]>;
   bams_objects: (Omit<BamsObject, 'active_alerts'> & { alerts?: { status: string }[] })[];
   server_upgrades: ServerUpgrade[];
   next_upgrade: { date: string; server: string } | null;   // FE-AC-4: server-computed
+}
+interface WireServerTile {
+  name: string;
+  environment?: string | null;
+  version?: string | null;
+  alert_severity?: ServerTile['alert_severity'];
+  spark?: { metric: string; window_hours: number; points: [string, number][] } | null;
 }
 type WireSideEffect = { type: string; name?: string; contact_id?: string };
 interface WireMutation<T> { ok: true; item: T; side_effects?: WireSideEffect[] }
@@ -37,6 +45,23 @@ type WireActivity =
 export function mapAccount(a: WireAccount): AccountSummary {
   const { counts, ...rest } = a;
   return { ...rest, ...counts };
+}
+
+/** Per-server tiles (contract §9.3, `server_tiles`; absent on older servers). A tile without a series gets spark = null. */
+export function mapServers(w: WireInfra): ServerTile[] {
+  const list = w.server_tiles ?? [];
+  return list.map((t) => ({
+    name: t.name,
+    environment: t.environment ?? null,
+    version: t.version ?? null,
+    alert_severity: t.alert_severity ?? null,
+    spark: t.spark && Array.isArray(t.spark.points) && t.spark.points.length > 0 ? { metric: t.spark.metric, window_hours: t.spark.window_hours, points: t.spark.points } : null,
+  }));
+}
+
+export function mapProgress(p: TodayProgress | null | undefined): TodayProgress | null {
+  if (!p || typeof p.total !== 'number' || typeof p.done !== 'number') return null;
+  return { day: p.day, total: p.total, done: p.done, open: p.open, done_other: p.done_other ?? 0 };
 }
 
 export function mapInfraSummary(w: WireInfra): InfrastructureSummary {
@@ -63,6 +88,7 @@ export function mapInfra(w: WireInfra & { client_id: string }): Infrastructure {
     })),
     upgrades: w.server_upgrades,
     summary: mapInfraSummary(w),
+    servers: mapServers(w),
   };
 }
 
@@ -147,8 +173,16 @@ export class ApiDataSource implements DataSource {
   }
 
   async getToday(): Promise<TodayData> {
-    const t = await this.request<{ today: string; queue: QueueItem[]; upcoming: QueueItem[]; recent_changes: RecentChange[]; account_load: TodayData['account_load'] }>('GET', '/api/today');
-    return { today: t.today, queue: t.queue, upcoming: t.upcoming, recent_changes: t.recent_changes, account_load: t.account_load, generated_at: new Date().toISOString() };
+    const t = await this.request<{ today: string; queue: QueueItem[]; upcoming: QueueItem[]; recent_changes: RecentChange[]; account_load: TodayData['account_load']; progress?: TodayProgress }>('GET', '/api/today');
+    return {
+      today: t.today, queue: t.queue, upcoming: t.upcoming, recent_changes: t.recent_changes, account_load: t.account_load,
+      progress: mapProgress(t.progress), generated_at: new Date().toISOString(),
+    };
+  }
+
+  async getActivityTrend(days = 14): Promise<ActivityTrend> {
+    const r = await this.request<{ today: string; days: number; series: Record<string, number[]> }>('GET', `/api/accounts/activity-trend${this.qs({ days })}`);
+    return { today: r.today, days: r.days, series: r.series };
   }
 
   async getActivity(clientId: string, q: ActivityQuery): Promise<ActivityPage> {

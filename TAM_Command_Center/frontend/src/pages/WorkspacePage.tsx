@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Activity, ChevronDown, ChevronLeft, History, LayoutDashboard, ListChecks, Pencil, Server, Users } from 'lucide-react';
+import { Activity, ChevronDown, ChevronLeft, History, LayoutDashboard, ListChecks, Server, Users } from 'lucide-react';
 import { Tabs, type TabItem } from '../components/ui/Tabs';
-import { CountStat, StatusBadge } from '../components/ui/Badges';
 import { EmptyState } from '../components/ui/Feedback';
-import { useApp } from '../store/DataContext';
+import { useApp, useQuery } from '../store/DataContext';
+import { HeaderBand } from './workspace/HeaderBand';
 import { WORKSPACE_TABS, accountPath, type WorkspaceTab } from '../lib/links';
 import { useDocumentTitle, useMediaQuery } from '../lib/hooks';
 import { ContextRail } from './workspace/ContextRail';
@@ -25,6 +25,8 @@ export function WorkspacePage() {
   const current = (WORKSPACE_TABS as string[]).includes(tab ?? '') ? (tab as WorkspaceTab) : null;
   const [briefOpen, setBriefOpen] = useState(current === 'overview');
   useDocumentTitle(account?.name ?? 'Account');
+  const infra = useQuery(`infra:${clientId}`, (ds) => ds.getInfrastructure(clientId), { enabled: !!account });
+  const todayQ = useQuery('today', (ds) => ds.getToday(), { enabled: !!account });
 
   // The brief starts expanded on Overview and collapsed elsewhere (narrow layout only).
   useEffect(() => { setBriefOpen(current === 'overview'); }, [current, clientId]);
@@ -51,30 +53,7 @@ export function WorkspacePage() {
   return (
     <div className="page ws">
       <Link to="/accounts" className="ws__back"><ChevronLeft size={16} strokeWidth={1.5} aria-hidden="true" /> Accounts</Link>
-      <header className="wshead">
-        <div className="wshead__row">
-          <h1 className="wshead__name">{account.name}</h1>
-          {account.status === 'Inactive' && <StatusBadge value="Inactive" />}
-          <span className="wshead__meta muted">
-            {account.bpid && <>BPID <span className="mono">{account.bpid}</span></>}
-            {account.bpid && account.products && ' · '}
-            {account.products}
-          </span>
-          <div className="pagehead__spacer" />
-          <Link to={editLink} className="btn btn--secondary btn--sm">
-            <span className="btn__icon" aria-hidden="true"><Pencil size={16} strokeWidth={1.5} /></span>
-            <span className="btn__label">Edit account</span>
-          </Link>
-        </div>
-        <p className="wshead__counts" aria-label="Account counts">
-          <CountStat label="Open" value={account.open_tasks} />
-          <CountStat label="Overdue" value={account.overdue} tone="danger" />
-          <CountStat label="Waiting" value={account.waiting} />
-          <CountStat label="Servers" value={account.servers} />
-          <CountStat label="Alerts" value={account.active_alerts} tone="warning" />
-          <CountStat label="Upgrades" value={account.upcoming_upgrades} />
-        </p>
-      </header>
+      <HeaderBand account={account} infra={infra.data} queue={todayQ.data?.queue ?? null} editLink={editLink} />
       <Tabs items={items} value={current} onChange={(id) => navigate(accountPath(clientId, id as WorkspaceTab))} label={`${account.name} sections`} idPrefix="ws" />
       <div className="ws__grid">
         {narrow && (
@@ -90,10 +69,10 @@ export function WorkspacePage() {
           </div>
         )}
         <div id="ws-panel" role="tabpanel" aria-labelledby={`ws-tab-${current}`} className="ws__main">
-          {current === 'overview' && <OverviewTab account={account} />}
+          {current === 'overview' && <OverviewTab account={account} infra={infra} todayQ={todayQ} />}
           {current === 'tasks' && <TaskList clientId={account.id} caption={`${account.name} tasks`} />}
           {current === 'activity' && <ActivityTab account={account} />}
-          {current === 'infrastructure' && <InfrastructureTab account={account} />}
+          {current === 'infrastructure' && <InfrastructureTab q={infra} />}
           {current === 'contacts' && <ContactsTab account={account} />}
         </div>
         {!narrow && <ContextRail account={account} />}

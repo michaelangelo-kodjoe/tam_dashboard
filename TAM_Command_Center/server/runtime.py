@@ -23,9 +23,11 @@ log = logging.getLogger("tam.startup")
 
 class Runtime:
     def __init__(self, config: Config, *, acquire_lock: bool = True,
-                 clock: Optional[Callable[[], _dt.date]] = None) -> None:
+                 clock: Optional[Callable[[], _dt.date]] = None,
+                 tz: Optional[_dt.tzinfo] = None) -> None:
         self.config = config
         self.clock = clock or _dt.date.today
+        self.tz = tz                      # None = workstation zone; tests inject a zone (DST days)
         self.backups = BackupService(config.backup_dir)
         self.lock = InstanceLock(config.lock_path)
         self.log_file: Optional[Path] = None

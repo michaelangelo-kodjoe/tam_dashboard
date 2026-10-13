@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { App } from './App';
 import { newMock } from './data/mock/testFile';
+import { taskToInput } from './lib/tasks';
 
 function go(path: string) {
   window.history.pushState({}, '', path);
@@ -19,64 +20,211 @@ const loc = () => window.location.pathname + window.location.search;
 beforeEach(() => { document.body.style.overflow = ''; });
 afterEach(() => cleanup());
 
-describe('app shell and Today (integration over MockDataSource)', () => {
-  it('lands on Today, shows the DEV and Mock badges, and a tiered queue with the seeded tiers', async () => {
-    await boot('/');
+const utcMidnight = (day: string) => `${day}T00:00:00.000Z`;
+const options = (c: HTMLElement = document.body) => within(c).getAllByRole('option');
+const chip = (name: RegExp) => screen.getByRole('radio', { name });
+
+describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () => {
+  it('lands on Today with the top 10, eight chips with full counts, a detail pane and collapsed Later tabs', async () => {
+    const ds = newMock();
+    const full = await ds.getToday();
+    await boot('/', ds);
     expect(await screen.findByRole('heading', { level: 1, name: /Today/ })).toBeInTheDocument();
     expect(loc()).toBe('/today');
     expect(screen.getByText('DEV')).toBeInTheDocument();
     expect(screen.getByText('Mock data')).toBeInTheDocument();
-    for (const label of ['Overdue / Critical', 'Due today', 'Infrastructure alerts', 'Waiting / follow-up', 'Upgrade actions', 'Upcoming tasks']) {
-      expect(await screen.findByRole('region', { name: new RegExp(`^${label.replace('/', '\\/')},`) })).toBeInTheDocument();
-    }
-    expect(screen.getByRole('heading', { name: /^Upcoming \(\d+\)$/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Recently changed/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Account load/ })).toBeInTheDocument();
+    const list = await screen.findByRole('listbox', { name: /Work queue/ });
+    const opts = options(list);
+    expect(opts).toHaveLength(10); // strict top 10 (AC1)
+    expect(opts[0]).toHaveAttribute('aria-selected', 'true');
+    expect(list).toHaveAttribute('aria-activedescendant', opts[0].id);
+    expect(opts.map((o) => o.querySelector('.trow__n')!.textContent)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
+    // titles equal the first 10 of the queue array, in queue order (AC6)
+    expect(opts.map((o) => o.querySelector('b')!.textContent)).toEqual(full.queue.slice(0, 10).map((i) => i.title));
+    // chips: Top 10, six tiers, All; counts are the full counts (AC3)
+    const radios = within(screen.getByRole('radiogroup', { name: 'Queue groups' })).getAllByRole('radio');
+    expect(radios.map((r) => r.querySelector('.chip__label')!.textContent)).toEqual(['Top 10', 'Overdue / critical', 'Due today', 'Alerts', 'Waiting', 'Upgrades', 'Next 3 days', 'All']);
+    const counts = radios.map((r) => Number(r.querySelector('.chip__count')!.textContent));
+    const byTier = [1, 2, 3, 4, 5, 6].map((t) => full.queue.filter((i) => i.tier === t).length);
+    expect(counts).toEqual([10, ...byTier, full.queue.length]);
+    expect(counts[1]).toBeGreaterThan(10 - 1); // tier 1 alone exceeds the cap, so the cap never hides a count
+    expect(screen.getByText(`Showing 10 of ${full.queue.length}`)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: new RegExp(`View all \\(${full.queue.length}\\)`) })).toBeInTheDocument();
+    // detail pane for the first item
+    const detail = screen.getByRole('region', { name: 'Selected item' });
+    expect(within(detail).getByRole('heading', { level: 2 })).toHaveTextContent(full.queue[0].title);
+    expect(within(detail).getByText('Why it is here')).toBeInTheDocument();
+    expect(within(detail).getByText('Key facts')).toBeInTheDocument();
+    expect(within(detail).getByRole('link', { name: /^Open (task|account|infrastructure)/ })).toBeInTheDocument();
+    // Later: tab bar visible, collapsed (D-30)
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual([`Upcoming (${full.upcoming.length})`, 'Recently changed (20)', 'Account load']);
+    expect(tabs.every((t) => t.getAttribute('aria-selected') === 'false')).toBe(true);
+    expect(screen.queryByRole('tabpanel')).toBeNull();
   });
 
-  it('overdue items come before upcoming tasks and BAMS/upgrade items are present (US-3.1 AC3-5)', async () => {
+  it('the detail pane never offers steps, a next action or a completion control (D-28, AC5)', async () => {
     await boot('/today');
-    const overdue = await screen.findByRole('region', { name: /^Overdue \/ Critical/ });
-    expect(within(overdue).getAllByRole('listitem').length).toBeGreaterThan(5);
-    const regions = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label') ?? '');
-    expect(regions.findIndex((n) => n.startsWith('Overdue'))).toBeLessThan(regions.findIndex((n) => n.startsWith('Upcoming tasks')));
-    expect(within(overdue).getAllByText('BAMS alert').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Upgrade').length).toBeGreaterThan(0);
+    const detail = await screen.findByRole('region', { name: 'Selected item' });
+    expect(detail.textContent).not.toMatch(/What to do|Mark complete|next action/i);
+    expect(within(detail).queryByRole('button')).toBeNull();
   });
 
-  it('clicking a task row navigates to the task and opens its drawer; Enter on the focused title link does the same', async () => {
-    const { user } = await boot('/today');
-    const overdue = await screen.findByRole('region', { name: /^Overdue \/ Critical/ });
-    const taskRow = within(overdue).getAllByRole('listitem').find((li) => li.textContent?.includes('Task') && li.querySelector('a.qrow__link') && !li.textContent.includes('No account'))!;
-    await user.click(taskRow.querySelector('.qrow__type')!);
-    await waitFor(() => expect(loc()).toMatch(/^\/accounts\/[^/]+\/tasks\?task=/));
-    expect(await screen.findByRole('dialog', { name: /Follow up|.+/ })).toBeInTheDocument();
-    expect(screen.getByText('Task', { selector: '.label' })).toBeInTheDocument();
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-
-    go('/today');
+  it('tier chips list every item of the tier with no cap; All lists the whole queue with tier headings; ?show= survives a reload', async () => {
+    const ds = newMock();
+    const full = await ds.getToday();
+    const tier1 = full.queue.filter((i) => i.tier === 1).length;
+    const { user } = await boot('/today', ds);
+    await user.click(await screen.findByRole('radio', { name: /Overdue \/ critical/ }));
+    expect(loc()).toBe('/today?show=t1');
+    expect(options(screen.getByRole('listbox'))).toHaveLength(tier1);
+    expect(screen.getByText(`Showing ${tier1} of ${tier1}`)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /View all/ })).toBeNull();
+    await user.click(chip(/^Top 10/));
+    expect(loc()).toBe('/today'); // default is not written to the URL
+    await user.click(screen.getByRole('link', { name: /View all/ }));
+    expect(loc()).toBe('/today?show=all');
+    expect(chip(/^All/)).toHaveAttribute('aria-checked', 'true');
+    expect(options(screen.getByRole('listbox'))).toHaveLength(full.queue.length);
+    const groups = screen.getAllByRole('group').filter((g) => /items$/.test(g.getAttribute('aria-label') ?? ''));
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(
+      [1, 2, 3, 4, 5, 6].map((t) => `${full.queue.find((i) => i.tier === t)!.tier_label}, ${full.queue.filter((i) => i.tier === t).length} items`),
+    );
     cleanup();
-    const again = await boot('/today');
-    const overdue2 = await screen.findByRole('region', { name: /^Overdue \/ Critical/ });
-    const link = within(overdue2).getAllByRole('link').find((a) => a.classList.contains('qrow__link'))!;
-    link.focus();
-    await again.user.keyboard('{Enter}');
+    await boot('/today?show=t3', ds); // reload restores the state
+    expect(await screen.findByRole('radio', { name: /^Alerts/ })).toHaveAttribute('aria-checked', 'true');
+    cleanup();
+    await boot('/today?show=bogus', ds); // unknown values fall back to top
+    expect(await screen.findByRole('radio', { name: /^Top 10/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('upcoming-only objects never appear in the list, and there is no Plan chip (AC7, D-27)', async () => {
+    const ds = newMock();
+    const full = await ds.getToday();
+    const { user } = await boot('/today?show=all', ds);
+    await screen.findByRole('listbox');
+    const shown = options(screen.getByRole('listbox')).map((o) => o.querySelector('b')!.textContent);
+    expect(shown).toEqual(full.queue.map((i) => i.title));
+    expect(screen.queryByRole('radio', { name: /^Plan/ })).toBeNull();
+    void user;
+  });
+
+  it('Up/Down/Home/End move the selection and the detail; Enter opens; click selects only; double-click opens (AC4)', async () => {
+    const ds = newMock();
+    const full = await ds.getToday();
+    const { user } = await boot('/today', ds);
+    const list = await screen.findByRole('listbox');
+    const detailTitle = () => within(screen.getByRole('region', { name: 'Selected item' })).getByRole('heading', { level: 2 }).textContent;
+    const selected = () => options(list).findIndex((o) => o.getAttribute('aria-selected') === 'true');
+    list.focus();
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(selected()).toBe(2);
+    expect(detailTitle()).toBe(full.queue[2].title);
+    expect(list.getAttribute('aria-activedescendant')).toBe(options(list)[2].id);
+    await user.keyboard('{ArrowUp}');
+    expect(selected()).toBe(1);
+    await user.keyboard('{End}');
+    expect(selected()).toBe(9);
+    await user.keyboard('{ArrowDown}'); // no wrap
+    expect(selected()).toBe(9);
+    await user.keyboard('{Home}{ArrowUp}');
+    expect(selected()).toBe(0);
+    await user.click(options(list)[4]);
+    expect(selected()).toBe(4);
+    expect(loc()).toBe('/today'); // a click does not navigate
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(loc()).not.toBe('/today'));
+    cleanup();
+    go('/today');
+    const again = await boot('/today', ds);
+    const list2 = await screen.findByRole('listbox');
+    await again.user.dblClick(options(list2)[1]);
     await waitFor(() => expect(loc()).not.toBe('/today'));
   });
 
-  it('BAMS alert rows go to the Infrastructure tab with ?server=, and client touches to the Overview', async () => {
+  it('arrow keys work with no focus in the list, and Left/Right belong to a focused chip', async () => {
     const { user } = await boot('/today');
-    const alerts = await screen.findByRole('region', { name: /^Infrastructure alerts/ });
-    await user.click(within(alerts).getAllByRole('link').find((a) => a.classList.contains('qrow__link'))!);
-    await waitFor(() => expect(loc()).toMatch(/^\/accounts\/[^/]+\/infrastructure\?server=/));
+    const list = await screen.findByRole('listbox');
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.keyboard('{ArrowDown}');
+    expect(options(list)[1]).toHaveAttribute('aria-selected', 'true');
+    chip(/^Top 10/).focus();
+    await user.keyboard('{ArrowDown}'); // Up/Down still move the list while a chip has focus
+    expect(options(list)[2]).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowRight}'); // Left/Right move between chips
+    expect(chip(/^Overdue \/ critical/)).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('a task with no account goes to /tasks?task=', async () => {
+  it('changing the chip selects the first row; items route to their objects (task, alert, no account) per §4.2', async () => {
     const { user } = await boot('/today');
-    const row = (await screen.findAllByText('No account')).map((e) => e.closest('li')).find((li) => li?.querySelector('a.qrow__link'))!;
-    await user.click(row!.querySelector('a.qrow__link')!);
-    await waitFor(() => expect(loc()).toMatch(/^\/tasks\?task=/));
+    await screen.findByRole('listbox');
+    await user.click(chip(/^Alerts/));
+    expect(options(screen.getByRole('listbox'))[0]).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Enter}'); // focus is on the chip; Enter on a chip must not open anything
+    expect(loc()).toBe('/today?show=t3');
+    await user.click(within(screen.getByRole('region', { name: 'Selected item' })).getByRole('link', { name: 'Open infrastructure' }));
+    await waitFor(() => expect(loc()).toMatch(/^\/accounts\/[^/]+\/infrastructure\?server=/));
+    cleanup();
+    const t = await boot('/today?show=t1');
+    await screen.findByRole('listbox');
+    const taskOpt = options(screen.getByRole('listbox')).find((o) => o.querySelector('small')?.textContent === 'No account') ?? options(screen.getByRole('listbox')).find((o) => !/(CPU|Disk|Memory|Network)/.test(o.textContent ?? ''))!;
+    await t.user.click(taskOpt);
+    await t.user.click(within(screen.getByRole('region', { name: 'Selected item' })).getByRole('link', { name: /^Open/ }));
+    await waitFor(() => expect(loc()).toMatch(/^\/(tasks\?task=|accounts\/[^/]+\/(tasks\?task=|infrastructure))/));
+  });
+
+  it('the ring shows "N of M tasks done" from progress and updates after a task is completed (US-3.7)', async () => {
+    const ds = newMock({ now: () => new Date('2026-10-12T15:00:00.000Z'), localMidnight: utcMidnight });
+    const before = (await ds.getToday()).progress!;
+    expect(before.done).toBe(8);
+    const { user } = await boot('/today', ds);
+    const ring = await screen.findByTestId('progress');
+    expect(ring).toHaveTextContent(`${before.done} of ${before.total} tasks done`);
+    expect(ring.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
+    expect(ring).toHaveAttribute('title', '+2 other tasks completed');
+    const st = await ds.getState();
+    const plan = st.tasks.find((t) => t.status !== 'Complete' && t.due != null && t.due <= '2026-10-12' && t.client_id && st.accounts.find((a) => a.id === t.client_id)?.status === 'Active')!;
+    await ds.saveTask({ ...taskToInput(plan), status: 'Complete' });
+    await user.click(screen.getByRole('button', { name: 'Refresh Today' }));
+    await waitFor(() => expect(screen.getByTestId('progress')).toHaveTextContent(`${before.done + 1} of ${before.total} tasks done`));
+    const after = (await ds.getToday()).progress!;
+    expect(after.done).toBeLessThanOrEqual(after.total);
+    expect(after.total).toBe(before.total); // M is unchanged when an open plan task completes
+  });
+
+  it('M = 0 shows "No tasks due today" and no ring; N = M shows "All done"', async () => {
+    const ds = newMock();
+    const base = await ds.getToday();
+    ds.getToday = async () => ({ ...base, progress: { day: base.today, total: 0, done: 0, open: 0, done_other: 0 } });
+    await boot('/today', ds);
+    expect(await screen.findByTestId('progress')).toHaveTextContent('No tasks due today');
+    expect(screen.getByTestId('progress').querySelector('svg')).toBeNull();
+    cleanup();
+    const ds2 = newMock();
+    ds2.getToday = async () => ({ ...base, progress: { day: base.today, total: 5, done: 5, open: 0, done_other: 0 } });
+    await boot('/today', ds2);
+    const r = await screen.findByTestId('progress');
+    expect(r).toHaveTextContent('5 of 5 tasks done');
+    expect(r).toHaveTextContent('All done');
+    expect(r.querySelector('.ring__check')).not.toBeNull();
+  });
+
+  it('Later tabs: click opens a panel, click again collapses; Account load shows at most 8 rows and an All accounts link (US-3.8)', async () => {
+    const { user } = await boot('/today');
+    await screen.findByRole('listbox');
+    await user.click(screen.getByRole('tab', { name: /^Upcoming/ }));
+    expect(screen.getByRole('tab', { name: /^Upcoming/ })).toHaveAttribute('aria-selected', 'true');
+    expect(within(screen.getByRole('tabpanel')).getAllByRole('link').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('tab', { name: /^Upcoming/ }));
+    expect(screen.queryByRole('tabpanel')).toBeNull();
+    await user.click(screen.getByRole('tab', { name: /^Recently changed/ }));
+    expect(within(screen.getByRole('tabpanel')).getAllByRole('listitem').length).toBe(20);
+    await user.click(screen.getByRole('tab', { name: 'Account load' }));
+    const table = within(screen.getByRole('tabpanel')).getByRole('table', { name: 'Account load' });
+    expect(within(table).getAllByRole('row').length - 1).toBeLessThanOrEqual(8);
+    expect(within(table).getAllByRole('row').length - 1).toBe(8);
+    expect(screen.getByRole('link', { name: /All accounts \(10\)/ })).toHaveAttribute('href', '/accounts');
+    expect(document.querySelector('[role="dialog"]')).toBeNull(); // no drawer
   });
 
   it('nav rail: Today/Accounts/Tasks/Settings work; Operations/BAMS/Bridge show "Later" and a not-built page; no Journal', async () => {
@@ -108,6 +256,25 @@ describe('Accounts and Workspace', () => {
     expect(await screen.findByRole('heading', { level: 1, name: /Halvorsen/ })).toBeInTheDocument();
   });
 
+  it('Accounts refresh: tile strip, needs-attention list (max 4, no score), instruments in the table (US-4.2)', async () => {
+    await boot('/accounts');
+    const table = await screen.findByRole('table', { name: 'Accounts' });
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent?.trim()).filter((h) => h && h !== 'Open')).toEqual(['Account', 'Load', 'Overdue', 'Waiting', 'Alerts', 'Servers', 'Next upgrade', 'Next contact', 'Activity']);
+    const portfolio = screen.getByRole('region', { name: 'Portfolio' });
+    expect(portfolio).toHaveTextContent(/10\s*active accounts/);
+    expect(screen.getByRole('region', { name: 'Open load by account' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /^Next 15 days: \d+ upgrades, \d+ client touches$/ })).toBeInTheDocument();
+    const attn = await screen.findByRole('region', { name: 'Needs attention' });
+    await waitFor(() => expect(within(attn).getAllByRole('link').length).toBeGreaterThan(0));
+    expect(within(attn).getAllByRole('link').length).toBeLessThanOrEqual(4);
+    expect(attn.textContent).not.toMatch(/\b(score|health|grade)\b/i);
+    // every row has a load bar with a text equivalent and a servers dot row; activity sparkline once the trend loads
+    const row = within(table).getAllByRole('row')[1];
+    expect(within(row).getByRole('img', { name: /open: \d+ overdue, \d+ waiting, \d+ other/ })).toBeInTheDocument();
+    expect(within(row).getByRole('img', { name: /\d+ servers?, \d+ with an alert/ })).toBeInTheDocument();
+    await waitFor(() => expect(within(row).getByRole('img', { name: /^Activity, last 14 days: \d+ entr/ })).toBeInTheDocument());
+  });
+
   it('Accounts: Inactive filter lists the 2 inactive accounts; columns have no health score', async () => {
     const { user } = await boot('/accounts');
     await user.click(await screen.findByRole('radio', { name: 'Inactive' }));
@@ -125,9 +292,9 @@ describe('Accounts and Workspace', () => {
 
   it('Workspace header counts, tabs synced to the URL, arrow-key tab navigation', async () => {
     const { user, id } = await openHalvorsen();
-    const counts = screen.getByLabelText('Account counts');
-    expect(counts).toHaveTextContent(/Open\s*12/);
-    expect(counts).toHaveTextContent(/Overdue\s*3/);
+    const counts = screen.getByRole('group', { name: 'Account counts' });
+    expect(counts).toHaveTextContent(/Open tasks\s*12/);
+    expect(counts).toHaveTextContent(/3 overdue/);
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent);
     expect(tabs.map((t) => t?.replace(/\d+$/, '').trim())).toEqual(['Overview', 'Tasks', 'Activity', 'Infrastructure', 'Contacts']);
     const overview = screen.getByRole('tab', { name: 'Overview' });
@@ -138,6 +305,24 @@ describe('Accounts and Workspace', () => {
     expect(screen.getByRole('tab', { name: /Tasks/ })).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{End}');
     await waitFor(() => expect(loc()).toBe(`/accounts/${id}/contacts`));
+  });
+
+  it('Workspace refresh: header band cells, Top item, due histogram, server tiles and the upgrade timeline (US-5.6)', async () => {
+    await openHalvorsen();
+    const band = screen.getByRole('group', { name: 'Account counts' });
+    for (const cap of ['Open tasks', 'Servers', 'Alerts', 'Next upgrade', 'Next client touch']) expect(within(band).getByText(cap)).toBeInTheDocument();
+    // exclusive meter: 12 open = 3 overdue + 2 waiting + 7 other (an overdue Waiting task counts once)
+    const meter = within(band).getByRole('img', { name: /^12 open: \d+ overdue, \d+ waiting, \d+ other$/ });
+    const n = /(\d+) open: (\d+) overdue, (\d+) waiting, (\d+) other/.exec(meter.getAttribute('aria-label')!)!.slice(1).map(Number);
+    expect(n[1] + n[2] + n[3]).toBe(n[0]);
+    expect(await screen.findByRole('article', { name: 'Top item for this account' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Top item for this account' }).textContent).not.toMatch(/Mark complete|What to do/);
+    expect(screen.getByRole('img', { name: /open tasks over 20 days/ })).toBeInTheDocument();
+    const tiles = await screen.findByRole('list', { name: 'Servers' });
+    expect(within(tiles).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(tiles).getAllByText('No trend data').length).toBeGreaterThan(0); // a server with no samples: no sparkline
+    expect(within(tiles).getAllByRole('img').length).toBeGreaterThan(0); // and at least one with a series
+    expect(screen.getByRole('table', { name: 'Upgrades in the next 30 days' })).toBeInTheDocument();
   });
 
   it('Overview shows up to 8 open tasks sorted overdue first, then priority, then due (US-5.3)', async () => {
@@ -174,7 +359,7 @@ describe('Accounts and Workspace', () => {
     await user.click(within(table).getAllByRole('button', { name: /Mark complete/ })[0]);
     await waitFor(() => expect(within(screen.getByRole('table', { name: /tasks/ })).getAllByRole('row').length).toBe(before - 1));
     expect(await screen.findByText('Task completed')).toBeInTheDocument();
-    expect(screen.getByLabelText('Account counts')).toHaveTextContent(/Open\s*11/);
+    expect(screen.getByRole('group', { name: 'Account counts' })).toHaveTextContent(/Open tasks\s*11/);
   });
 
   it('Activity tab: filters, system events have no edit/delete controls, notes do (US-7.4)', async () => {
@@ -303,7 +488,7 @@ describe('overlays, Quick Capture and account jump', () => {
 
   it('+ Capture button saves a task with Ctrl+Enter, toasts with a View link, and refreshes Today', async () => {
     const { user } = await boot('/today');
-    await screen.findByRole('region', { name: /^Overdue/ });
+    await screen.findByRole('listbox');
     await user.click(screen.getByRole('button', { name: /Capture/ }));
     const dlg = await screen.findByRole('dialog', { name: 'Quick capture' });
     await user.type(within(dlg).getByLabelText(/^Task/), 'Capture test task');
@@ -312,8 +497,8 @@ describe('overlays, Quick Capture and account jump', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     const toast = await screen.findByText('Task created');
     expect(within(toast.closest('.toast') as HTMLElement).getByRole('link', { name: 'View' })).toBeInTheDocument();
-    const due = await screen.findByRole('region', { name: /^Due today/ });
-    expect(within(due).getByText('Capture test task')).toBeInTheDocument();
+    await user.click(await screen.findByRole('radio', { name: /^Due today/ }));
+    expect(await screen.findByText('Capture test task')).toBeInTheDocument();
   });
 
   it('Client follow-up requires an account and a due date, prefills the title, and offers the next-touch checkbox', async () => {
@@ -395,11 +580,11 @@ describe('overlays, Quick Capture and account jump', () => {
   it('keeps showing data and a stale banner when a refresh fails (guidelines §12)', async () => {
     const ds = newMock();
     const { user } = await boot('/today', ds);
-    await screen.findByRole('region', { name: /^Overdue/ });
+    await screen.findByRole('listbox');
     ds.failNext = 1;
     await user.click(screen.getByRole('button', { name: 'Refresh Today' }));
     expect(await screen.findByText(/Showing data from/)).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /^Overdue/ })).toBeInTheDocument();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
   });
 });
 

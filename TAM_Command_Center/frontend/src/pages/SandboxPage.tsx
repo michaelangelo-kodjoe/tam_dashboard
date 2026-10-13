@@ -9,6 +9,7 @@ import { Checkbox } from '../components/ui/Checkbox';
 import { StatusBadge, PriorityLabel } from '../components/ui/Badges';
 import { Dialog } from '../components/ui/Dialog';
 import { useToast } from '../components/ui/Toast';
+import { Avatar, DatePill, DotRow, ProgressRing, Sparkline, StackBar } from '../components/ui/Instruments';
 import { useApp } from '../store/DataContext';
 import { useDocumentTitle } from '../lib/hooks';
 
@@ -88,6 +89,12 @@ export function SandboxPage() {
             <Button onClick={() => toast.push({ kind: 'success', message: 'Saved', detail: 'Success toast' })}>Success toast</Button>
             <Button onClick={() => toast.push({ kind: 'error', message: 'Could not save', detail: 'Errors stay until dismissed' })}>Error toast</Button>
           </div>
+        </Panel>
+        <Panel title="Instruments (Run 2)">
+          <div className="sandbox__row"><StackBar meter={{ open: 12, overdue: 3, waiting: 2, other: 7 }} /></div>
+          <div className="sandbox__row"><Sparkline values={[32, 35, 30, 34, 48, 52, 60]} label="CPU, last 7d, latest 60" tone="warning" /></div>
+          <div className="sandbox__row"><ProgressRing done={3} total={8} /><span className="num">3 of 8 tasks done</span></div>
+          <div className="sandbox__row"><DotRow dots={[{ tone: null }, { tone: 'warning' }, { tone: null }]} label="3 servers, 1 with an alert" /><Avatar name="Sofia Whitcombe" /><DatePill pill={{ date: '13 Oct', rel: '', overdue: false, today: true }} /></div>
         </Panel>
       </div>
       {dlg && (

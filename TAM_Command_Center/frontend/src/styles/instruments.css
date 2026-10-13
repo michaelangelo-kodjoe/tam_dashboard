@@ -1,0 +1,89 @@
+/* Run 2 instruments and panels (docs/02_DESIGN_GUIDELINES.md §15). Static: no gradients, no animation, no shadows. */
+.sm { font-size: var(--fs-sm); line-height: var(--lh-sm); }
+
+/* ---- meter / stack bar ---- */
+.stackbar { display: flex; gap: 1px; height: var(--meter-h); border-radius: 1px; overflow: hidden; background: var(--surface-3); }
+.stackbar--thin { height: 5px; }
+.stackbar .seg { display: block; height: 100%; flex-basis: 0; min-width: 2px; }
+.seg--overdue { background: var(--danger); }
+.seg--waiting { background: var(--warning); }
+.seg--other { background: var(--border-strong); }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+.legend span { white-space: nowrap; }
+.swatch { display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 1px; }
+
+/* ---- sparkline ---- */
+.spark { display: block; width: 100%; height: var(--spark-h); overflow: visible; }
+.spark polyline { stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark--warning polyline { stroke: var(--warning); }
+.spark--danger polyline { stroke: var(--danger); }
+.spark--info polyline { stroke: var(--info); }
+.spark--cell { width: 64px; height: 20px; }
+
+/* ---- due histogram ---- */
+.duehist { padding: var(--sp-3) var(--sp-4) var(--sp-2); }
+.duehist__bars { display: flex; align-items: flex-end; gap: 3px; height: 48px; }
+.duehist__bar { display: block; flex: 1; min-width: 0; background: var(--surface-3); border-radius: 1px 1px 0 0; }
+.duehist__bar--overdue { background: var(--danger); }
+.duehist__bar--today { background: var(--accent); }
+.duehist__bar--future { background: var(--border-strong); }
+.duehist__bar--zero { background: var(--surface-3); }
+.duehist__axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: var(--fs-label); line-height: var(--lh-label); color: var(--subtle); }
+
+/* ---- timeline track ---- */
+.timeline-track { padding: var(--sp-3) var(--sp-5) var(--sp-3); }
+.timeline-track__line { position: relative; margin: 0 var(--sp-5); }
+.timeline-track__line::before { content: ''; position: absolute; left: 0; right: 0; top: 11px; border-top: 2px solid var(--border-strong); }
+.timeline-track__today { position: absolute; left: 0; top: 4px; width: 2px; height: 16px; background: var(--accent); }
+.tmark { position: absolute; top: 3px; transform: translateX(-50%); width: 0; }
+.tmark--left { transform: none; }
+.tmark--right { transform: none; }
+.tmark__ring { position: absolute; left: -8px; top: 0; display: block; width: 16px; height: 16px; border-radius: var(--r-round); border: 2px solid var(--border-strong); background: var(--surface-1); }
+.tmark__ring--danger { border-color: var(--danger); }
+.tmark__ring--warning { border-color: var(--warning); }
+.tmark__ring--info { border-color: var(--info); }
+.tmark__ring--accent { border-color: var(--accent); }
+.tmark__label { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; font-size: var(--fs-sm); line-height: 16px; color: var(--muted); }
+.tmark--left .tmark__label { transform: none; left: -8px; }
+.tmark--right .tmark__label { transform: translateX(-100%); left: 8px; }
+.timeline-track__axis { display: flex; justify-content: space-between; margin-top: 2px; font-size: var(--fs-label); color: var(--subtle); }
+
+/* ---- progress ring ---- */
+.ring { width: var(--ring-size); height: var(--ring-size); flex: none; }
+.ring__track { fill: none; stroke: var(--surface-3); stroke-width: 4; }
+.ring__arc { fill: none; stroke: var(--accent); stroke-width: 4; }
+.ring__check { stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- summary chips ---- */
+.chips { display: flex; flex-wrap: wrap; border: 1px solid var(--border-control); border-radius: var(--r-md); overflow: hidden; background: var(--surface-1); margin-bottom: var(--sp-3); }
+.chip { flex: 1 1 110px; min-width: 110px; display: flex; flex-direction: column; padding: 8px 12px; text-align: left; color: var(--muted); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); margin: 0 -1px -1px 0; transition: background-color var(--dur) var(--ease); }
+.chip:hover:not(.is-empty) { background: var(--surface-2); }
+.chip__label { font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.chip__count { font-size: var(--fs-lg); line-height: 22px; font-weight: 700; color: var(--text); }
+.chip.is-checked { background: var(--accent-tint); color: var(--accent); }
+.chip.is-checked .chip__count { color: var(--accent); }
+.chip.is-empty { cursor: not-allowed; }
+.chip.is-empty .chip__count { color: var(--subtle); font-weight: 400; }
+.chip:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* ---- dot row, avatar, pills, proximity track ---- */
+.dotrow { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+.dotrow__dot { display: block; width: 8px; height: 8px; border-radius: var(--r-round); background: var(--border-strong); }
+.dotrow--sq { gap: 5px; }
+.dotrow--sq .dotrow__dot { width: 12px; height: 12px; border-radius: var(--r-sm); }
+.dotrow__dot--warning { background: var(--warning); }
+.dotrow__dot--danger { background: var(--danger); }
+.dotrow__dot--info { background: var(--info); }
+.dotrow__more { font-size: var(--fs-sm); color: var(--muted); margin-left: 2px; }
+.avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: var(--r-round); background: var(--surface-3); border: 1px solid var(--border-strong); color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+.pill { display: inline-flex; align-items: baseline; gap: 6px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: var(--fs-sm); line-height: 18px; white-space: nowrap; }
+.pill__rel { font-style: normal; color: var(--muted); }
+.pill__rel--overdue { color: var(--danger); }
+.pill__rel--today { color: var(--accent); }
+.proxtrack { position: relative; height: var(--meter-h); margin: 8px 0 6px; border-radius: 1px; background: var(--surface-3); overflow: hidden; }
+.proxtrack__fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--info); }
+.proxtrack__fill--accent { background: var(--accent); }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: var(--r-round); background: var(--border-strong); flex: none; }
+.status-dot--danger { background: var(--danger); }
+.status-dot--warning { background: var(--warning); }
+.status-dot--muted { background: var(--subtle); }

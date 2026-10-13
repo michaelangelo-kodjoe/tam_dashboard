@@ -3,6 +3,7 @@ import type {
   Account,
   ActivityFilter,
   ActivityPage,
+  ActivityTrend,
   AppState,
   BackupInfo,
   Contact,
@@ -65,6 +66,8 @@ export interface DataSource {
   getActivity(clientId: string, query: ActivityQuery): Promise<ActivityPage>;
   getTasks(query: TaskQuery): Promise<Task[]>;
   getInfrastructure(clientId: string): Promise<Infrastructure>;
+  /** Accounts activity-trend column (PM-AC-2). Active accounts only; 14 daily points by default. */
+  getActivityTrend(days?: number): Promise<ActivityTrend>;
 
   getSettings(): Promise<Settings>;
   saveSettings(patch: Partial<Settings>): Promise<MutationResult<Settings>>;

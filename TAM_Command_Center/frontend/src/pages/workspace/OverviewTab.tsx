@@ -8,17 +8,28 @@ import { Timeline } from '../../components/activity/Timeline';
 import { taskDrawerLink } from '../../lib/links';
 import { topOpenTasks } from '../../lib/tasks';
 import { useApp, useQuery } from '../../store/DataContext';
-import type { AccountSummary, Task } from '../../types';
+import { DueHistogram, TimelineTrack } from '../../components/ui/Instruments';
+import { TopItem } from './TopItem';
+import { ServerTiles } from './ServerTiles';
+import { dueHistogram, serverSummary, timelineMarkers, topItemFor } from '../../lib/instruments';
+import type { QueryResult } from '../../store/DataContext';
+import type { AccountSummary, Infrastructure, Task, TodayData } from '../../types';
 import { accountPath } from '../../lib/links';
 
-export function OverviewTab({ account }: { account: AccountSummary }) {
+export function OverviewTab({ account, infra, todayQ }: { account: AccountSummary; infra: QueryResult<Infrastructure>; todayQ: QueryResult<TodayData> }) {
   const { state, today, settings } = useApp();
   const loc = useLocation();
   const act = useQuery(`activity:${account.id}:overview`, (ds) => ds.getActivity(account.id, { filter: 'all', limit: 10 }));
   const mine = state.tasks.filter((t) => t.client_id === account.id);
   const top = topOpenTasks(mine, today, 8);
+  const topItem = todayQ.data ? topItemFor(todayQ.data.queue, account.id) : null;
+  const bins = dueHistogram(mine, today);
+  const tiles = infra.data?.servers ?? [];
+  const sum = serverSummary(tiles);
+  const markers = infra.data ? timelineMarkers(infra.data.upgrades, today) : [];
 
   const cols: Column<Task>[] = [
+    { key: 'mark', header: 'Urgency', hideHeader: true, className: 'tmark-cell', cell: (t) => <i className={`rowmark ${t.due != null && t.due < today ? 'rowmark--danger' : t.due === today ? 'rowmark--accent' : ''}`} aria-hidden="true" /> },
     { key: 'task', header: 'Task', primary: true, cell: (t) => <span className="truncate" title={t.task}>{t.task}</span> },
     { key: 'priority', header: 'Priority', cell: (t) => <PriorityLabel value={t.priority} /> },
     { key: 'due', header: 'Due', align: 'right', cell: (t) => <DateCell date={t.due} today={today} /> },
@@ -28,10 +39,12 @@ export function OverviewTab({ account }: { account: AccountSummary }) {
 
   return (
     <div className="overview">
+      {topItem && <TopItem item={topItem} />}
       <Panel
         title="Open tasks"
         actions={<Link className="more-link" to={accountPath(account.id, 'tasks')}>View all ({account.open_tasks}) <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" /></Link>}
       >
+        <DueHistogram bins={bins} today={today} />
         <DataTable
           caption={`Top open tasks for ${account.name}`}
           columns={cols}
@@ -41,6 +54,20 @@ export function OverviewTab({ account }: { account: AccountSummary }) {
           chevron
           empty={<EmptyState action={<Link className="btn btn--primary btn--sm" to={taskDrawerLink(loc.pathname, loc.search, 'new')}><span className="btn__label">+ Task</span></Link>}>No open tasks for this account.</EmptyState>}
         />
+      </Panel>
+      <Panel
+        title="Infrastructure"
+        actions={<><span className="muted sm">{[sum.prod ? `PROD ${sum.prod}` : '', sum.dev ? `DEV ${sum.dev}` : ''].filter(Boolean).join(' · ')}</span><Link className="more-link" to={accountPath(account.id, 'infrastructure')}>Open tab <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" /></Link></>}
+      >
+        {infra.loading && <SkeletonRows rows={3} label="Loading infrastructure" />}
+        {infra.error ? <ErrorBanner error={infra.error} onRetry={infra.reload} title="Could not load infrastructure" /> : null}
+        {infra.data && (
+          <>
+            <ServerTiles tiles={tiles} />
+            <div className="subsec"><h3 className="label">Upgrades, next 30 days</h3></div>
+            <TimelineTrack markers={markers} today={today} />
+          </>
+        )}
       </Panel>
       <Panel
         title="Recent activity"

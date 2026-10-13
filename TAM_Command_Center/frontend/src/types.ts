@@ -154,11 +154,29 @@ export interface InfrastructureSummary {
   regions: string[];
 }
 
+/** One metric series for a server tile (PM-AC-3). `points` are [ISO UTC instant, value], oldest first, at most 28. */
+export interface ServerSpark {
+  metric: string;
+  window_hours: number;
+  points: [ISOInstant, number][];
+}
+
+/** One tile per distinct server name (docs/01_PM_SPEC.md §10.4 #6, #7; PM-AC-3). */
+export interface ServerTile {
+  name: string;
+  environment: string | null;
+  version: string | null;
+  /** worst open alert: Critical or Warning drive the tile; Info/null = healthy */
+  alert_severity: 'Critical' | 'Warning' | 'Info' | null;
+  spark: ServerSpark | null;
+}
+
 export interface Infrastructure {
   client_id: string;
   bams_objects: BamsObject[];
   upgrades: ServerUpgrade[];
   summary: InfrastructureSummary;
+  servers: ServerTile[];
 }
 
 export interface Settings {
@@ -246,13 +264,31 @@ export interface AccountLoadRow {
   next_contact: ISODate | null;
 }
 
+/** "Done today N of M" (D-29, docs/01_PM_SPEC.md §10.2). Tasks only; done <= total always. */
+export interface TodayProgress {
+  day: ISODate;
+  total: number;
+  done: number;
+  open: number;
+  done_other: number;
+}
+
 export interface TodayData {
   today: ISODate;
   queue: QueueItem[];
   upcoming: QueueItem[];
   recent_changes: RecentChange[];
   account_load: AccountLoadRow[];
+  /** null when the server predates PM-AC-1 */
+  progress: TodayProgress | null;
   generated_at: ISOInstant;
+}
+
+/** GET /api/accounts/activity-trend (PM-AC-2): per account, `days` daily counts, oldest first. */
+export interface ActivityTrend {
+  today: ISODate;
+  days: number;
+  series: Record<string, number[]>;
 }
 
 // ---- Activity ------------------------------------------------------------

@@ -1,6 +1,7 @@
 """Read-only infrastructure payloads (PM US-9.1, D-02): BAMS objects, alerts, upgrades, server counts."""
 from __future__ import annotations
 
+import datetime as _dt
 import sqlite3
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
@@ -53,8 +54,98 @@ def _env_summary(objects: List[Dict[str, Any]], upgrades: List[Dict[str, Any]]) 
     return {"servers": len(env), "environment_summary": {**summary, "regions": regions}}
 
 
+_SEV_RANK = {"Critical": 3, "Warning": 2, "Info": 1}
+SPARK_WINDOW_DAYS = 7
+SPARK_MAX_POINTS = 28
+
+
+def _instant(s: str) -> _dt.datetime:
+    return _dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _fmt(t: _dt.datetime) -> str:
+    return t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z"
+
+
+def _downsample(rows: List[Any], limit: int = SPARK_MAX_POINTS) -> List[List[Any]]:
+    """rows = [(iso, value)] oldest first. <= limit -> as is; else `limit` equal-time buckets over the span
+    first..last, each non-empty bucket contributing its maximum (at that sample's timestamp)."""
+    if len(rows) <= limit:
+        return [[t, v] for t, v in rows]
+    t0, t1 = _instant(rows[0][0]), _instant(rows[-1][0])
+    span = (t1 - t0).total_seconds()
+    best: Dict[int, Any] = {}
+    for t, v in rows:
+        idx = min(limit - 1, int((_instant(t) - t0).total_seconds() / span * limit)) if span > 0 else 0
+        if idx not in best or v > best[idx][1]:
+            best[idx] = (t, v)
+    return [[best[i][0], best[i][1]] for i in sorted(best)]
+
+
+def _spark(conn: sqlite3.Connection, metric_id: str, metric_name: str, now: _dt.datetime) -> Optional[Dict[str, Any]]:
+    """One metric, one time range, nothing else is read (spec section 45)."""
+    lo = _fmt(now - _dt.timedelta(days=SPARK_WINDOW_DAYS))
+    rows = [(r[0], r[1]) for r in conn.execute(
+        "SELECT sampled_at, value FROM bams_metric_samples WHERE metric_id = :m AND sampled_at >= :lo"
+        " AND sampled_at <= :hi ORDER BY sampled_at, id", {"m": metric_id, "lo": lo, "hi": _fmt(now)})]
+    if not rows:
+        return None
+    hours = -(-int((now - _instant(rows[0][0])).total_seconds()) // 3600)
+    return {"metric": metric_name, "window_hours": max(1, min(SPARK_WINDOW_DAYS * 24, hours)),
+            "points": _downsample(rows)}
+
+
+def _server_tiles(conn: sqlite3.Connection, objects: List[Dict[str, Any]], upgrades: List[Dict[str, Any]],
+                  alerts_by_obj: Dict[str, List[Dict[str, Any]]], metrics: List[Dict[str, Any]],
+                  now: _dt.datetime) -> List[Dict[str, Any]]:
+    """PM-AC-3 / PM section 10.4 #6-#7: one tile per distinct server name (case-insensitive)."""
+    names: Dict[str, str] = {}
+    for o in objects:
+        names.setdefault(o["name"].strip().casefold(), o["name"])
+    for u in upgrades:
+        names.setdefault(u["server_name"].strip().casefold(), u["server_name"])
+    env: Dict[str, Optional[str]] = {}
+    for u in sorted(upgrades, key=lambda u: (u["schedule_year"] or 0, u["schedule_quarter"] or "",
+                                             u["scheduled_date"] or "")):
+        env[u["server_name"].strip().casefold()] = u["environment"]
+    for o in objects:
+        env.setdefault(o["name"].strip().casefold(), o.get("environment"))
+    metrics_by_obj: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for m in metrics:
+        metrics_by_obj[m["object_id"]].append(m)
+    tiles = []
+    for key in sorted(names, key=lambda k: (k, names[k])):
+        ups = [u for u in upgrades if u["server_name"].strip().casefold() == key]
+        open_ups = sorted((u for u in ups if u["status"] not in ("Completed", "Deferred")),
+                          key=lambda u: (u["scheduled_date"] is None, u["scheduled_date"] or "", u["id"]))
+        done_ups = sorted((u for u in ups if u["status"] == "Completed"),
+                          key=lambda u: (u["scheduled_date"] or "", u["id"]))
+        version = (open_ups[0]["current_version"] if open_ups and open_ups[0]["current_version"] else None)
+        if version is None and not open_ups and done_ups:
+            version = done_ups[-1]["target_version"]
+        objs = [o for o in objects if o["name"].strip().casefold() == key and o["enabled"]]
+        open_alerts = [(a, o) for o in objs for a in alerts_by_obj.get(o["id"], []) if a["status"] == "open"]
+        open_alerts.sort(key=lambda p: (-_SEV_RANK.get(p[0]["severity"], 0), p[0]["opened_at"], p[0]["id"]))
+        metric = None
+        if open_alerts:
+            wanted = open_alerts[0][0]["metric_name"]
+            metric = next((m for m in metrics_by_obj[open_alerts[0][1]["id"]]
+                           if m["metric_name"] == wanted and m["enabled"]), None)
+        else:
+            cpu = sorted((m for o in objs for m in metrics_by_obj[o["id"]]
+                          if m["enabled"] and "cpu" in m["metric_name"].casefold()),
+                         key=lambda m: (m["metric_name"], m["id"]))
+            metric = cpu[0] if cpu else None
+        tiles.append({"name": names[key], "environment": env.get(key),
+                      "version": version,
+                      "alert_severity": open_alerts[0][0]["severity"] if open_alerts else None,
+                      "spark": _spark(conn, metric["id"], metric["metric_name"], now) if metric else None})
+    return tiles
+
+
 def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: Optional[str] = None,
-                         include_metrics: bool = True, today: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+                         include_metrics: bool = True, today: Optional[str] = None,
+                         server_tiles: bool = False) -> Dict[str, Dict[str, Any]]:
     """Returns {client_id: payload} for one account or for all accounts."""
     cond, params = ("WHERE client_id = :c", {"c": client_id}) if client_id else ("", {})
     objects = rows_to_dicts(conn.execute(f"SELECT * FROM bams_objects {cond} ORDER BY name COLLATE NOCASE, id", params))
@@ -65,7 +156,8 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
     fresh_by_obj: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for f in fresh:
         fresh_by_obj[f["object_id"]].append(f)
-    metrics = rows_to_dicts(conn.execute("SELECT id, object_id, enabled FROM bams_metrics"))
+    metrics = rows_to_dicts(conn.execute("SELECT id, object_id, metric_name, enabled FROM bams_metrics"
+                                         " ORDER BY metric_name, id"))
     enabled_by_metric = {m["id"]: bool(m["enabled"]) for m in metrics}
     alerts_by_obj: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for a in rows_to_dicts(conn.execute(
@@ -77,6 +169,10 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
         oid = a.pop("object_id")
         alerts_by_obj[oid].append(a)
 
+    objects_raw: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for o in objects:
+        objects_raw[o["client_id"]].append(o)
+    now = _instant(migrate.utc_now())
     out: Dict[str, Dict[str, Any]] = {}
     clients = [client_id] if client_id else [r[0] for r in conn.execute("SELECT id FROM clients")]
     for cid in clients:
@@ -107,4 +203,6 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
         payload["active_alerts"] = sum(len(o["alerts"]) for o in objs)
         payload.update(_env_summary(objs, ups))
         payload["next_upgrade"] = _next_upgrade(ups, today)
+        if server_tiles:
+            payload["server_tiles"] = _server_tiles(conn, objects_raw.get(cid, []), ups, alerts_by_obj, metrics, now)
     return out

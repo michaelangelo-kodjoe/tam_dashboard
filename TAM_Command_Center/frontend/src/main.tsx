@@ -6,6 +6,9 @@ import './styles/base.css';
 import './styles/ui.css';
 import './styles/shell.css';
 import './styles/pages.css';
+import './styles/instruments.css';
+import './styles/today.css';
+import './styles/refresh.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

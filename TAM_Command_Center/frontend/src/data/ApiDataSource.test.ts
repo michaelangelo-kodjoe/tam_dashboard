@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiDataSource, mapAccount, mapActivity, mapInfra, mapInfraSummary } from './ApiDataSource';
+import { ApiDataSource, mapAccount, mapActivity, mapInfra, mapInfraSummary, mapProgress, mapServers } from './ApiDataSource';
 import { DataSourceError } from './DataSource';
 
 // Payloads below are shaped exactly like the examples in docs/04_API_CONTRACT.md.
@@ -118,5 +118,44 @@ describe('ApiDataSource requests', () => {
     expect(calls[0].url).toBe('/api/tasks?client_id=c1&archived=true');
     await ds.getActivity('c1', { filter: 'call', q: 'x y', cursor: 'abc', limit: 50 });
     expect(calls[1].url).toBe('/api/client/c1/activity?filter=call&q=x+y&before=abc&limit=50');
+  });
+});
+
+describe('Run 2 wire shapes (docs/04_API_CONTRACT.md §2 and §9)', () => {
+  it('progress is mapped from GET /api/today and is null on a server that predates it', async () => {
+    const calls = mockFetch(() => ({ body: { ok: true, today: '2026-10-13', queue: [], upcoming: [], recent_changes: [], account_load: [], progress: { day: '2026-10-13', total: 8, done: 3, open: 5, done_other: 1 } } }));
+    const t = await new ApiDataSource().getToday();
+    expect(calls[0].url).toBe('/api/today');
+    expect(t.progress).toEqual({ day: '2026-10-13', total: 8, done: 3, open: 5, done_other: 1 });
+    mockFetch(() => ({ body: { ok: true, today: '2026-10-13', queue: [], upcoming: [], recent_changes: [], account_load: [] } }));
+    expect((await new ApiDataSource().getToday()).progress).toBeNull();
+    expect(mapProgress({ day: 'x' } as never)).toBeNull();
+  });
+
+  it('server_tiles become servers (the integer `servers` count stays the summary count); a tile with no points has spark null', () => {
+    const w = {
+      ...wireInfra,
+      server_tiles: [
+        { name: 'bxa-ny-01', environment: 'PROD', version: '7.1.4', alert_severity: 'Critical', spark: { metric: 'Disk', window_hours: 168, points: [['2026-10-06T12:00:00.000Z', 71.2], ['2026-10-06T18:00:00.000Z', 73]] } },
+        { name: 'bxa-ldn-02', environment: 'DEV', version: null, alert_severity: null, spark: null },
+        { name: 'x', spark: { metric: 'CPU', window_hours: 1, points: [] } },
+      ],
+    };
+    const i = mapInfra(w as never);
+    expect(i.summary.servers).toBe(5);
+    expect(i.servers).toHaveLength(3);
+    expect(i.servers[0]).toMatchObject({ name: 'bxa-ny-01', alert_severity: 'Critical', spark: { metric: 'Disk', window_hours: 168 } });
+    expect(i.servers[0].spark!.points).toHaveLength(2);
+    expect(i.servers[1].spark).toBeNull();
+    expect(i.servers[2]).toMatchObject({ environment: null, version: null, alert_severity: null, spark: null });
+    expect(mapServers(wireInfra as never)).toEqual([]);
+  });
+
+  it('activity trend requests days=14 and returns the series keyed by client id', async () => {
+    const series = { c1: Array.from({ length: 14 }, (_, i) => i) };
+    const calls = mockFetch(() => ({ body: { ok: true, today: '2026-10-13', days: 14, series } }));
+    const r = await new ApiDataSource().getActivityTrend();
+    expect(calls[0].url).toBe('/api/accounts/activity-trend?days=14');
+    expect(r).toEqual({ today: '2026-10-13', days: 14, series });
   });
 });

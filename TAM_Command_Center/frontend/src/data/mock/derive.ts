@@ -10,6 +10,8 @@ import type {
   Infrastructure,
   InfrastructureSummary,
   Note,
+  ServerSpark,
+  ServerTile,
   ServerUpgrade,
   Task,
 } from '../../types';
@@ -156,10 +158,10 @@ export function accountSummary(t: Tables, c: Row, today: string): AccountSummary
   };
 }
 
-export function infrastructureSummary(t: Tables, clientId: string, today: string): InfrastructureSummary {
+/** Environment per server (QA-1-15): most recent upgrade row for the server, else bams_objects.environment. */
+export function serverEnvironments(t: Tables, clientId: string): Map<string, string> {
   const objs = t.bams_objects.filter((o) => o.client_id === clientId);
   const ups = t.server_upgrades.filter((u) => u.client_id === clientId);
-  // Environment precedence (QA-1-15): most recent upgrade row for the server, else bams_objects.environment.
   const env = new Map<string, string>();
   const latest = new Map<string, Row>();
   for (const u of ups) {
@@ -171,6 +173,13 @@ export function infrastructureSummary(t: Tables, clientId: string, today: string
   }
   for (const [k, u] of latest) env.set(k, u.environment);
   for (const o of objs) if (!env.has(norm(o.name)) && o.environment) env.set(norm(o.name), o.environment);
+  return env;
+}
+
+export function infrastructureSummary(t: Tables, clientId: string, today: string): InfrastructureSummary {
+  const objs = t.bams_objects.filter((o) => o.client_id === clientId);
+  const ups = t.server_upgrades.filter((u) => u.client_id === clientId);
+  const env = serverEnvironments(t, clientId);
   const counts = new Map<string, number>();
   for (const e of env.values()) counts.set(e, (counts.get(e) ?? 0) + 1);
   const order = ['PROD', 'DEV'];
@@ -189,6 +198,90 @@ export function infrastructureSummary(t: Tables, clientId: string, today: string
     env_summary: keys.map((k) => `${k} ${counts.get(k)}`).join(' · '),
     regions: [...new Set(objs.map((o) => o.region).filter(Boolean) as string[])].sort(),
   };
+}
+
+// ------------------------------------------------------------------ server tiles (PM-AC-3, §10.4 #6 and #7)
+
+const SEV_RANK: Record<string, number> = { Critical: 0, Warning: 1, Info: 2 };
+export const SPARK_MAX_POINTS = 28;
+export const SPARK_WINDOW_HOURS = 168;
+
+/** Contract §9.3: more than `max` samples -> `max` equal-time buckets over first..last, each non-empty bucket keeps its maximum sample. */
+export function downsampleMax(points: [string, number][], max = SPARK_MAX_POINTS): [string, number][] {
+  if (points.length <= max) return points;
+  const t0 = Date.parse(points[0][0]);
+  const span = Date.parse(points[points.length - 1][0]) - t0;
+  const best = new Map<number, [string, number]>();
+  for (const p of points) {
+    const idx = span === 0 ? 0 : Math.min(max - 1, Math.floor(((Date.parse(p[0]) - t0) / span) * max));
+    const cur = best.get(idx);
+    if (!cur || p[1] > cur[1]) best.set(idx, p);
+  }
+  return [...best.entries()].sort((x, y) => x[0] - y[0]).map(([, p]) => p);
+}
+
+export function serverTiles(t: Tables, clientId: string, clock: Date): ServerTile[] {
+  const objs = t.bams_objects.filter((o) => o.client_id === clientId);
+  const ups = t.server_upgrades.filter((u) => u.client_id === clientId);
+  const env = serverEnvironments(t, clientId);
+  const names = new Map<string, string>(); // normalized -> display
+  for (const u of ups) if (!names.has(norm(u.server_name))) names.set(norm(u.server_name), u.server_name);
+  for (const o of objs) names.set(norm(o.name), o.name); // the appliance name wins
+  const metricsByObj = new Map<string, Row[]>();
+  for (const m of t.bams_metrics) {
+    const list = metricsByObj.get(m.object_id) ?? [];
+    list.push(m);
+    metricsByObj.set(m.object_id, list);
+  }
+  const winStart = clock.getTime() - SPARK_WINDOW_HOURS * 3_600_000;
+  const tiles: ServerTile[] = [];
+  for (const [key, display] of names) {
+    // version (earliest open upgrade's current_version, else latest Completed upgrade's target_version)
+    const mine = ups.filter((u) => norm(u.server_name) === key);
+    const open = mine
+      .filter((u) => u.status !== 'Completed' && u.status !== 'Deferred')
+      .sort((a, b) => (a.scheduled_date ?? '9999') .localeCompare(b.scheduled_date ?? '9999') || String(a.id).localeCompare(String(b.id)))[0];
+    const done = mine
+      .filter((u) => u.status === 'Completed')
+      .sort((a, b) => (b.scheduled_date ?? '').localeCompare(a.scheduled_date ?? '') || String(a.id).localeCompare(String(b.id)))[0];
+    const version = open ? (open.current_version ?? null) : done ? (done.target_version ?? null) : null;
+
+    // worst open alert and its metric
+    const myObjs = objs.filter((o) => norm(o.name) === key);
+    const myMetrics = myObjs.filter((o) => o.enabled).flatMap((o) => (metricsByObj.get(o.id) ?? []).filter((m) => m.enabled));
+    const mIds = new Map<string, Row>(myMetrics.map((m) => [m.id, m]));
+    const openAlerts = t.bams_alert_events
+      .filter((e) => e.status === 'open' && mIds.has(e.metric_id))
+      .sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9) || (a.opened_at < b.opened_at ? -1 : a.opened_at > b.opened_at ? 1 : 0) || String(a.id).localeCompare(String(b.id)));
+    const worst = openAlerts[0];
+    const metric = worst
+      ? mIds.get(worst.metric_id)!
+      : myMetrics.filter((m) => /cpu/i.test(m.metric_name)).sort((a, b) => String(a.metric_name).localeCompare(String(b.metric_name)))[0];
+
+    let spark: ServerSpark | null = null;
+    if (metric) {
+      const pts: [string, number][] = t.bams_metric_samples
+        .filter((s) => s.metric_id === metric.id && Date.parse(s.sampled_at) >= winStart && Date.parse(s.sampled_at) <= clock.getTime())
+        .sort((a, b) => (a.sampled_at < b.sampled_at ? -1 : 1))
+        .map((s) => [s.sampled_at as string, s.value as number]);
+      if (pts.length > 0) {
+        const spanH = (clock.getTime() - Date.parse(pts[0][0])) / 3_600_000; // first sample to now (contract §9.3)
+        spark = {
+          metric: metric.metric_name,
+          window_hours: Math.min(SPARK_WINDOW_HOURS, Math.max(1, Math.ceil(spanH))),
+          points: downsampleMax(pts),
+        };
+      }
+    }
+    tiles.push({
+      name: display,
+      environment: env.get(key) ?? null,
+      version,
+      alert_severity: (worst?.severity as ServerTile['alert_severity']) ?? null,
+      spark,
+    });
+  }
+  return tiles.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function infrastructure(t: Tables, clientId: string, today: string, clock: Date): Infrastructure {
@@ -218,7 +311,7 @@ export function infrastructure(t: Tables, clientId: string, today: string, clock
     .filter((u) => u.client_id === clientId)
     .map(toUpgrade)
     .sort((a, b) => (b.scheduled_date ?? '').localeCompare(a.scheduled_date ?? '') || a.server_name.localeCompare(b.server_name));
-  return { client_id: clientId, bams_objects: bams, upgrades, summary: infrastructureSummary(t, clientId, today) };
+  return { client_id: clientId, bams_objects: bams, upgrades, summary: infrastructureSummary(t, clientId, today), servers: serverTiles(t, clientId, clock) };
 }
 
 // ------------------------------------------------------------------ sentences

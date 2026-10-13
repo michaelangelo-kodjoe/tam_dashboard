@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { Avatar } from '../../components/ui/Instruments';
 import { DateField } from '../../components/ui/Fields';
 import { RichText } from '../../components/ui/Feedback';
 import { useToast } from '../../components/ui/Toast';
@@ -118,7 +119,9 @@ export function ContextRail({ account }: { account: AccountSummary }) {
         ) : (
           <ul className="rc-contacts">
             {contacts.slice(0, 5).map((c) => (
-              <li key={c.id}>
+              <li key={c.id} className="rc-contact">
+                <Avatar name={c.name} />
+                <div className="rc-contact__body">
                 <p className="rc-contact__name">
                   {c.is_primary && <Star size={14} strokeWidth={1.5} fill="currentColor" className="accent-text" aria-hidden="true" />}
                   <span>{c.name}</span>
@@ -126,6 +129,7 @@ export function ContextRail({ account }: { account: AccountSummary }) {
                 </p>
                 <p className="muted rc-small">{[c.role, c.team].filter(Boolean).join(' · ') || <span className="subtle">No role</span>}</p>
                 {c.email && <p className="rc-small"><a href={`mailto:${c.email}`}>{c.email}</a></p>}
+                </div>
               </li>
             ))}
           </ul>

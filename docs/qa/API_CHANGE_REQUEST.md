@@ -16,9 +16,14 @@ All additive; no frozen field, route or error code changes; **no schema change**
 
 | ID | Sev | Status | Request | Why |
 |---|---|---|---|---|
-| PM-AC-1 | Medium | open | `GET /api/today` adds `progress: {day, total, done, open, done_other}` per PM §10.2 (tasks with `due <= today`, Active or no account; done = status Complete now and a `task`/`completed` audit row inside the local-day window; open = not Complete and not archived; `total = done + open`). Day window = local midnights of `today` and `today+1` converted to UTC separately (DST-safe). Reference query `db/queries/day_progress.sql` (DA, T-61). | "Done today N of M" ring (D-29). |
-| PM-AC-2 | Low | open | New `GET /api/accounts/activity-trend?days=14` returning `{ok, today, days, series: {client_id: [int x days, oldest first]}}` for Active accounts: Activity-timeline entries (same union as `activity_timeline.sql`) per local day. | Accounts table activity sparkline (D-31); keeps `/api/state` light (§42). |
-| PM-AC-3 | Low | open | `GET /api/client/{id}/infrastructure` adds `servers: [{name, environment, version, alert_severity, spark}]` per distinct server name; `spark = {metric, window_hours, points: [[iso_utc, value] x <= 28]}` or `null` (metric: highest-severity open alert, else a "cpu" metric, else null; window = min(7 days, available)). Reads only the window from `bams_metric_samples` (§45). | Server tiles with sparklines (D-31). |
+| PM-AC-1 | Medium | done (2026-10-13) | `GET /api/today` adds `progress: {day, total, done, open, done_other}` per PM §10.2 (tasks with `due <= today`, Active or no account; done = status Complete now and a `task`/`completed` audit row inside the local-day window; open = not Complete and not archived; `total = done + open`). Day window = local midnights of `today` and `today+1` converted to UTC separately (DST-safe). Reference query `db/queries/day_progress.sql` (DA, T-61). | "Done today N of M" ring (D-29). |
+| PM-AC-2 | Low | done (2026-10-13) | New `GET /api/accounts/activity-trend?days=14` returning `{ok, today, days, series: {client_id: [int x days, oldest first]}}` for Active accounts: Activity-timeline entries (same union as `activity_timeline.sql`) per local day. | Accounts table activity sparkline (D-31); keeps `/api/state` light (§42). |
+| PM-AC-3 | Low | done (2026-10-13) | `GET /api/client/{id}/infrastructure` adds `servers: [{name, environment, version, alert_severity, spark}]` per distinct server name; `spark = {metric, window_hours, points: [[iso_utc, value] x <= 28]}` or `null` (metric: highest-severity open alert, else a "cpu" metric, else null; window = min(7 days, available)). Reads only the window from `bams_metric_samples` (§45). | Server tiles with sparklines (D-31). |
 
 `GET /api/today` `queue` order and item shape are unchanged.
+
+Backend notes (2026-10-13, T-62 to T-64; shapes frozen in `docs/04_API_CONTRACT.md` §9):
+- PM-AC-1: as requested, `progress` on `GET /api/today`, via `day_progress.sql` unmodified; window from two separately converted local midnights (`server/localtime.py`).
+- PM-AC-2: as requested, via `activity_trend.sql` unmodified. `days` accepts only `14` (the reference query is fixed at 14 buckets; other values -> 422). Extra optional `include_inactive=true`.
+- PM-AC-3 **deviation**: the array is `server_tiles`, not `servers`, because `servers` is a frozen integer on that payload. Present on the per-account endpoint only (not in `/api/state`).
 

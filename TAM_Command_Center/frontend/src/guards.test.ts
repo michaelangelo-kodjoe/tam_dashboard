@@ -49,4 +49,49 @@ describe('guards', () => {
       expect(t, relative(SRC, f)).not.toMatch(/gradient\(|backdrop-filter/);
     }
   });
+
+  // ---- Run 2 (docs/02_DESIGN_GUIDELINES.md §15.6 item 10, T-70) -------------------------------------------------
+  // Scoped to the Run 2 files: the Run 1 overlay entrance, skeleton pulse and refresh spinner predate §15 and are
+  // already disabled under prefers-reduced-motion; QA decides whether to retire them.
+  const run2Css = ['instruments.css', 'today.css', 'refresh.css'].map((f) => join(SRC, 'styles', f));
+  const run2Tsx = files.filter((x) => /(components\/ui\/Instruments|pages\/today\/|pages\/workspace\/(HeaderBand|TopItem|ServerTiles)|pages\/AccountsPage)[^/]*\.tsx$/.test(x) && !/\.test\./.test(x));
+
+  it('Run 2 files: no animation, keyframes, gradients, blur or shadows; radii only from tokens', () => {
+    expect(run2Tsx.length).toBeGreaterThanOrEqual(8);
+    for (const f of [...run2Css, ...run2Tsx, join(SRC, 'lib/triage.ts'), join(SRC, 'lib/instruments.ts')]) {
+      const t = readFileSync(f, 'utf8');
+      const name = relative(SRC, f);
+      expect(t, name).not.toMatch(/@keyframes|animation\s*:|animation-/);
+      expect(t, name).not.toMatch(/gradient\(|backdrop-filter|filter\s*:\s*blur/);
+      expect(t, name).not.toMatch(/box-shadow/);
+      for (const m of t.matchAll(/border-radius\s*:\s*([^;}]+)/g)) {
+        expect(m[1].trim(), `${name}: ${m[0]}`).toMatch(/^(var\(--r-(sm|md|lg|round)\)|1px(\s+1px\s+0\s+0)?|0)$/);
+      }
+      expect(t, name).not.toMatch(/style=\{\{[^}]*(color|background)\s*:/);
+    }
+  });
+
+  it('Today detail has no steps, next action or completion control (D-28)', () => {
+    const todayFiles = files.filter((x) => /pages\/today\//.test(x) && /\.tsx$/.test(x) && !/\.test\./.test(x)).concat(join(SRC, 'pages/workspace/TopItem.tsx'), join(SRC, 'lib/triage.ts'));
+    for (const f of todayFiles) {
+      const t = readFileSync(f, 'utf8');
+      expect(t, relative(SRC, f)).not.toMatch(/What to do|Mark complete|next[- ]action|\bsteps\b/i);
+    }
+  });
+
+  it('the three solid tint surfaces equal the status colour at 12% over --surface-1 (§15.2)', () => {
+    const css = readFileSync(join(SRC, 'styles/tokens.css'), 'utf8');
+    const hex = (name: string) => {
+      const m = new RegExp(`--${name}:\\s*#([0-9a-fA-F]{6})`).exec(css);
+      if (!m) throw new Error(`token ${name} not found`);
+      return [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+    };
+    const blend = (fg: number[], bg: number[]) => fg.map((c, i) => Math.round(bg[i] + 0.12 * (c - bg[i])));
+    const surface = hex('surface-1');
+    for (const [tint, colour] of [['surface-warning', 'warning'], ['surface-danger', 'danger'], ['surface-accent', 'accent']] as const) {
+      const got = hex(tint);
+      const want = blend(hex(colour), surface);
+      got.forEach((c, i) => expect(Math.abs(c - want[i]), `${tint}[${i}]`).toBeLessThanOrEqual(1));
+    }
+  });
 });
