@@ -146,4 +146,18 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - Indexes `ix_tasks_waiting_next_update`, `ix_server_upgrades_open_date`, `ix_server_upgrades_validation`, `ix_bams_alert_events_active` (QA-1-10).
 
 ### Fixed
+- 2026-10-12, backend-dev-agent (Phase 4.1):
+  - **FE-AC-1:** `GET /api/note/{id}` returns `{"ok": true, "item": <Note>}`; unknown id is 404 `not_found`; `GET /api/note/save|delete` is 405.
+  - **FE-AC-2:** activity note entries carry `client_id` and `created_at`.
+  - **FE-AC-3:** `server_name` on activity system entries and `recent_changes` rows (BAMS object name for alerts, server name for upgrades, else null).
+  - **FE-AC-4:** `next_upgrade: {date, server} | null` on every `infrastructure[client_id]` in `/api/state` and on the per-account infrastructure response. Same rule as `account_summary.sql`.
+  - **QA-E1-2:** `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, and a restrictive CSP (self-only scripts; inline styles allowed for React/Recharts) on every response. The built `web/` bundle loads and navigates with no CSP violations.
+  - **QA-E1-3:** a known path with the wrong method returns 405 `method_not_allowed` with `Allow`. `HEAD /` works.
+  - **QA-E1-4:** 2 MiB request-body cap (declared and chunked bodies) returns 413 `payload_too_large`.
+  - **QA-E1-7 (part):** `server/requirements.txt` pinned to the venv versions. pip-audit: no known vulnerabilities (after upgrading the venv's pip 24.0 to 26.2.1). bandit on `server/` excluding tests: 0 High, 8 Medium (B608 on f-strings built from fixed fragments and allow-listed column names, false positives), 1 Low (B101 assert).
+  - Tests: `server/tests/test_phase41.py` (11 new). `pytest server` 118, `pytest db` 77, e2e 44, scanner 0 violations. `docs/04_API_CONTRACT.md` updated.
+- 2026-10-12, frontend-dev-agent (Phase 4.1):
+  - **QA-E1-1:** `DEFAULT_SOURCE` is now `api`. `?data=mock` still selects the mock adapter for DEV/demo and is remembered for the tab session in `sessionStorage` (try/catch). A production build (`npm run build:api`, `VITE_DATA_SOURCE=api`) ignores `?data=mock` and does not ship `mock_data.json`. Regression test: `src/data/index.test.ts`.
+  - **FE-AC-1..4 consumed in `ApiDataSource`** (backend routes and fields exist in `server/`; `docs/04_API_CONTRACT.md` did not yet document them when re-read): `GET /api/note/{id}` replaces the 12-page activity paging for `?note=` deep links (new `DataSource.getNote`), note activity entries use wire `client_id` and `created_at`, system entries and recent changes use wire `server_name`, and the infrastructure summary uses the server-computed `next_upgrade`. The client-side derivations were removed.
+  - Verified against the live DEV backend on a scratch DB (Today, account workspace, note create/edit/delete, `?note=` deep link on a cold load, Quick Capture call note, primary contact switch): no console errors, no failed requests. Vitest 113 -> 118.
 - none

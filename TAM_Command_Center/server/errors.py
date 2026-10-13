@@ -56,6 +56,10 @@ class ForbiddenOrigin(AppError):
     code, status = "forbidden_origin", 403
 
 
+class PayloadTooLarge(AppError):
+    code, status = "payload_too_large", 413
+
+
 class BackupFailed(AppError):
     code, status = "backup_failed", 500
 

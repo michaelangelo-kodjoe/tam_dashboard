@@ -9,7 +9,7 @@ const wireAccount = {
   counts: { open_tasks: 12, overdue: 3, waiting: 2, active_alerts: 1, next_upgrade: '2026-10-24', upcoming_upgrades: 2, servers: 5 },
 };
 const wireInfra = {
-  client_id: 'c1', servers: 5, active_alerts: 1,
+  client_id: 'c1', servers: 5, active_alerts: 1, next_upgrade: { date: '2026-10-24', server: 'bxa-ny-01' },
   environment_summary: { PROD: 4, DEV: 1, unknown: 0, regions: ['East', 'West'] },
   bams_objects: [{ id: 'o1', client_id: 'c1', name: 'bxa-ny-01', region: 'East', location: 'NY', environment: 'PROD', enabled: true, row_version: 1, worst_status: 'Stale', metric_count: 4, alerts: [{ id: 'a', status: 'open' }] }],
   server_upgrades: [
@@ -38,23 +38,24 @@ describe('ApiDataSource mapping (docs/04_API_CONTRACT.md)', () => {
   });
 
   it('builds the infrastructure summary (env string, regions, next upgrade ignoring Completed)', () => {
-    const s = mapInfraSummary(wireInfra as never, '2026-10-12');
+    const s = mapInfraSummary(wireInfra as never);
     expect(s.env_summary).toBe('PROD 4 · DEV 1');
     expect(s.regions).toEqual(['East', 'West']);
     expect(s.next_upgrade).toEqual({ date: '2026-10-24', server: 'bxa-ny-01' });
-    const i = mapInfra(wireInfra as never, '2026-10-12');
+    const i = mapInfra(wireInfra as never);
     expect(i.bams_objects[0].active_alerts).toBe(1);
     expect(i.upgrades).toHaveLength(2);
   });
 
   it('maps kind-tagged activity entries (notes get a Note; BAMS and upgrade events get a server link target)', () => {
-    const note = mapActivity({ kind: 'note', entry_key: 'n:1', ts: '2026-10-11T10:00:00.000Z', id: '1', note_type: 'Call Note', subject: 'S', body: null, action_items: null, source: 'GUI', row_version: 2, updated_at: 'u' }, 'c1');
+    const note = mapActivity({ kind: 'note', entry_key: 'n:1', ts: '2026-10-11T10:00:00.000Z', id: '1', client_id: 'c1', created_at: '2026-10-11T09:59:00.000Z', note_type: 'Call Note', subject: 'S', body: null, action_items: null, source: 'GUI', row_version: 2, updated_at: 'u' });
     expect(note.entry_kind === 'note' && note.note.client_id).toBe('c1');
-    const bams = mapActivity({ kind: 'system', entry_key: 'b:e:opened', ts: 't', event_type: 'bams_alert.opened', object_type: 'bams_alert_event', object_id: 'e', label: 'bxa-ny-01 · CPU', severity: 'Critical', source: 'System', sentence: 'BAMS alert opened: bxa-ny-01 · CPU (Critical)' }, 'c1');
+    expect(note.entry_kind === 'note' && note.note.created_at).toBe('2026-10-11T09:59:00.000Z');
+    const bams = mapActivity({ kind: 'system', entry_key: 'b:e:opened', ts: 't', event_type: 'bams_alert.opened', object_type: 'bams_alert_event', object_id: 'e', label: 'bxa-ny-01 · CPU', server_name: 'bxa-ny-01', severity: 'Critical', source: 'System', sentence: 'BAMS alert opened: bxa-ny-01 · CPU (Critical)' });
     expect(bams.entry_kind === 'system' && bams.server_name).toBe('bxa-ny-01');
-    const up = mapActivity({ kind: 'system', entry_key: 'a:1', ts: 't', event_type: 'server_upgrade.created', object_type: 'server_upgrade', object_id: 'u', label: 'srv-02', severity: null, source: 'GUI', sentence: 'Server upgrade scheduled: srv-02' }, 'c1');
+    const up = mapActivity({ kind: 'system', entry_key: 'a:1', ts: 't', event_type: 'server_upgrade.created', object_type: 'server_upgrade', object_id: 'u', label: 'srv-02', server_name: 'srv-02', severity: null, source: 'GUI', sentence: 'Server upgrade scheduled: srv-02' });
     expect(up.entry_kind === 'system' && up.server_name).toBe('srv-02');
-    const task = mapActivity({ kind: 'system', entry_key: 'a:2', ts: 't', event_type: 'task.completed', object_type: 'task', object_id: 't', label: 'x', severity: null, source: 'GUI', sentence: 'Task completed: x' }, 'c1');
+    const task = mapActivity({ kind: 'system', entry_key: 'a:2', ts: 't', event_type: 'task.completed', object_type: 'task', object_id: 't', label: 'x', server_name: null, severity: null, source: 'GUI', sentence: 'Task completed: x' });
     expect(task.entry_kind === 'system' && task.server_name).toBeNull();
   });
 });
@@ -68,6 +69,14 @@ describe('ApiDataSource requests', () => {
     expect(s.contacts[0].is_primary).toBe(true);
     expect(s.runtime.source).toBe('api');
     expect(s.infrastructure.c1.servers).toBe(5);
+  });
+
+  it('getNote uses GET /api/note/{id} (FE-AC-1) and maps 404 not_found to null', async () => {
+    const calls = mockFetch((url) => (url.endsWith('/n1') ? { body: { ok: true, item: { id: 'n1', client_id: 'c1' } } } : { status: 404, body: { ok: false, error: { code: 'not_found', message: 'Note not found.' } } }));
+    const ds = new ApiDataSource();
+    expect((await ds.getNote('n1'))?.client_id).toBe('c1');
+    expect(calls[0].url).toBe('/api/note/n1');
+    expect(await ds.getNote('zz')).toBeNull();
   });
 
   it('wraps settings in {settings} and sends expected_row_version on task saves', async () => {

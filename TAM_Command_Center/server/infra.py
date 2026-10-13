@@ -26,6 +26,17 @@ def _upgrade_row(r: Dict[str, Any]) -> Dict[str, Any]:
     return {k: r.get(k) for k in keys}
 
 
+def _next_upgrade(upgrades: List[Dict[str, Any]], today: Optional[str]) -> Optional[Dict[str, str]]:
+    """Same rule as account_summary.sql: earliest scheduled_date >= today, status not Completed/Deferred (FE-AC-4).
+    `upgrades` is already ordered by (scheduled_date, server_name, id)."""
+    if today is None:
+        return None
+    for u in upgrades:
+        if u["scheduled_date"] and u["scheduled_date"] >= today and u["status"] not in ("Completed", "Deferred"):
+            return {"date": u["scheduled_date"], "server": u["server_name"]}
+    return None
+
+
 def _env_summary(objects: List[Dict[str, Any]], upgrades: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Environment precedence (QA-1-15): upgrade rows (most recent release) first, BAMS object env otherwise."""
     env: Dict[str, Optional[str]] = {}
@@ -43,7 +54,7 @@ def _env_summary(objects: List[Dict[str, Any]], upgrades: List[Dict[str, Any]]) 
 
 
 def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: Optional[str] = None,
-                         include_metrics: bool = True) -> Dict[str, Dict[str, Any]]:
+                         include_metrics: bool = True, today: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """Returns {client_id: payload} for one account or for all accounts."""
     cond, params = ("WHERE client_id = :c", {"c": client_id}) if client_id else ("", {})
     objects = rows_to_dicts(conn.execute(f"SELECT * FROM bams_objects {cond} ORDER BY name COLLATE NOCASE, id", params))
@@ -69,7 +80,8 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
     out: Dict[str, Dict[str, Any]] = {}
     clients = [client_id] if client_id else [r[0] for r in conn.execute("SELECT id FROM clients")]
     for cid in clients:
-        out[cid] = {"client_id": cid, "bams_objects": [], "server_upgrades": [], "active_alerts": 0}
+        out[cid] = {"client_id": cid, "bams_objects": [], "server_upgrades": [], "active_alerts": 0,
+                    "next_upgrade": None}
     objs_by_client: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for o in objects:
         states = [f["freshness"] for f in fresh_by_obj.get(o["id"], [])]
@@ -94,4 +106,5 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
         payload["server_upgrades"] = ups
         payload["active_alerts"] = sum(len(o["alerts"]) for o in objs)
         payload.update(_env_summary(objs, ups))
+        payload["next_upgrade"] = _next_upgrade(ups, today)
     return out

@@ -82,6 +82,8 @@ export interface DataSource {
   archiveTask(input: { id: string; archived: boolean; expected_row_version?: number }): Promise<MutationResult<Task>>;
   deleteTask(input: { id: string; confirm: true }): Promise<void>;
 
+  /** One note by id, or null if it does not exist (GET /api/note/{id}, FE-AC-1). */
+  getNote(id: string): Promise<Note | null>;
   saveNote(input: NoteInput): Promise<MutationResult<Note>>;
   deleteNote(input: { id: string; confirm: true }): Promise<void>;
 }

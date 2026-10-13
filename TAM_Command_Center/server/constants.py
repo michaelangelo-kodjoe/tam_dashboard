@@ -47,3 +47,6 @@ SETTING_ENUMS = {
     "auto_refresh_minutes": ("off", "1", "5", "15"),
     "log_level": ("INFO", "DEBUG"),
 }
+
+# Request body cap (QA-E1-4): largest legitimate body is a 50000-char note; 2 MB leaves wide headroom.
+MAX_BODY_BYTES = 2 * 1024 * 1024

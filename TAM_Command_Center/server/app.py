@@ -1,6 +1,7 @@
 """FastAPI application factory. Routes are thin: validation -> service -> JSON. No SQL here."""
 from __future__ import annotations
 
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -16,7 +17,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import constants as C
 from . import infra, reads, services
 from .config import Config
-from .errors import (AppError, ForbiddenOrigin, MethodNotAllowed, NotFound, NotImplementedYet, ValidationFailed)
+from .errors import (AppError, ForbiddenOrigin, MethodNotAllowed, NotFound, NotImplementedYet, PayloadTooLarge,
+                     ValidationFailed)
 from .logsetup import is_disconnect, log_connection_event, tail
 from .runtime import Runtime
 from .schemas import (ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
@@ -36,6 +38,73 @@ _STUB_PHASES = {
     "chat": "Phase 5: ChatGPT Bridge",
 }
 _ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+
+# QA-E1-2: the compiled bundle loads only same-origin scripts/styles and one data: favicon. Styles keep
+# 'unsafe-inline' because Recharts/React emit inline style attributes; scripts do not.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                                "img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; "
+                                "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"),
+}
+
+
+class BodyLimit:
+    """Pure ASGI middleware (QA-E1-4): reject request bodies over `limit` bytes with a structured 413.
+    A declared Content-Length is checked up front; chunked bodies are buffered up to the cap and replayed."""
+
+    def __init__(self, app: Any, limit: int) -> None:
+        self.app, self.limit = app, limit
+
+    async def _reject(self, send: Any) -> None:
+        body = json.dumps(PayloadTooLarge(
+            f"Request body exceeds the {self.limit // (1024 * 1024)} MB limit.",
+            details={"max_bytes": self.limit}).body()).encode()
+        headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()),
+                   (b"cache-control", b"no-store"), (b"connection", b"close")]
+        headers += [(k.lower().encode(), v.encode()) for k, v in SECURITY_HEADERS.items()]
+        await send({"type": "http.response.start", "status": 413, "headers": headers})
+        await send({"type": "http.response.body", "body": body})
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = dict(scope["headers"]).get(b"content-length")
+        if declared is not None:
+            try:
+                too_big = int(declared) > self.limit
+            except ValueError:
+                too_big = False
+            if too_big:
+                await self._reject(send)
+                return
+            await self.app(scope, receive, send)
+            return
+        # No Content-Length: only a chunked body can be large. Buffer up to the cap, then replay.
+        messages, total = [], 0
+        while True:
+            msg = await receive()
+            messages.append(msg)
+            if msg["type"] != "http.request":
+                break
+            total += len(msg.get("body", b""))
+            if total > self.limit:
+                await self._reject(send)
+                return
+            if not msg.get("more_body", False):
+                break
+        replay = iter(messages)
+
+        async def replay_receive() -> Any:
+            try:
+                return next(replay)
+            except StopIteration:
+                return await receive()
+
+        await self.app(scope, replay_receive, send)
 
 
 def _json(status: int, body: Dict[str, Any]) -> JSONResponse:
@@ -89,7 +158,8 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
                 log.exception("unhandled error on %s %s", request.method, request.url.path)
                 response = _json(500, {"ok": False, "error": {"code": "internal",
                                                               "message": "Unexpected server error. See the log."}})
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        for k, v in SECURITY_HEADERS.items():
+            response.headers[k] = v
         if request.url.path.startswith("/api") or response.headers.get("content-type", "").startswith("application/json"):
             response.headers["Cache-Control"] = "no-store"
         log.debug("%s %s -> %s (%.1f ms)", request.method, request.url.path, response.status_code,
@@ -99,6 +169,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
     if config.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins, allow_methods=["GET", "POST"],
                            allow_headers=["Content-Type"], allow_credentials=False)
+    app.add_middleware(BodyLimit, limit=C.MAX_BODY_BYTES)      # outermost: rejects before anything reads the body
 
     # ------------------------------------------------------------ error handlers
     @app.exception_handler(AppError)
@@ -150,7 +221,8 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
                     "accounts": reads.list_accounts(conn, today),
                     "tasks": reads.query_tasks(conn, archived="false", limit=C.TASKS_MAX_LIMIT),
                     "contacts": reads.list_contacts(conn),
-                    "infrastructure": infra.build_infrastructure(conn, config.channel, include_metrics=False)}
+                    "infrastructure": infra.build_infrastructure(conn, config.channel, include_metrics=False,
+                                                                today=today)}
 
     @api.get("/today")
     def today() -> Dict[str, Any]:
@@ -192,11 +264,22 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
             page = reads.activity_page(conn, client_id, filter_=filter, q=q, before=before, limit=limit)
         return {"ok": True, **page}
 
+    @api.get("/note/{note_id}")
+    def note_get(note_id: str) -> Dict[str, Any]:
+        if note_id in ("save", "delete"):          # write routes: GET is the wrong method, not a missing note
+            raise MethodNotAllowed("Method not allowed on this path.", details={"allowed": ["POST"]})
+        with rt.db() as conn:
+            raw = reads.get_note_raw(conn, note_id)
+        if raw is None:
+            raise NotFound("Note not found.")
+        return {"ok": True, "item": reads.note_row(raw)}
+
     @api.get("/client/{client_id}/infrastructure")
     def infrastructure(client_id: str) -> Dict[str, Any]:
         with rt.db() as conn:
             reads.require_client(conn, client_id)
-            return {"ok": True, **infra.build_infrastructure(conn, config.channel, client_id=client_id)[client_id]}
+            return {"ok": True, **infra.build_infrastructure(conn, config.channel, client_id=client_id,
+                                                             today=rt.today())[client_id]}
 
     # ------------------------------------------------------------ writes
     @api.post("/client/save")
@@ -262,7 +345,23 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
         _stub(prefix, phase)
 
     @api.api_route("/{rest:path}", methods=_ALL_METHODS, include_in_schema=False)
-    def api_not_found(rest: str) -> JSONResponse:
+    def api_not_found(request: Request, rest: str) -> JSONResponse:
+        # QA-E1-3: a path that exists under another method is a 405 with Allow, not a 404.
+        path = request.url.path
+        allowed = set()
+        for route in api.routes:
+            methods = getattr(route, "methods", None)
+            if (route.path.endswith("{rest:path}") or not methods or len(methods) >= len(_ALL_METHODS)  # type: ignore[attr-defined]
+                    or not route.path_regex.match(path)):  # type: ignore[attr-defined]
+                continue
+            allowed |= set(methods)
+        if allowed:
+            if "GET" in allowed:
+                allowed.add("HEAD")
+            resp = _json(405, MethodNotAllowed("Method not allowed on this path.",
+                                               details={"allowed": sorted(allowed)}).body())
+            resp.headers["Allow"] = ", ".join(sorted(allowed))
+            return resp
         return _json(404, NotFound("Unknown API route.").body())
 
     app.include_router(api)
@@ -270,7 +369,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
     # ------------------------------------------------------------ compiled frontend + SPA fallback (D-13)
     web = config.web_dir
 
-    @app.get("/{full_path:path}", include_in_schema=False)
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def spa(full_path: str):  # type: ignore[no-untyped-def]
         index = web / "index.html"
         if not index.is_file():

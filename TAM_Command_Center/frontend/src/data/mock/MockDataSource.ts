@@ -593,6 +593,12 @@ export class MockDataSource implements DataSource {
 
   // ------------------------------------------------------------------ notes
 
+  async getNote(id: string): Promise<Note | null> {
+    await this.enter();
+    const n = this.t.notes.find((x) => x.id === id);
+    return n ? toNote(n) : null;
+  }
+
   async saveNote(input: NoteInput): Promise<MutationResult<Note>> {
     await this.enter();
     const errs = validateNote(input);

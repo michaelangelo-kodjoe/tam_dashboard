@@ -152,6 +152,15 @@ def _dec_cursor(c: str) -> Tuple[str, str]:
         raise ValidationFailed("Invalid cursor.", fields={"before": "invalid cursor"}) from None
 
 
+def _server_name(object_type: str, object_id: Any, label: Any, bams_names: Dict[str, str]) -> Optional[str]:
+    """Deep-link target (FE-AC-3): BAMS object name for alerts, the server name for upgrades, else None."""
+    if object_type in ("bams_alert", "bams_alert_event"):
+        return bams_names.get(object_id)
+    if object_type == "server_upgrade":
+        return label or None
+    return None
+
+
 def activity_page(conn: sqlite3.Connection, client_id: str, *, filter_: str = "all", q: Optional[str] = None,
                   before: Optional[str] = None, limit: int = C.ACTIVITY_DEFAULT_LIMIT) -> Dict[str, Any]:
     require_client(conn, client_id)
@@ -167,21 +176,31 @@ def activity_page(conn: sqlite3.Connection, client_id: str, *, filter_: str = "a
     note_ids = [r["object_id"] for r in rows if r["entry_kind"] == "note"]
     if note_ids:
         marks = ",".join("?" for _ in note_ids)
-        versions = {r[0]: r[1] for r in conn.execute(
-            f"SELECT id, row_version FROM notes WHERE id IN ({marks})", note_ids)}
+        versions = {r[0]: (r[1], r[2]) for r in conn.execute(
+            f"SELECT id, row_version, created_at FROM notes WHERE id IN ({marks})", note_ids)}
+    bams_ids = [r["object_id"] for r in rows if r["entry_kind"] != "note" and r["event_type"].startswith("bams_alert.")]
+    bams_names: Dict[str, str] = {}
+    if bams_ids:
+        marks = ",".join("?" for _ in bams_ids)
+        bams_names = {r[0]: r[1] for r in conn.execute(
+            "SELECT e.id, o.name FROM bams_alert_events e JOIN bams_metrics m ON m.id = e.metric_id"
+            f" JOIN bams_objects o ON o.id = m.object_id WHERE e.id IN ({marks})", bams_ids)}
     items = []
     for r in rows:
         if r["entry_kind"] == "note":
             items.append({"kind": "note", "entry_key": r["entry_key"], "ts": r["ts"], "id": r["object_id"],
                           "note_type": r["event_type"], "subject": r["subject"], "body": r["body"],
                           "action_items": r["action_items"], "source": r["source"],
-                          "row_version": versions.get(r["object_id"]), "updated_at": r["updated_at"]})
+                          "row_version": versions.get(r["object_id"], (None, None))[0],
+                          "updated_at": r["updated_at"], "client_id": client_id,
+                          "created_at": versions.get(r["object_id"], (None, None))[1]})
         else:
             otype, _, action = r["event_type"].partition(".")
             label = r["subject"]
+            server_name = _server_name(otype, r["object_id"], label, bams_names)
             items.append({"kind": "system", "entry_key": r["entry_key"], "ts": r["ts"], "event_type": r["event_type"],
                           "object_type": r["object_type"], "object_id": r["object_id"], "label": label,
-                          "severity": r["severity"], "source": r["source"],
+                          "severity": r["severity"], "source": r["source"], "server_name": server_name,
                           "sentence": system_sentence(otype, action, label, r["old_value"], r["new_value"],
                                                       r["severity"])})
     nxt = _enc_cursor(rows[-1]["ts"], rows[-1]["entry_key"]) if has_more and rows else None
@@ -198,6 +217,8 @@ def recent_changes(conn: sqlite3.Connection, limit: int = C.RECENT_CHANGES_LIMIT
         out.append({"entry_key": r["entry_key"], "ts": r["ts"], "client_id": r["client_id"],
                     "client_name": r["client_name"], "object_type": r["object_type"], "object_id": r["object_id"],
                     "object_label": r["object_label"], "action": r["action"], "severity": sev,
+                    "server_name": _server_name(r["object_type"], r["object_id"], r["object_label"],
+                                                {r["object_id"]: r.get("server_name")}),
                     "sentence": system_sentence(r["object_type"], r["action"], r["object_label"],
                                                 r["old_value"], r["new_value"], sev)})
     return out
