@@ -2,13 +2,13 @@
 
 > This file is the current truth, not a transcript (spec §50). Update it on every substantive code, config, schema, deployment or behaviour change. History belongs in `CHANGELOG.md`.
 
-Last updated: 2026-10-12 by pm-agent (Phase 4.2 traceability). Previous: frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
+Last updated: 2026-10-12 by deployment-agent (Phase 4.3 release scaffolding). Previous: pm-agent (Phase 4.2 traceability); before that frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
 
 ## Current release
 | | |
 |---|---|
-| App version | `0.1.0-dev` (frontend and backend built separately; not yet assembled or released) |
-| Channel | dev |
+| App version | `0.1.0-rc1`. A release archive can now be built (`tools/build_release.py`); it has not been validated on Windows or Bloomberg. |
+| Channel | dev in the source tree; the release archive is rewritten to `channel=prod` (`validation=UNVALIDATED`) |
 | Schema version | 1, built in `db/schema.sql` and `db/migrations/0001_initial.sql`. Unreleased. Revised for QA reviews 1 to 4; awaiting `SCHEMA_REVIEW_5`. |
 | Production status | **Not production-ready.** Nothing has been validated on the target Bloomberg Windows workstation (spec §56). |
 
@@ -59,7 +59,8 @@ Every finding has a disposition in `docs/03_DATA_MODEL.md` §13 to §16. **Await
 | `TAM_Command_Center/db/` | `schema.sql`, `migrations/0001_initial.sql`, `migrate.py` (reference runner and online backup), `queries/*.sql` (reference Today, Activity, Recent and Summary SQL), `seed_mock.py`, `mock_data.json`, `tests/test_db_contract.py` | present (1.2) |
 | `TAM_Command_Center/server/` | FastAPI backend: `config`, `locking`, `logsetup`, `dbkit` (the only DB opener), `backups`, `audit`, `schemas`, `reads` + `infra` + `today` (read repository), `services` (writes and rules), `app` (routes, thin), `runtime`. Run: `python -m server` from `TAM_Command_Center/`. Tests: `pytest server` (118). Deps: `server/requirements.txt`. | present (2.1) |
 | `docs/04_API_CONTRACT.md` | Routes, payloads, error shapes, Today queue item shape | present (frozen for run 1) |
-| `TAM_Command_Center/VERSION.txt` | `version=0.1.0-dev`, `channel=dev`. Deployment overwrites it with `channel=prod` in the release. | present |
+| `TAM_Command_Center/VERSION.txt` | `version=0.1.0-rc1`, `channel=dev`. `tools/build_release.py` rewrites it to `channel=prod` inside the release. | present |
+| `TAM_Command_Center/*.bat`, `README.txt`, `VALIDATION.txt`, `tools/` | Phase 4.3: five Windows launchers/checks, `tools/_resolve_python.bat`, `env_check.py`, `open_when_ready.py`, `build_release.py`, `smoke_release.py`, `lint_bat.py`. Build: `python tools/build_release.py [--channel prod\|dev]` (output `dist/`). Smoke: `python tools/smoke_release.py --work <scratch dir>`. | present (4.3); .bat files never executed |
 | `TAM_Command_Center/frontend/` | React + TypeScript + Vite source. `src/data/` is the only data boundary: `DataSource` interface, `mock/` (`MockDataSource`, `rebase.ts`, `today.ts`, `derive.ts`) and `ApiDataSource.ts` (aligned to `docs/04_API_CONTRACT.md`). `src/components/ui` is the design system, `src/components/editors` the drawers and Quick Capture, `src/pages` the screens, `src/styles/tokens.css` the only file with raw colours. Commands: `npm run dev`, `npm test`, `npm run build`, `npm run build:api`. | present (2.2, 2.3) |
 | `TAM_Command_Center/web/` | Build output of `frontend/` (`npm run build` writes here; the backend serves it). `web/` is built with `npm run build:api`: the API adapter is the default and no `mock_data.json` ships (QA-E1-1). `npm run build` still copies the mock file for DEV/demo use. | present (dev build) |
 
@@ -93,12 +94,12 @@ Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Qu
 | 2.2 / 2.3 Frontend tests | 118 Vitest tests pass; `tsc --noEmit` clean; `vite build` succeeds. Includes keyboard matrices for `Select` and `AccountPicker`, the Today parity test against the reference SQL, rebase tests, adapter tests, App integration tests and repository guards (no raw colours outside `tokens.css`, `fetch` only in `src/data`, no native select). Verified in the Browser pane at 1440, 1024, 900 and 768 px with no console errors and no page-level horizontal scroll from 768 px. |
 | 3.2 QA integration | `docs/qa/ERROR_LOG_1.md`: **PASS (0 open Blocker/High)**. Phase 4.1 fixes (QA-E1-1/2/3/4/7/8) await a formal QA re-check; PM re-ran all suites (239 pytest, 118 vitest) in 4.2. |
 | 4.2 Traceability | `docs/05_TRACEABILITY.md`: **COMPLETE** (PASS 111, FAIL 0, MISSING 0, DEFERRED 2: US-12.2 AC1/AC2, Phase 4.3). Verified by PM against the live DEV app on a scratch DB. |
-| 4.3 Deployment smoke test | not run |
-| Windows workstation | **untested** |
+| 4.3 Deployment smoke test | **PASS on macOS (Python 3.10)**: `tools/smoke_release.py`. Archive has no DB/dev_data; schema.sql, migrations, queries shipped; manifest SHA-256 verified; fresh venv install; PROD boots with no auto-seed and ignores test flags; dev-channel build refuses PROD; DEV boots seeded. `.bat` files: static lint only (0 errors), never executed. |
+| Windows workstation | **untested** (launchers, `.venv` install, `%LOCALAPPDATA%`, `msvcrt` lock, browser open) |
 | Bloomberg / BLPAPI / TEAM | **untested and out of scope this run** |
 
 ## Next steps
--1. Phase 4.3: deployment-agent builds the release archive; the smoke test must prove no `*.db`/`dev_data/` in the zip (US-12.2 AC1).
+-1. Phase 4.3 done on macOS (US-12.2 AC1 verified by the smoke test; AC2 flagged in `VALIDATION.txt`). Next: run every `.bat` on the target Bloomberg Windows workstation; backend-dev to fix `server/requirements.txt` (websockets 17.2 needs Python 3.11+, uvloop has no Windows wheels); QA to review the release scaffolding.
 0. QA re-check of QA-E1-2/3/4/7/8 (Phase 4.1 fixes) at the next gate.
 1. 1.3 QA schema re-review (`docs/qa/SCHEMA_REVIEW_5.md`).
 2. Phase 3.1: build both trees and commit a checkpoint, then 3.2 QA integration.

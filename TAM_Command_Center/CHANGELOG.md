@@ -2,9 +2,21 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
-## [Unreleased] - 0.1.0-dev
+## [Unreleased] - 0.1.0-rc1
 
 ### Added
+- 2026-10-12, deployment-agent (Phase 4.3, T-42): Windows release scaffolding. NOT production-ready; nothing was run on Windows or against Bloomberg.
+  - **Launchers** (CRLF, static-linted only): `Launch_TAM_Command_Center.bat` (PROD, 8765, clears test flags), `Launch_DEV_Preview.bat` (DEV, 8766, sets `TAM_DEV_MODE=1` and `TAM_BAMS_TEST_MODE=1`), `Install_Dependency.bat` (app-local `.venv`, optional `wheelhouse\` offline install), `Check_PROD_Environment.bat`, `Check_DEV_Environment.bat`, and the helper `tools/_resolve_python.bat` (TAM_PYTHON, `.venv`, `python`, `py -3`; 3.10+ required; an invalid TAM_PYTHON fails with no fallback).
+  - **Helpers:** `tools/env_check.py` (read-only preflight: Python, modules, files, channel vs mode, flags, data folder, port, BLPAPI import; PROD fails closed without BLPAPI, `--core-only` is used by the PROD launcher because the BAMS monitor does not exist yet; DEV warns only) and `tools/open_when_ready.py` (honours the stored `open_browser_on_start` setting, reads the DB read-only).
+  - **Build:** `tools/build_release.py` (zip with SHA-256 `BUILD_MANIFEST.txt`, refuses DBs/dev_data/.venv/node_modules/frontend/mock data in a prod archive, rewrites `VERSION.txt` to `channel=prod`, `--channel dev` makes a DEV-preview package with the seed data) and `tools/smoke_release.py` (unpack, fresh venv, boot PROD and DEV, assert no auto-seed in PROD), `tools/lint_bat.py` (static lint of the .bat files).
+  - `README.txt`, `VALIDATION.txt` (honest: untested on Windows and Bloomberg, not production-ready, deferred phases 3-5).
+- `VERSION.txt` is now `0.1.0-rc1` (channel dev in the source tree; the release archive rewrites it to prod).
+
+### Found (reported, not fixed; application logic untouched)
+- `server/requirements.txt` pins `websockets==17.2` (Python 3.11+) and `uvloop` (no Windows wheels), so `pip install -r server/requirements.txt` fails on the supported minimum Python 3.10. The release requirements omit the optional uvicorn[standard] extras. Owner: backend-dev-agent (pin or split a runtime file).
+- A DEV preview cannot run from a prod-channel release by design (TAM_DEV_MODE is ignored there); DEV needs the `--channel dev` package.
+- CRM and Operations guides and the Operations/Bulk Upload/BAMS screenshots required by spec section 56 do not exist yet (phases 3-5).
+
 - 2026-10-12, frontend-dev-agent: QA-E2-3 fixed (top-bar + Capture now prefills the current account like the N key; two regression tests). T-1 fixed (`build:api` tree-shakes the mock adapter and `mock_data.json` out of `web/`).
 - 2026-10-12, pm-agent (Phase 4.2): `docs/05_TRACEABILITY.md`, the requirements traceability matrix. 113 rows (mandatory checks, E1-E12 acceptance criteria, PM decisions) plus the section 52 summary: PASS 111, FAIL 0, MISSING 0, DEFERRED 2 (US-12.2, Phase 4.3). Verified by re-running `pytest server db tests` (239 passed), `tsc` and `vitest` (118 passed), and by driving the live DEV app on a scratch DB. Five Low observations (T-1 to T-5) are listed there. `TAM_PROJECT_STATE.md` validation table brought up to date.
 - 2026-10-12, pm-agent (Phase 1.1): `docs/01_PM_SPEC.md`, covering epics E1-E12, user stories traced to spec sections, the Today ranking rules, screen layouts, component inventory, API contract list, task board T-01 to T-50, and the out-of-scope list for run 1 (spec phases 1-2).

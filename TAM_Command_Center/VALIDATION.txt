@@ -1,0 +1,80 @@
+TAM COMMAND CENTER - VALIDATION REPORT
+======================================
+Build: 0.1.0-rc1   Report date: 2026-10-12   Author: deployment-agent (Phase 4.3)
+
+*** THIS BUILD IS NOT PRODUCTION-READY. ***
+It has NOT been validated on the target Bloomberg Windows environment, and nothing in
+it has been exercised against Bloomberg BLPAPI, TEAM or BSSO. Per spec section 56 it
+must not be called production-ready until that is done. The "channel=prod" stamp in
+VERSION.txt only selects the production code path (production database location, test
+flags ignored, DEV routes absent); it is not a statement that validation passed.
+
+1. WHAT PASSED (all on macOS, Apple silicon, Python 3.10 and 3.12, SQLite 3.38-3.53)
+   Source suites, run by the PM/deployment agents on the build tree:
+     - pytest server db tests ........ 267 passed (backend 118, DB contract 77, e2e 44, other)
+     - tsc --noEmit .................. clean
+     - vitest ........................ 120 passed
+     - sql_safety_scan.py ............ 0 violations (whole tree, including release tooling)
+   Release smoke test (tools/smoke_release.py), real run in a scratch directory, with HOME,
+   USERPROFILE and LOCALAPPDATA redirected so no real user data or %LOCALAPPDATA% was touched:
+     - zip builds; integrity OK; NO *.db / -wal / -shm / dev_data / .venv / node_modules /
+       frontend source / tests / mock data in the PROD archive
+     - db/schema.sql, db/migrate.py, db/migrations/*.sql and db/queries/*.sql all shipped
+     - every SHA-256 in BUILD_MANIFEST.txt matches the archive bytes; manifest lists exactly
+       the shipped files
+     - fresh venv on Python 3.10 + pip install -r requirements.txt succeeds; pip check clean
+     - PROD boot from the archive with TAM_DEV_MODE=1 and TAM_BAMS_TEST_MODE=1 set on
+       purpose: flags ignored and logged, mode=PROD, NO auto-seed (0 accounts, 0 tasks),
+       /api/dev/* and /openapi.json absent, empty DB created only in the (redirected) data folder,
+       built UI served at /
+     - a dev-channel build refuses PROD mode (exit 3) and creates nothing
+     - DEV boot from a dev-channel preview package: mode=DEV, /api/state 200, mock data
+       seeded, DB only under <app>/dev_data
+     - env_check: PROD fails closed without BLPAPI; --core-only passes; DEV check fails on a
+       prod-channel release (DEV mode is not honoured there)
+
+2. WHAT IS UNTESTED
+   WINDOWS (nothing below has been run on Windows at all):
+     - the five .bat launchers and tools\_resolve_python.bat were only STATICALLY linted
+       (tools/lint_bat.py: quoting, %~dp0, pushd/popd, setlocal, errorlevel handling, labels,
+       CRLF, ASCII). They have never been executed. Expect to find at least small defects.
+     - Python resolution order (TAM_PYTHON, .venv, python, py -3) and the Microsoft Store
+       "python.exe" stub fall-through
+     - %LOCALAPPDATA% data/backup/log paths, msvcrt.locking single-instance lock, file
+       locking/AV/OneDrive interactions with SQLite WAL, path length and spaces in paths
+     - pip install of the pinned requirements on Windows (wheels for pydantic_core etc.),
+       corporate proxy / offline wheelhouse path of Install_Dependency.bat
+     - Windows socket errors 10053/10054 handling (spec section 40), Ctrl+C / console close
+       behaviour, "Open browser on start" (open_when_ready.py) with Edge/Chrome
+     - start-with-Windows (spec section 39) is not implemented in this build
+     - Chrome/Edge rendering of the shipped UI (it was checked in the Browser pane only)
+   BLOOMBERG (out of scope for this run, untested):
+     - BLPAPI availability and connection on the workstation: env_check only tries
+       "import blpapi"; it never opens a session
+     - TEAM / CMS / BSSO schedule sync, bbg:// link behaviour, Bloomberg terminal integration
+     - the BAMS monitor itself (not built)
+   SECURITY / SUPPLY CHAIN:
+     - requirements are pinned by version but not by hash; the release zip is not code-signed
+     - npm audit shows open findings (QA-E1-6, Low); pip-audit run earlier on server/requirements.txt
+
+3. DEFERRED PHASES (not in this build)
+   Spec phase 3 Operations (schedule sync, server upgrades, bulk upload, 501 routes);
+   phase 4 BAMS monitor and provider (501 routes, seeded read-only data only);
+   phase 5 portability (export/import, restore, data reset) and the ChatGPT Bridge;
+   spec section 56 items still missing: CRM guide, Operations guide, screenshots of
+   Operations / Bulk Upload / BAMS.
+
+4. DEPENDENCY NOTES (found while building)
+   - server/requirements.txt pins websockets==17.2, which needs Python 3.11+, so
+     "pip install -r server/requirements.txt" fails on Python 3.10 (supported minimum).
+     The release requirements.txt drops the optional uvicorn[standard] extras (uvloop - no
+     Windows wheels - httptools, watchfiles, websockets, python-dotenv, PyYAML) and all
+     test-only packages. The app runs without them (smoke test on 3.10).
+   - openpyxl (spec section 48) is not included because nothing in this build uses it yet.
+
+5. RELEASE CRITERIA BEFORE ANYONE CALLS THIS PRODUCTION-READY
+   [ ] Install on the target Bloomberg Windows workstation; run every .bat; fix defects
+   [ ] Check_PROD_Environment.bat passes with the real BLPAPI package
+   [ ] Two-instance, reboot, forced-kill and AV/OneDrive tests of the production DB
+   [ ] Spec phases 3-5 built and validated, or explicitly accepted as out of scope
+   [ ] User sign-off recorded in TAM_PROJECT_STATE.md and CHANGELOG.md
