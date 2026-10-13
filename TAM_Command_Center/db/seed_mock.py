@@ -44,6 +44,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import math
 import random
 import sqlite3
 import sys
@@ -58,6 +59,8 @@ import migrate  # noqa: E402  (sibling module: reference migration runner)
 MOCK_JSON = DB_DIR / "mock_data.json"
 TODAY_SQL = DB_DIR / "queries" / "today_queue.sql"
 FRESHNESS_SQL = DB_DIR / "queries" / "metric_freshness.sql"
+PROGRESS_SQL = DB_DIR / "queries" / "day_progress.sql"
+TREND_SQL = DB_DIR / "queries" / "activity_trend.sql"
 ANCHOR = dt.date(2026, 10, 12)          # the date the JSON is written "as of" (a Monday)
 ANCHOR_NOW = dt.datetime(2026, 10, 12, 12, 0, 0)  # the instant BAMS freshness fields are written "as of"
 ROW_VERSION_TABLES = ["clients", "contacts", "tasks", "notes", "support_cases", "quarterly_upgrade_windows",
@@ -143,6 +146,29 @@ LATEST_INSTANT = ts(-1, 20, 0)  # nothing is stamped later than "yesterday 20:00
 
 def cap(s: str) -> str:
     return s if s <= LATEST_INSTANT else LATEST_INSTANT
+
+
+def local_midnight_utc(day: dt.date, tz: Optional[dt.tzinfo] = None) -> str:
+    """UTC instant of the local midnight that starts `day` in `tz` (default: the workstation zone).
+
+    Each local midnight is converted on its own, so a 23h or 25h DST day is exact (D-29)."""
+    local = dt.datetime(day.year, day.month, day.day, tzinfo=tz) if tz else dt.datetime(day.year, day.month, day.day)
+    utc = local.astimezone(dt.timezone.utc)  # naive `local` is read as workstation-local time
+    return fmt_instant(utc.replace(tzinfo=None))
+
+
+def progress_params(day: dt.date, tz: Optional[dt.tzinfo] = None) -> Dict[str, str]:
+    """Parameters for queries/day_progress.sql."""
+    return {"today": day.isoformat(), "day_start_utc": local_midnight_utc(day, tz),
+            "day_end_utc": local_midnight_utc(day + dt.timedelta(days=1), tz)}
+
+
+def trend_params(day: dt.date, tz: Optional[dt.tzinfo] = None, include_inactive: bool = False) -> Dict[str, Any]:
+    """Parameters for queries/activity_trend.sql: b0..b14 = local midnights of day-13 .. day+1."""
+    p: Dict[str, Any] = {"today": day.isoformat(), "include_inactive": 1 if include_inactive else 0}
+    for i in range(15):
+        p[f"b{i}"] = local_midnight_utc(day + dt.timedelta(days=i - 13), tz)
+    return p
 
 
 def qindex(year: int, quarter: str) -> int:
@@ -252,7 +278,8 @@ class Gen:
 
     def add_audit(self, timestamp: str, category: str, client_id: Optional[str], object_type: str,
                   object_id: Optional[str], action: str, old: Any = None, new: Any = None,
-                  source: str = "GUI", reason: Optional[str] = None, label: Optional[str] = None) -> None:
+                  source: str = "GUI", reason: Optional[str] = None, label: Optional[str] = None,
+                  capped: bool = True) -> None:
         if label is None:  # fall back to the natural display field of the snapshot
             for snap in (new or {}, old or {}):
                 for k in ("task", "subject", "name", "server_name", "primary_contact"):
@@ -261,7 +288,7 @@ class Gen:
                         break
                 if label:
                     break
-        self.audit.append(dict(timestamp=cap(timestamp), category=category, client_id=client_id,
+        self.audit.append(dict(timestamp=cap(timestamp) if capped else timestamp, category=category, client_id=client_id,
                                object_type=object_type, object_id=object_id, object_label=label, action=action,
                                old_value=jdump(old), new_value=jdump(new), reason=reason, source=source))
 
@@ -272,6 +299,7 @@ class Gen:
         self.build_windows_upgrades()
         self.build_bams()
         self.build_tasks()
+        self.build_done_today()
         self.build_notes()
         self.build_misc_audit()
         self.audit.sort(key=lambda a: (a["timestamp"], a["object_type"], a["object_id"] or "", a["action"]))
@@ -660,10 +688,23 @@ class Gen:
                         id=len(self.t["bams_notification_log"]) + 1, event_id=ev["id"], kind=kind, channel=ch,
                         attempted_at=add_minutes(at, 0.05), success=1 if ok else 0,
                         detail=None if ok else "Desktop notification API unavailable (mock)"))
-        # samples: 24 hourly samples ending at the last source update for scenario metrics + a few others
+        # samples: 7 days (36 four-hourly + 24 hourly) ending at the last source update for scenario metrics + a few others
         sample_metrics = [self.metric_idx[k] for k in sorted(self.metric_idx)
                           if k[1] == 0 and k[2] in ("CPU", "DISK", "NET")][:24]
+        r61 = random.Random(SEED + 61)  # separate stream: adding history must not move any other seeded value
         for m in sample_metrics:
+            # T-61 / 01_PM_SPEC §10.4 #7: 7 days of history. Days 7..1 back are 4-hourly (offsets 168h..28h
+            # before the last reading), the final 24 h stay hourly. Disjoint offsets, so no duplicate instants.
+            cur_v = m["current_value"]
+            for h in range(168, 24, -4):
+                at = add_minutes(m["last_source_update"], -60 * h)
+                swing = 0.12 * math.sin(2 * math.pi * (h % 24) / 24.0)  # gentle daily rhythm
+                v = round(max(0.0, cur_v * (0.92 + swing + r61.uniform(-0.06, 0.06))), 1)
+                if m["metric_name"] != "Network Throughput (Mbps)":
+                    v = min(v, 100.0)
+                self.t["bams_metric_samples"].append(dict(
+                    id=len(self.t["bams_metric_samples"]) + 1, metric_id=m["id"], sampled_at=at,
+                    source_update=add_minutes(at, -0.25), value=v))
             for h in range(24, 0, -1):
                 at = add_minutes(m["last_source_update"], -60 * (h - 1))
                 v = max(0.0, round(m["current_value"] * r.uniform(0.85, 1.05), 1))
@@ -809,6 +850,75 @@ class Gen:
             acct = self.accounts[abbr]
             self.add_audit(self.rand_instant(-20, -2), "crm", acct["id"], "task", uid("task-deleted", i), "deleted",
                            old={"task": title, "status": "Not Started"})
+
+    # ------------------------------------------------------------------ done today (T-61, 01_PM_SPEC §10.2)
+    def build_done_today(self) -> None:
+        """Tasks completed TODAY (offset 0) so the 'done today N of M' ring has realistic numbers.
+
+        Completion instants sit between 08:30Z and 10:45Z: after local midnight for any workstation from
+        UTC-8 to UTC+13, and before the 12:00Z mock clock. A separate RNG stream (SEED+61) and task ids that
+        continue the counter keep every other seeded value unchanged. Expected on the seed (rebased to any day):
+        done N = 8, done_other = 2; excluded: reopened, Inactive account (x2), completed yesterday, deleted.
+        """
+        saved, self.r = self.r, random.Random(SEED + 61)
+        T = self.task
+        today_at = lambda hh, mm: ts(0, hh, mm, 7, 113)            # noqa: E731
+        yday_at = lambda hh, mm: ts(-1, hh, mm, 41, 502)           # noqa: E731
+        DONE = ({"status": "In Progress"}, {"status": "Complete"})
+        REOPEN = ({"status": "Complete"}, {"status": "In Progress"})
+
+        def retime(row: Dict[str, Any], events: List[Tuple[str, str]]) -> None:
+            """Replace the generic completed/archived rows T() wrote with an explicit event history."""
+            self.audit[:] = [a for a in self.audit if not (a["object_id"] == row["id"]
+                                                          and a["action"] in ("completed", "archived"))]
+            for action, at in events:
+                old, new = {"completed": DONE, "reopened": REOPEN, "archived": ({"archived": 0}, {"archived": 1})}[action]
+                self.add_audit(at, "crm", row["client_id"], "task", row["id"], action, label=row["task"],
+                               old=old, new=new, capped=False)
+            row["updated_at"] = max(at for _, at in events)
+
+        def done(client: Optional[str], title: str, cat: str, prio: str, due: Optional[int],
+                 events: List[Tuple[str, str]], status: str = "Complete", archived: int = 0) -> Dict[str, Any]:
+            row = T(client, title, cat, prio, status, due, archived=archived)
+            retime(row, events)
+            return row
+
+        # --- plan tasks completed today: counted in N (and in M)
+        done("NWH", "Send Q3 entitlement recap to desk heads", "Entitlements", "High", -3, [("completed", today_at(8, 42))])
+        done("BRS", "Reconcile September usage report", "Reporting", "Medium", 0, [("completed", today_at(9, 5))])
+        done("MRA", "Share B-PIPE failover runbook with client", "Engineering Follow-Up", "High", -1,
+             [("completed", today_at(9, 40))])
+        done("TBF", "Close out API migration questionnaire", "Client Follow-Up", "Medium", -7, [("completed", today_at(10, 15))])
+        done(None, "File weekly coverage summary", "Internal", "Low", -1, [("completed", today_at(10, 30))])
+        # completed, then archived the same morning: still counted (archived is ignored for done tasks)
+        done("KMC", "Archive superseded capacity worksheet", "Usage Review", "Low", -2,
+             [("completed", today_at(8, 30)), ("archived", today_at(10, 32))], archived=1)
+        # completed, reopened, completed again today: counted once
+        done("CPG", "Collect server inventory addendum", "Client Follow-Up", "Medium", 0,
+             [("completed", today_at(8, 50)), ("reopened", today_at(9, 10)), ("completed", today_at(9, 55))])
+        # completed and reopened YESTERDAY, completed again today: counted today
+        done("HFA", "Confirm DR contact escalation path", "Escalation", "High", -4,
+             [("completed", yday_at(14, 10)), ("reopened", yday_at(16, 0)), ("completed", today_at(9, 20))])
+        # --- completed today, then reopened: back in R, not in N, M unchanged
+        done("SCS", "Re-check West upgrade ticket after reopen", "Client Follow-Up", "High", -2,
+             [("completed", today_at(8, 40)), ("reopened", today_at(9, 50))], status="In Progress")
+        # --- completed today but outside the plan: done_other
+        done("LHF", "Walk analysts through Terminal basics (session 1)", "Onboarding", "Low", 5, [("completed", today_at(10, 5))])
+        done("OLP", "Log call outcome in the tracker", "Other", "Low", None, [("completed", today_at(10, 20))])
+        # --- completed today on an Inactive account: excluded everywhere (due in the plan range and not)
+        done("AVC", "Hand over final entitlement list", "Entitlements", "Medium", -2, [("completed", today_at(9, 30))])
+        done("AVC", "Close dormant account follow-up", "Other", "Low", None, [("completed", today_at(9, 35))])
+        # --- completed yesterday only: not today's N (nor in the plan: it is Complete)
+        done("NWH", "Confirm DR contact list", "Client Follow-Up", "Medium", -2, [("completed", yday_at(15, 20))])
+        # --- completed today, then the task row was deleted: only the audit rows remain
+        gone = uid("task-deleted-today", 1)
+        gone_label = "Duplicate: reconcile September usage report"
+        acct = self.accounts["BRS"]
+        self.add_audit(today_at(9, 0), "crm", acct["id"], "task", gone, "completed", label=gone_label,
+                       old={"status": "In Progress"}, new={"status": "Complete"}, capped=False)
+        self.add_audit(today_at(9, 30), "crm", acct["id"], "task", gone, "deleted", label=gone_label,
+                       old={"task": gone_label, "status": "Complete"}, capped=False)
+        self.r = saved
 
     # ------------------------------------------------------------------ notes
     def build_notes(self) -> None:
@@ -1150,10 +1260,19 @@ def verify(conn: sqlite3.Connection, today: dt.date) -> bool:
     check("emails are *.example.com only",
           scalar("SELECT count(*) FROM contacts WHERE email IS NOT NULL AND email NOT LIKE '%.example.com' "
                  "AND email NOT LIKE '%@example.com'") == 0)
-    check("no instant later than yesterday (nothing stamped in the future)",
+    # T-61: only the 'done today' history (08:30Z-10:45Z today) is stamped today; nothing is stamped after
+    # today 12:00Z (the mock clock). Loading earlier than 10:45Z on the real day leaves them a few hours
+    # ahead of the wall clock; accepted (documented in 03_DATA_MODEL section 8).
+    check("no instant later than today 12:00Z; only 'done today' rows are stamped today",
           scalar("SELECT max(m) FROM (SELECT max(updated_at) m FROM tasks UNION ALL SELECT max(timestamp) FROM audit_events "
                  "UNION ALL SELECT max(timestamp) FROM notes UNION ALL SELECT max(updated_at) FROM server_upgrades "
-                 "UNION ALL SELECT max(updated_at) FROM bams_alert_events UNION ALL SELECT max(updated_at) FROM clients)") < T)
+                 "UNION ALL SELECT max(updated_at) FROM bams_alert_events UNION ALL SELECT max(updated_at) FROM clients)")
+          <= f"{T}T12:00:00.000Z"
+          and scalar("SELECT count(*) FROM (SELECT updated_at u FROM notes UNION ALL SELECT timestamp FROM notes "
+                     "UNION ALL SELECT updated_at FROM server_upgrades UNION ALL SELECT updated_at FROM bams_alert_events "
+                     "UNION ALL SELECT updated_at FROM clients) WHERE u >= ?", T) == 0
+          and scalar("SELECT count(*) FROM audit_events WHERE timestamp >= ? AND NOT (object_type='task' "
+                     "AND action IN ('completed','reopened','archived','deleted'))", T) == 0)
     check("last_contact == latest meeting/call note date (D-08)",
           scalar("SELECT count(*) FROM clients c WHERE c.last_contact IS NOT (SELECT max(substr(timestamp,1,10)) "
                  "FROM notes n WHERE n.client_id=c.id AND n.note_type IN ('Meeting Note','Call Note'))") == 0)
@@ -1182,6 +1301,52 @@ def verify(conn: sqlite3.Connection, today: dt.date) -> bool:
           scalar("SELECT count(*) FROM server_upgrades u JOIN quarterly_upgrade_windows w USING (schedule_year, schedule_quarter) "
                  "WHERE u.scheduled_date IS NOT CASE u.polarity WHEN 'DEV' THEN w.dev_upgrade_date "
                  "WHEN 'East' THEN w.east_prod_date ELSE w.west_prod_date END") == 0)
+    # ---- T-61: 'done today' ring (D-29), activity trend, 7-day sparkline history
+    prog = dict(zip(("day", "total", "done", "open", "done_other"),
+                    q(PROGRESS_SQL.read_text(encoding="utf-8"), progress_params(today, dt.timezone.utc)).fetchone()))
+    print(f"\nDay progress for {T} (UTC day): {prog}")
+    check("progress: M = N + R and N <= M", prog["total"] == prog["done"] + prog["open"] and prog["done"] <= prog["total"])
+    check("progress: several plan tasks done today (N >= 5) and M > N (ring is partly full)",
+          prog["done"] >= 5 and prog["total"] > prog["done"], f"{prog['done']} of {prog['total']}")
+    check("progress: done_other >= 2 (future-dated and no-date completions)", prog["done_other"] >= 2, prog["done_other"])
+    check("progress: a task completed then reopened today is open and not counted",
+          scalar("SELECT count(*) FROM tasks t WHERE t.status <> 'Complete' AND EXISTS (SELECT 1 FROM audit_events a "
+                 "WHERE a.object_id=t.id AND a.action='completed' AND a.timestamp >= ?) AND EXISTS (SELECT 1 FROM audit_events a "
+                 "WHERE a.object_id=t.id AND a.action='reopened' AND a.timestamp >= ?)", f"{T}T00:00:00.000Z", f"{T}T00:00:00.000Z") >= 1)
+    check("progress: completions on an Inactive account exist but are excluded",
+          scalar("SELECT count(*) FROM tasks t JOIN clients c ON c.id=t.client_id WHERE c.status='Inactive' "
+                 "AND t.status='Complete' AND t.updated_at >= ?", f"{T}T00:00:00.000Z") >= 1)
+    check("progress: a completed-and-archived task and a completed-yesterday task exist",
+          scalar("SELECT count(*) FROM tasks t WHERE t.archived=1 AND t.status='Complete' AND t.updated_at >= ?",
+                 f"{T}T00:00:00.000Z") >= 1
+          and scalar("SELECT count(*) FROM audit_events WHERE object_type='task' AND action='completed' "
+                     "AND timestamp >= ? AND timestamp < ?", f"{(today - dt.timedelta(days=1)).isoformat()}T00:00:00.000Z",
+                     f"{T}T00:00:00.000Z") >= 1)
+    check("progress: a task completed today and then deleted leaves audit rows only",
+          scalar("SELECT count(*) FROM audit_events a WHERE a.object_type='task' AND a.action='deleted' AND a.timestamp >= ? "
+                 "AND EXISTS (SELECT 1 FROM audit_events c WHERE c.object_id=a.object_id AND c.action='completed') "
+                 "AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id=a.object_id)", f"{T}T00:00:00.000Z") >= 1)
+    trend = q(TREND_SQL.read_text(encoding="utf-8"), trend_params(today, dt.timezone.utc)).fetchall()
+    n_active = scalar("SELECT count(*) FROM clients WHERE status='Active'")
+    check("activity trend: 14 points for every Active account, Inactive excluded", len(trend) == 14 * n_active,
+          f"{len(trend)} rows")
+    check("activity trend: points are non-negative and at least 8 accounts show activity",
+          all(r[4] >= 0 for r in trend) and len({r[0] for r in trend if r[4] > 0}) >= 8)
+    n_samp = {r[0]: r[1:] for r in q(
+        "SELECT o.id, count(*), min(s.sampled_at), max(s.sampled_at), m.metric_name, o.name FROM bams_metric_samples s "
+        "JOIN bams_metrics m ON m.id=s.metric_id JOIN bams_objects o ON o.id=m.object_id GROUP BY o.id, m.id").fetchall()}
+    spans = [(parse_instant(v[2]) - parse_instant(v[1])).total_seconds() / 86400 for v in n_samp.values()]
+    check("samples: >= 3 servers carry 7 days of history", sum(1 for x in spans if x >= 6.9) >= 3, f"{len(spans)} metrics")
+    check("samples: no metric has more than 7 days + 1 hour", all(x <= 7.05 for x in spans))
+    check("samples: an open alert sits on a non-CPU metric that has samples",
+          scalar("SELECT count(*) FROM bams_alert_events e JOIN bams_metrics m ON m.id=e.metric_id WHERE e.status='open' "
+                 "AND e.alert_type <> 'stale' AND m.metric_name NOT LIKE '%CPU%' "
+                 "AND EXISTS (SELECT 1 FROM bams_metric_samples s WHERE s.metric_id=m.id)") >= 1)
+    check("samples: a BAMS server has no samples at all (No trend data)",
+          scalar("SELECT count(*) FROM bams_objects o WHERE o.enabled=1 AND NOT EXISTS (SELECT 1 FROM bams_metrics m "
+                 "JOIN bams_metric_samples s ON s.metric_id=m.id WHERE m.object_id=o.id)") >= 1)
+    check("samples: none newer than the frozen mock clock",
+          scalar("SELECT count(*) FROM bams_metric_samples WHERE sampled_at > ?", stamp["bams_now"]) == 0)
     return bool(ok_all)
 
 # ----------------------------------------------------------------------------- CLI

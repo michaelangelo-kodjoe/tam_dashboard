@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Author | data-architect-agent (Phase 1.2, tasks T-01 to T-04). Revised for QA `SCHEMA_REVIEW_1` to `_4` (all REJECTED) and for PM decisions D-23 and D-24. |
-| Date | 2026-10-12 |
+| Author | data-architect-agent (Phase 1.2, tasks T-01 to T-04). Revised for QA `SCHEMA_REVIEW_1` to `_4` (all REJECTED) and for PM decisions D-23 and D-24. Run 2 (T-61, 2026-10-13): two new reference queries, seed additions, §17. **No schema change.** |
+| Date | 2026-10-12 (T-61 addendum 2026-10-13) |
 | Inputs | `docs/SPEC.md` (§11-14, §22-27, §33, §35, §36, §42, §45, §46), `docs/01_PM_SPEC.md` (§0, §2, §3), `docs/qa/SCHEMA_REVIEW_1.md` |
 | Next gate | QA re-review → `docs/qa/SCHEMA_REVIEW_5.md`. Finding dispositions are in §13 to §16 (reviews 1 to 4). |
 
@@ -22,10 +22,12 @@ All paths are under `TAM_Command_Center/db/`.
 | `queries/recent_changes.sql` | Today "Recently Changed". |
 | `queries/account_summary.sql` | Accounts directory, Account Load and workspace header counts. |
 | `queries/object_history.sql` | Audit history of one object. |
+| `queries/day_progress.sql` | **Run 2 (T-61).** The "done today N of M" ring (D-29). See §17.1. |
+| `queries/activity_trend.sql` | **Run 2 (T-61).** 14 daily activity points per account (D-31, §10.4 #18). See §17.2. |
 | `queries/metric_freshness.sql` | BAMS per-metric freshness state (Live, Delayed, Stale, No Data, Disabled) under the frozen mock clock rule (§8). |
 | `seed_mock.py` | Deterministic mock generator, plus a loader that rebases dates to today and a verifier. |
 | `mock_data.json` | The fixture (`tam-mock-v1`). The frontend `MockDataSource` (T-23) also reads it. |
-| `tests/test_db_contract.py` | **77** stdlib `unittest` tests: the original contract tests, regression tests for every review-1 to -4 fix, D-23/D-24 queue tests, and the scanner corpus (572 generated banned statements, 44 ORM and other banned forms, 57 legitimate negatives). Run with `python -m unittest discover -s TAM_Command_Center/db/tests`. |
+| `tests/test_db_contract.py` | **109** stdlib `unittest` tests (32 are the T-61 additions, §17.5): the original contract tests, regression tests for every review-1 to -4 fix, D-23/D-24 queue tests, and the scanner corpus (572 generated banned statements, 44 ORM and other banned forms, 57 legitimate negatives). Run with `python -m unittest discover -s TAM_Command_Center/db/tests`. |
 
 ## 1. Decisions applied
 
@@ -322,7 +324,7 @@ Online backup under live WAL writes was tested: the copy passes `integrity_check
 1. `delta = today_local − anchor_date` (days). `date_fields` shift by `delta`. `instant_fields` shift by `delta` days, keeping the time of day. Inside audit `old_value`/`new_value`, keys in `json_date_keys` / `json_instant_keys` shift the same way.
 2. **BAMS freshness fields** (`now_relative_fields`: `bams_metrics.last_received`, `last_source_update`; `bams_metric_samples.sampled_at`, `source_update`) shift by **exactly `load_now − anchor_now`** (`anchor_now = 2026-10-12T12:00:00.000Z`), not by whole days. This keeps every metric's freshness state at any load time (QA-1-5). `load_now` is the real UTC time when seeding for the real local today; otherwise it is `today 12:00Z`.
 3. `(schedule_year, schedule_quarter)` shift by whole quarters (`qidx(today) − qidx(anchor)`).
-4. Apart from rule 2, nothing is stamped later than "yesterday 20:00Z".
+4. Apart from rule 2 and the T-61 "done today" history (§17.3), nothing is stamped later than "yesterday 20:00Z". The done-today rows are stamped today between 08:30Z and 10:45Z, so nothing is later than the 12:00Z mock clock.
 
 **BAMS freshness states (§27 bands, ages at load time):**
 
@@ -352,16 +354,16 @@ Real windows come from the Phase 3 schedule sync and never use the rebase rule.
 |---|---|
 | 12 | clients (10 Active, 2 Inactive) |
 | 35 | contacts |
-| 166 | tasks (every status, priority and category) |
+| 183 | tasks (every status, priority and category; 14 added by T-61) |
 | 210 | notes |
-| 756 | audit_events (every row has `object_label`) |
+| 800 | audit_events (every row has `object_label`; 36 added by T-61) |
 | 3 | windows |
-| 79 | server_upgrades (all 8 statuses) |
+| 82 | server_upgrades (all 8 statuses) |
 | 25 | bams_objects |
 | 95 | bams_metrics |
 | 165 | bams_alert_rules |
 | 26 | bams_alert_events |
-| 576 | bams_metric_samples |
+| 1440 | bams_metric_samples (24 metrics x 60 samples over 7 days; T-61) |
 | 5 | bams_alert_configs |
 | 21 | bams_notification_log |
 
@@ -469,6 +471,9 @@ Every row below is from `EXPLAIN QUERY PLAN` of the reference queries on the see
 | `recent_changes.sql` | `SCAN a USING INDEX ix_audit_ts`. The audit branch is ordered and LIMITed on its own (`INDEXED BY ix_audit_ts`), so it walks newest-first and stops early instead of sorting the unbounded audit table on every refresh. **Note (QA-2-7):** `INDEXED BY` makes renaming or dropping `ix_audit_ts` a hard query error. That is deliberate: fail loudly rather than silently degrade. Any migration touching that index must update this query. The BAMS branch now has a full tie-break (`ts DESC, id DESC, what DESC`), so its top-N is deterministic (tested). |
 | `metric_freshness.sql` | Per-metric join over `bams_metrics` → `bams_objects` (PK). Small table; no extra index. |
 | `object_history.sql` | `ix_audit_object`. |
+| `day_progress.sql` (T-61) | done set: `SEARCH a USING INDEX ix_audit_ts (timestamp>? AND timestamp<?)` (forced with `INDEXED BY`), then `tasks`/`clients` by primary key; open set: `SEARCH t USING INDEX ix_tasks_open_due (due>? AND due<?)`. |
+| `activity_trend.sql` (T-61) | `SEARCH n USING COVERING INDEX ix_notes_client_ts (client_id=? AND timestamp>? AND timestamp<?)` and `SEARCH a USING INDEX ix_audit_client_ts (client_id=? AND timestamp>? AND timestamp<?)`, both forced with `CROSS JOIN ... INDEXED BY` so the join order is account first; BAMS events through metric/object PKs. |
+| sparkline range read (T-64) | `SEARCH bams_metric_samples USING INDEX ix_bams_metric_samples_metric_ts (metric_id=? AND sampled_at>?)`. No query file: the backend owns the downsampling (§10.4 #7). |
 
 These indexes exist for FKs, cascades and integrity rather than for a reference query: `ix_support_cases_client`, `ix_server_upgrades_release`, `ix_bams_alert_rules_metric`, `ix_bams_alert_events_rule`, `ix_bams_metric_samples_metric_ts` (also the §45 trend access path), and the four `ux_*` unique indexes.
 
@@ -574,3 +579,71 @@ The `maintenance.audit_purge_allowed` flag from review 1 no longer exists and ha
 | QA-4-2 | Low | **Fixed:** E5 `AS alias`; peewee `Model.replace()` / `replace_many()`; pandas `if_exists` via a dict; BOM-aware and UTF-16-aware decoding; `.sh/.bash/.zsh/.ps1/.psm1/.bat/.cmd` scanned; a bare allow marker no longer exempts; `--list-allow` added for QA 3.2. Also added: sqlite-utils `replace=True`, Kysely `.orReplace()`. | `test_4_2_*` (2 tests), corpus |
 | QA-4-3 | Low | **F10 fixed:** `.sql` single-quoted data is never scanned. **F6 accepted** with reasons (§2.1), together with two sibling cases. All are tested as fail-closed and clearable only with a reasoned marker. | `test_4_3_*` (2 tests) |
 
+## 17. Run 2 additions (T-61, 2026-10-13): progress ring, activity trend, 7-day samples
+
+**No schema change.** `schema.sql`, the migration and `schema_version` are untouched; `docs/qa/SCHEMA_CHANGE_REQUEST.md` is not created. Everything below is a reference query plus additive seed rows. Existing seeded rows are unchanged (a diff of the old and new JSON shows 0 removed and 0 changed rows in every table).
+
+### 17.1 `queries/day_progress.sql` (D-29, PM spec §10.2)
+
+Parameters: `:today` (local date), `:day_start_utc` and `:day_end_utc` (UTC instants `YYYY-MM-DDTHH:MM:SS.mmmZ` of the local midnight of `:today` and of `:today + 1 day`). The backend converts **each local midnight separately**, so a 23-hour or 25-hour DST day is exact; the window is half-open `[start, end)`. `seed_mock.progress_params(day, tz)` is the executable form of that conversion (used by the verifier and the tests). Returns one row `(day, total, done, open, done_other)`.
+
+| Term | Rule as implemented |
+|---|---|
+| done (N) | `DISTINCT` task ids with an audit row `object_type='task' AND action='completed'` in the window, joined to `tasks` where `status='Complete'`, account null or Active, and `due IS NOT NULL AND due <= :today`. `archived` and `source` are ignored; a deleted task has no row to join. |
+| open (R) | `status <> 'Complete' AND archived = 0 AND due IS NOT NULL AND due <= :today`, account null or Active. |
+| total (M) | `done + open`, so `N <= M` by construction. |
+| done_other | The same done set with `due > :today` or `due IS NULL`. |
+
+Decision recorded here (the PM text leaves it open): tasks on **Inactive accounts are excluded from `done_other` as well**, not only from the plan. A completion on a dormant account is not shown anywhere on Today, so it would be surprising in the ring tooltip. If the PM wants it counted, remove the `c.status = 'Active'` test from `done`.
+
+**Hand-computed table for the seed** (any rebased "today"; times are UTC, the window is the UTC day). The assertion `test_seed_hand_computed_table` pins it for three dates.
+
+| Task (account) | `due` | Completed today (UTC) | Counted as |
+|---|---|---|---|
+| Send Q3 entitlement recap to desk heads (Northwind) | T-3 | 08:42 | N |
+| Reconcile September usage report (Bluewater) | T | 09:05 | N |
+| Share B-PIPE failover runbook with client (Meridian) | T-1 | 09:40 | N |
+| Close out API migration questionnaire (Tidewater) | T-7 | 10:15 | N |
+| File weekly coverage summary (no account) | T-1 | 10:30 | N |
+| Archive superseded capacity worksheet (Kestrelmoor), then archived 10:32 | T-2 | 08:30 | N (archived ignored) |
+| Collect server inventory addendum (Castellan): completed 08:50, reopened 09:10, completed 09:55 | T | 09:55 | N, once |
+| Confirm DR contact escalation path (Halvorsen): completed, reopened and completed again | T-4 | yesterday 14:10, today 09:20 | N (today's completion) |
+| Re-check West upgrade ticket after reopen (Silverbirch): completed 08:40, reopened 09:50 | T-2 | status In Progress | R, not N |
+| Walk analysts through Terminal basics, session 1 (Larchmont) | T+5 | 10:05 | done_other |
+| Log call outcome in the tracker (Ostrava) | none | 10:20 | done_other |
+| Hand over final entitlement list (Aurelian Vale, Inactive) | T-2 | 09:30 | excluded |
+| Close dormant account follow-up (Aurelian Vale, Inactive) | none | 09:35 | excluded |
+| Confirm DR contact list (Northwind) | T-2 | yesterday 15:20 | not today |
+| Duplicate: reconcile September usage report (Bluewater), deleted 09:30 | gone | 09:00 | not counted (row gone) |
+
+Open plan tasks = **19** (12 overdue, 7 due today; the reopened one is among them), so the seed returns **`{total: 27, done: 8, open: 19, done_other: 2}`**, a ring at 30 percent with "+2 other tasks completed". A query run at the real UTC day gives the same numbers on any date. Under a non-UTC zone the two completions per task that fall near midnight can move; the seed times (08:30Z to 10:45Z) keep all of them inside the local day for workstations from UTC-8 to UTC+13.
+
+### 17.2 `queries/activity_trend.sql` (D-31, PM spec §10.4 #18)
+
+Parameters: `:today`, 15 UTC instants `:b0 .. :b14` (the local midnights of `today-13 .. today+1`, each converted separately; `seed_mock.trend_params(day, tz, include_inactive)` builds them), and `:include_inactive` (0 default). Output is one row per account and day, 14 rows per account, zeros included: `client_id, client_name, day_index (0 = oldest), day, n`. The backend folds it into `{client_id: [14 ints]}`.
+
+A point counts the same entries as the Activity timeline with filter `all` and no search: notes, the listed `audit_events` (task created/completed/reopened/archived/deleted, contact, note deleted, client next_contact/status, any server_upgrade) and one entry each for a BAMS alert's opened, recovered and closed instants. A deleted note therefore disappears (its row is gone) and its `note.deleted` audit event counts, exactly as in Activity. `test_all_zero_account_in_a_busy_seed_and_parity_with_activity_timeline` proves per-day equality against `activity_timeline.sql` for every Active account on the seed. Seed values for 2026-10-12 (UTC days, oldest first; today is the last point and includes the done-today history):
+
+| Account | 14 points | Sum |
+|---|---|---|
+| Bluewater Reach Securities | 0 3 1 3 3 0 1 0 2 1 1 1 1 3 | 20 |
+| Castellan Peak Global Markets | 0 3 2 1 1 1 0 2 0 1 0 2 1 3 | 17 |
+| Larchmont Hollow Family Office | 1 1 1 0 1 0 1 2 2 1 0 0 1 1 | 12 |
+| Northwind Harbor Capital | 1 0 0 1 2 4 1 4 0 0 1 0 3 1 | 18 |
+
+Plan lines (SQLite 3.38): `SEARCH n USING COVERING INDEX ix_notes_client_ts (client_id=? AND timestamp>? AND timestamp<?)`, `SEARCH a USING INDEX ix_audit_client_ts (client_id=? AND timestamp>? AND timestamp<?)`. Both use `CROSS JOIN ... INDEXED BY` because on a tiny table the planner otherwise starts from `notes` or picks `ix_audit_object`; like `recent_changes.sql` (QA-2-7), renaming either index is then a loud query error. BAMS events are reached through metric and object primary keys; there are few per account, so no window index is needed. Nothing new is stored: no snapshot or trend table.
+
+### 17.3 Seed additions (`db/seed_mock.py`)
+
+- `Gen.build_done_today()` runs after `build_tasks()`. It uses its **own RNG stream** (`SEED + 61`) and appends task ids after the existing ones, so no existing seeded value moves; the new rows are 14 tasks and 36 audit rows. The audit helper gained `capped=False` for rows stamped today. Tasks that are completed today have `updated_at` equal to their last event.
+- Done-today instants are 08:30Z to 10:45Z: after local midnight for UTC-8 to UTC+13, before the 12:00Z mock clock. When the real "today" is loaded before 10:45Z UTC, some rows are a few hours ahead of the wall clock (accepted; mock data, DEV only). The rebase rule is unchanged (whole-day shift for audit and task instants), so `MockDataSource` needs no new rule.
+- `bams_metric_samples`: each of the 24 sampled metrics now has **60 samples over 7 days**: 36 four-hourly (168 h to 28 h before the last reading) plus the original 24 hourly. They stay now-relative (§8 rule 2). Eight BAMS objects have samples, each with CPU, Disk and (B-PIPE) Network (180 rows each): the first object of AVC (Inactive), BRS, CPG, HFA, KMC, MRA, NWH and OLP. The open Disk alerts (CPG Critical, NWH Warning) and the open CPU alerts (HFA, MRA) sit on sampled metrics, so both the "alert metric" and the CPU-fallback paths of §10.4 #7 are exercised. The remaining 17 objects (every second and third object, and the first objects of SCS and TBF) have **no samples** ("No trend data"). Servers that exist only as upgrade records have no BAMS object at all. The older six days come from the separate RNG stream and wobble around the current value with a daily rhythm, clamped to 100 for percentage metrics. File size: 1.05 MB.
+- The Today queue gains exactly one row (the reopened task, open and overdue); completed tasks never enter it. Frontend parity fixtures `today_parity_*.json` were regenerated from `today_queue.sql` (117 rows, was 116).
+
+### 17.4 Verifier (`seed_mock.py verify`)
+
+The check "nothing stamped in the future" now reads: nothing after today 12:00Z, and only task `completed/reopened/archived/deleted` audit rows are stamped today. New checks: M = N + R and N <= M; N >= 5 with M > N; done_other >= 2; a reopened task is open; an Inactive-account completion exists and is excluded; completed-and-archived and completed-yesterday rows exist; a completed-then-deleted task leaves audit rows only; 14 points per Active account and Inactive excluded; at least 8 accounts show activity; at least 3 servers carry 7 days of samples and none exceeds 7 days; an open alert sits on a non-CPU sampled metric; an enabled server has no samples; no sample is newer than the frozen clock. It prints the progress row.
+
+### 17.5 Tests (32 new, `T61_*` classes)
+
+`T61_DayProgress` (20): empty day, open only and N = M, reopened lowers N and not M, yesterday-reopened-today-completed, many completions once and source ignored, completed only yesterday, archived open excluded and archived done counted, Inactive excluded from every term, done_other (future, NULL, no account), open tasks without due or future, deleted task, other object types, half-open UTC window, Tokyo local midnight, spring-forward 23 h day, fall-back 25 h day, a 40-round property test (`done <= total`, `total = done + open`), `ix_audit_ts` in the plan, the hand-computed seed table for three dates, and the queue-unchanged check. `T61_ActivityTrend` (9): shape and zero fill, order, the three sources and the excluded event types, deleted note, account independence, UTC edges, New York buckets including the 25-hour day, parity with `activity_timeline.sql`, index use. `T61_SeedSamplesAndVerifier` (3): 7-day sample shape and the sparkline cases (including `ix_bams_metric_samples_metric_ts` in the plan), additive seed, and a negative test showing the verifier fails when the done-today history is removed.

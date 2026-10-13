@@ -2,7 +2,7 @@
 
 > This file is the current truth, not a transcript (spec §50). Update it on every substantive code, config, schema, deployment or behaviour change. History belongs in `CHANGELOG.md`.
 
-Last updated: 2026-10-13 by pm-agent (Run 2 planning: Today triage and visual refresh, D-26 to D-36; documents only, no code changed). Previous: 2026-10-12 by deployment-agent (Phase 4.3 release scaffolding). Previous: pm-agent (Phase 4.2 traceability); before that frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
+Last updated: 2026-10-13 by data-architect-agent (Run 2 T-61: seed and reference queries for the progress ring, activity trend and 7-day sparklines; no schema change). Previous: 2026-10-13 by pm-agent (Run 2 planning, D-26 to D-36; documents only). Previous: 2026-10-12 by deployment-agent (Phase 4.3 release scaffolding). Previous: pm-agent (Phase 4.2 traceability); before that frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
 
 ## Current release
 | | |
@@ -84,13 +84,14 @@ Verification: 107 pytest tests pass on Python 3.12 and 3.10; real server runs ch
 Phase 1.1 planning is complete. Phase 1.2 database layer is done: schema v1, the migration runner contract (pre-migration online backup, no-op rerun), a deterministic relative-date mock seed that covers every Today tier, and reference queries. 
 
 ## Current work item
-**Run 2 (planned 2026-10-13, nothing built yet):** Today "Triage Split" (top-10 list, detail pane, chips, ring, Later tabs) and the approved visual refresh of the Account Workspace and Accounts pages. Binding decisions D-26 to D-36 and tasks T-60 to T-77 are in `docs/01_PM_SPEC.md` §0, §7 and §10; visual rules in `docs/02_DESIGN_GUIDELINES.md` §15; three additive API changes in `docs/qa/API_CHANGE_REQUEST.md` (PM-AC-1 to PM-AC-3). No schema change. Order: DA (T-61 seed and reference queries) then BE (T-62 to T-64) and FE (T-70 to T-75) in parallel, then QA (T-76) and PM traceability (T-77). The Run 1 item below is complete.
+**Run 2 (planned 2026-10-13; T-60 and T-61 done, BE and FE next):** Today "Triage Split" (top-10 list, detail pane, chips, ring, Later tabs) and the approved visual refresh of the Account Workspace and Accounts pages. Binding decisions D-26 to D-36 and tasks T-60 to T-77 are in `docs/01_PM_SPEC.md` §0, §7 and §10; visual rules in `docs/02_DESIGN_GUIDELINES.md` §15; three additive API changes in `docs/qa/API_CHANGE_REQUEST.md` (PM-AC-1 to PM-AC-3). No schema change. T-61 (DA, done 2026-10-13): `db/queries/day_progress.sql`, `db/queries/activity_trend.sql`, seed additions (8 of 27 plan tasks done today, 2 done_other; 7-day samples), `db/tests` 109 passed, verifier PASS, scanner 0 violations; details in `docs/03_DATA_MODEL.md` §17. Order: DA (T-61 seed and reference queries) then BE (T-62 to T-64) and FE (T-70 to T-75) in parallel, then QA (T-76) and PM traceability (T-77). The Run 1 item below is complete.
 
 Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Quick Capture). Backend 2.1 (T-10 to T-13) and frontend 2.2/2.3 (T-20 to T-23) are done. Next: Phase 3.1 checkpoint and 3.2 QA integration. The Phase 1.3 schema re-review (`SCHEMA_REVIEW_5`) is still pending.
 
 ## Validation
 | Gate | Status |
 |---|---|
+| T-61 DB layer (Run 2) | **PASS**: `python -m unittest discover -s db/tests` 109 passed (77 + 32 new); `seed_mock.py all` verifier PASS on 4 dates; `sql_safety_scan.py` 0 violations; vitest 120 passed after regenerating `today_parity_*.json` (117 rows). `pytest server` and `tests/e2e` NOT run (no fastapi in the DA's interpreter): backend-dev must run them on the new seed. |
 | 1.3 Schema review | Reviews 1 to 4 REJECTED; gate closed by the orchestrator on 2026-10-12 under the severity policy (no Blocker/High open). `SCHEMA_REVIEW_5` was not run; QA-4-1/2 were verified against real code at Gate 3.2. |
 | 2.1 Backend tests | 118 passed after Phase 4.1 (107 before) (Python 3.12 and 3.10, macOS). The scanner finds 0 violations in the whole `TAM_Command_Center/` tree. |
 | 2.2 / 2.3 Frontend tests | 118 Vitest tests pass; `tsc --noEmit` clean; `vite build` succeeds. Includes keyboard matrices for `Select` and `AccountPicker`, the Today parity test against the reference SQL, rebase tests, adapter tests, App integration tests and repository guards (no raw colours outside `tokens.css`, `fetch` only in `src/data`, no native select). Verified in the Browser pane at 1440, 1024, 900 and 768 px with no console errors and no page-level horizontal scroll from 768 px. |

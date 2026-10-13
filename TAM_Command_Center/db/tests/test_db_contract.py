@@ -10,6 +10,7 @@ import datetime as dt
 import codecs
 import io
 import json
+import random
 import re
 import shutil
 import sqlite3
@@ -26,6 +27,7 @@ import migrate  # noqa: E402
 import seed_mock  # noqa: E402
 import sql_safety_scan  # noqa: E402
 import warnings  # noqa: E402
+from zoneinfo import ZoneInfo  # noqa: E402
 
 warnings.filterwarnings("ignore", message=r"migrate\(channel=None\)")
 
@@ -1273,6 +1275,377 @@ ACCEPTED_FALSE_POSITIVES = [
     (".tsx", "<p>Replace into list (3 items)</p>"),
     (".py", 'msg = "Do not REPLACE INTO prod (seriously)"'),
 ]
+
+
+# ----------------------------------------------------------------------------- T-61
+
+PROGRESS_SQL = (DB_DIR / "queries" / "day_progress.sql").read_text(encoding="utf-8")
+TREND_SQL = (DB_DIR / "queries" / "activity_trend.sql").read_text(encoding="utf-8")
+TIMELINE_SQL = (DB_DIR / "queries" / "activity_timeline.sql").read_text(encoding="utf-8")
+UTC = dt.timezone.utc
+NY = ZoneInfo("America/New_York")
+TOKYO = ZoneInfo("Asia/Tokyo")
+
+
+def seeded(today: dt.date) -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:", isolation_level=None)
+    conn.execute("PRAGMA foreign_keys = ON")
+    seed_mock.load(conn, json.loads(seed_mock.MOCK_JSON.read_text(encoding="utf-8")), today,
+                   now=dt.datetime(today.year, today.month, today.day, 12))
+    return conn
+
+
+def progress(conn, day: dt.date, tz=UTC) -> dict:
+    cur = conn.execute(PROGRESS_SQL, seed_mock.progress_params(day, tz))
+    return dict(zip([c[0] for c in cur.description], cur.fetchone()))
+
+
+class T61_DayProgress(unittest.TestCase):
+    """D-29 / 01_PM_SPEC section 10.2: the 'done today N of M' ring."""
+    DAY = dt.date(2026, 10, 12)
+
+    def setUp(self):
+        self.c = fresh()
+        add_client(self.c, "act", "Active Mock Fund")
+        add_client(self.c, "ina", "Dormant Mock Fund", "Inactive")
+
+    def task(self, tid, due="2026-10-10", status="Not Started", client="act", archived=0):
+        self.c.execute("INSERT INTO tasks(id,task,client_id,due,status,archived) VALUES (?,?,?,?,?,?)",
+                       (tid, tid, client, due, status, archived))
+
+    def event(self, tid, action, at, source="GUI", object_type="task"):
+        self.c.execute("INSERT INTO audit_events(timestamp,category,client_id,object_type,object_id,object_label,action,source) "
+                       "VALUES (?,?,?,?,?,?,?,?)", (at, "crm", None, object_type, tid, tid, action, source))
+
+    def done(self, tid, at="2026-10-12T14:00:00.000Z", **kw):
+        self.task(tid, status="Complete", **kw)
+        self.event(tid, "completed", at)
+
+    def test_empty_day_has_no_ring(self):
+        self.assertEqual(progress(self.c, self.DAY), dict(day="2026-10-12", total=0, done=0, open=0, done_other=0))
+
+    def test_open_only_and_all_done(self):
+        self.task("a"); self.task("b", due="2026-10-12")
+        self.assertEqual(progress(self.c, self.DAY), dict(day="2026-10-12", total=2, done=0, open=2, done_other=0))
+        for t in ("a", "b"):
+            self.c.execute("UPDATE tasks SET status='Complete' WHERE id=?", (t,))
+            self.event(t, "completed", "2026-10-12T10:00:00.000Z")
+        self.assertEqual(progress(self.c, self.DAY), dict(day="2026-10-12", total=2, done=2, open=0, done_other=0))  # N = M
+
+    def test_reopened_task_lowers_n_and_not_m(self):
+        self.done("a", "2026-10-12T09:00:00.000Z"); self.done("b", "2026-10-12T09:30:00.000Z"); self.task("c")
+        before = progress(self.c, self.DAY)
+        self.assertEqual((before["done"], before["total"]), (2, 3))
+        self.c.execute("UPDATE tasks SET status='In Progress' WHERE id='b'")
+        self.event("b", "reopened", "2026-10-12T11:00:00.000Z")
+        after = progress(self.c, self.DAY)
+        self.assertEqual((after["done"], after["open"], after["total"]), (1, 2, 3))     # N-1, R+1, M unchanged
+
+    def test_completed_yesterday_reopened_and_completed_today_counts_today(self):
+        self.done("a", "2026-10-12T09:00:00.000Z")
+        self.event("a", "completed", "2026-10-11T15:00:00.000Z"); self.event("a", "reopened", "2026-10-11T16:00:00.000Z")
+        self.assertEqual(progress(self.c, self.DAY)["done"], 1)
+
+    def test_many_completions_count_once_and_source_is_ignored(self):
+        self.done("a", "2026-10-12T09:00:00.000Z")
+        self.event("a", "completed", "2026-10-12T10:00:00.000Z", source="System")
+        self.event("a", "completed", "2026-10-12T11:00:00.000Z", source="Bulk Import")
+        self.assertEqual(progress(self.c, self.DAY)["done"], 1)
+
+    def test_completed_only_yesterday_is_neither_done_nor_plan(self):
+        self.done("a", "2026-10-11T20:00:00.000Z")
+        self.assertEqual(progress(self.c, self.DAY), dict(day="2026-10-12", total=0, done=0, open=0, done_other=0))
+
+    def test_archived_open_task_excluded_but_archived_done_task_counts(self):
+        self.task("x", archived=1)
+        self.done("a", archived=1)
+        self.assertEqual(progress(self.c, self.DAY), dict(day="2026-10-12", total=1, done=1, open=0, done_other=0))
+
+    def test_inactive_account_excluded_from_every_term(self):
+        self.task("x", client="ina")
+        self.done("a", client="ina"); self.done("b", client="ina", due=None); self.done("c", client="ina", due="2026-12-01")
+        self.assertEqual(progress(self.c, self.DAY), dict(day="2026-10-12", total=0, done=0, open=0, done_other=0))
+
+    def test_done_other_future_due_null_due_and_no_account(self):
+        self.done("f", due="2026-10-20"); self.done("n", due=None)
+        self.done("u", client=None, due="2026-10-01")                      # no account is eligible, in the plan
+        self.assertEqual(progress(self.c, self.DAY), dict(day="2026-10-12", total=1, done=1, open=0, done_other=2))
+
+    def test_open_tasks_without_due_or_in_the_future_are_not_plan(self):
+        self.task("n", due=None); self.task("f", due="2026-10-13"); self.task("t", due="2026-10-12")
+        self.assertEqual(progress(self.c, self.DAY)["total"], 1)
+
+    def test_deleted_task_is_not_counted(self):
+        self.done("a")
+        self.c.execute("DELETE FROM tasks WHERE id='a'")                     # audit rows remain
+        self.assertEqual(progress(self.c, self.DAY)["done"], 0)
+        self.assertEqual(self.c.execute("SELECT count(*) FROM audit_events WHERE object_id='a'").fetchone()[0], 1)
+
+    def test_other_object_types_never_count(self):
+        self.task("a")
+        self.event("a", "completed", "2026-10-12T10:00:00.000Z", object_type="server_upgrade")
+        self.assertEqual(progress(self.c, self.DAY)["done"], 0)
+
+    def test_utc_window_is_half_open(self):
+        self.done("s", "2026-10-12T00:00:00.000Z"); self.done("e", "2026-10-13T00:00:00.000Z")
+        self.done("l", "2026-10-11T23:59:59.999Z")
+        self.assertEqual(progress(self.c, self.DAY)["done"], 1)
+
+    def test_local_midnight_in_a_non_utc_zone(self):
+        # Tokyo (UTC+9): local day Oct 12 = [Oct 11 15:00Z, Oct 12 15:00Z)
+        self.done("late_yesterday", "2026-10-11T14:30:00.000Z")             # 23:30 local Oct 11
+        self.done("early_today", "2026-10-11T15:30:00.000Z")                # 00:30 local Oct 12
+        self.done("late_today", "2026-10-12T14:59:59.999Z")                 # 23:59:59 local Oct 12
+        self.done("tomorrow", "2026-10-12T15:00:00.000Z")                   # 00:00 local Oct 13
+        self.assertEqual(progress(self.c, self.DAY, TOKYO)["done"], 2)
+        self.assertEqual(progress(self.c, self.DAY, UTC)["done"], 2)        # UTC counts a different pair
+
+    def test_dst_spring_forward_day_is_23_hours(self):
+        day = dt.date(2026, 3, 8)                                           # New York: 23-hour day
+        p = seed_mock.progress_params(day, NY)
+        self.assertEqual((p["day_start_utc"], p["day_end_utc"]), ("2026-03-08T05:00:00.000Z", "2026-03-09T04:00:00.000Z"))
+        self.done("before", "2026-03-08T04:59:59.999Z", due="2026-03-01")   # 23:59:59 EST Mar 7
+        self.done("first", "2026-03-08T05:00:00.000Z", due="2026-03-01")    # 00:00 EST Mar 8
+        self.done("last", "2026-03-09T03:59:59.999Z", due="2026-03-01")     # 23:59:59 EDT Mar 8
+        self.done("after", "2026-03-09T04:00:00.000Z", due="2026-03-01")    # 00:00 EDT Mar 9
+        self.assertEqual(progress(self.c, day, NY)["done"], 2)
+
+    def test_dst_fall_back_day_is_25_hours(self):
+        day = dt.date(2026, 11, 1)                                          # New York: 25-hour day
+        p = seed_mock.progress_params(day, NY)
+        self.assertEqual((p["day_start_utc"], p["day_end_utc"]), ("2026-11-01T04:00:00.000Z", "2026-11-02T05:00:00.000Z"))
+        self.done("naive_24h_would_miss", "2026-11-02T04:30:00.000Z", due="2026-10-01")   # 23:30 EST Nov 1
+        self.done("first", "2026-11-01T04:00:00.000Z", due="2026-10-01")
+        self.done("next_day", "2026-11-02T05:00:00.000Z", due="2026-10-01")
+        self.assertEqual(progress(self.c, day, NY)["done"], 2)
+
+    def test_property_done_never_exceeds_total(self):
+        rnd = random.Random(61)
+        for round_ in range(40):
+            self.c.execute("DELETE FROM tasks")
+            for i in range(rnd.randint(0, 12)):
+                due = rnd.choice([None, "2026-10-01", "2026-10-12", "2026-10-30"])
+                client = rnd.choice([None, "act", "ina"])
+                status = rnd.choice(["Not Started", "Complete", "Complete", "Waiting"])
+                self.task(f"p{round_}_{i}", due, status, client, rnd.choice([0, 0, 1]))
+                if rnd.random() < 0.7:
+                    self.event(f"p{round_}_{i}", rnd.choice(["completed", "reopened"]),
+                               rnd.choice(["2026-10-11T23:00:00.000Z", "2026-10-12T09:00:00.000Z", "2026-10-12T20:00:00.000Z"]))
+            r = progress(self.c, self.DAY)
+            self.assertEqual(r["total"], r["done"] + r["open"])
+            self.assertLessEqual(r["done"], r["total"])
+            self.assertTrue(all(v >= 0 for k, v in r.items() if k != "day"))
+
+    def test_uses_ix_audit_ts(self):
+        plan = " ".join(str(row[-1]) for row in self.c.execute("EXPLAIN QUERY PLAN " + PROGRESS_SQL,
+                                                               seed_mock.progress_params(self.DAY, UTC)))
+        self.assertIn("USING INDEX ix_audit_ts", plan)
+        self.assertNotIn("SCAN a", plan)
+
+    def test_seed_hand_computed_table(self):
+        """The doc table in 03_DATA_MODEL section 17 is this assertion, for any rebased 'today'."""
+        for day in (dt.date(2026, 10, 12), dt.date(2026, 11, 3), dt.date(2027, 3, 3)):
+            with self.subTest(day=day):
+                c = seeded(day)
+                self.assertEqual(progress(c, day), dict(day=day.isoformat(), total=27, done=8, open=19, done_other=2))
+                title = lambda ids: sorted(r[0] for r in c.execute(  # noqa: E731
+                    f"SELECT task FROM tasks WHERE id IN ({','.join('?' * len(ids))})", list(ids)))
+                done_ids = [r[0] for r in c.execute(
+                    "SELECT DISTINCT a.object_id FROM audit_events a JOIN tasks t ON t.id=a.object_id "
+                    "LEFT JOIN clients c ON c.id=t.client_id WHERE a.action='completed' AND a.object_type='task' "
+                    "AND a.timestamp >= ? AND a.timestamp < ? AND t.status='Complete' AND (t.client_id IS NULL OR c.status='Active') "
+                    "AND t.due IS NOT NULL AND t.due <= ?", (*(seed_mock.progress_params(day, UTC)[k] for k in ("day_start_utc", "day_end_utc")), day.isoformat()))]
+                self.assertEqual(title(done_ids), sorted([
+                    "Archive superseded capacity worksheet", "Close out API migration questionnaire",
+                    "Collect server inventory addendum", "Confirm DR contact escalation path",
+                    "File weekly coverage summary", "Reconcile September usage report",
+                    "Send Q3 entitlement recap to desk heads", "Share B-PIPE failover runbook with client"]))
+                reopened = c.execute("SELECT status FROM tasks WHERE task='Re-check West upgrade ticket after reopen'").fetchone()
+                self.assertEqual(reopened[0], "In Progress")
+                c.close()
+
+    def test_seed_does_not_change_the_today_queue(self):
+        """Completed tasks never reach the queue: only the reopened one (open, due in the past) does."""
+        day = dt.date(2026, 10, 12)
+        c = seeded(day)
+        c.row_factory = sqlite3.Row
+        titles = {r["title"] for r in c.execute((DB_DIR / "queries" / "today_queue.sql").read_text(encoding="utf-8"),
+                                                {"today": day.isoformat()})}
+        self.assertIn("Re-check West upgrade ticket after reopen", titles)
+        self.assertNotIn("Reconcile September usage report", titles)
+        self.assertNotIn("Hand over final entitlement list", titles)
+
+
+def bounds(day, tz=UTC):
+    return seed_mock.trend_params(day, tz)
+
+
+class T61_ActivityTrend(unittest.TestCase):
+    """01_PM_SPEC section 10.4 #18: 14 daily activity points per account."""
+    DAY = dt.date(2026, 10, 12)
+
+    def rows(self, conn, tz=UTC, inactive=False):
+        return conn.execute(TREND_SQL, seed_mock.trend_params(self.DAY, tz, inactive)).fetchall()
+
+    def setUp(self):
+        self.c = fresh()
+        add_client(self.c, "a1", "Alpha Mock Fund"); add_client(self.c, "a2", "Beta Mock Fund")
+        add_client(self.c, "in", "Dormant Mock Fund", "Inactive")
+
+    def note(self, nid, client, at):
+        self.c.execute("INSERT INTO notes(id,client_id,note_type,timestamp,subject) VALUES (?,?,?,?,?)",
+                       (nid, client, "General Note", at, nid))
+
+    def audit(self, client, otype, action, at):
+        self.c.execute("INSERT INTO audit_events(timestamp,category,client_id,object_type,object_id,object_label,action,source) "
+                       "VALUES (?,?,?,?,?,?,?,?)", (at, "crm", client, otype, "o", "o", action, "GUI"))
+
+    def series(self, conn=None, tz=UTC, inactive=False):
+        out = {}
+        for cid, _name, idx, day, n in self.rows(conn or self.c, tz, inactive):
+            out.setdefault(cid, []).append((idx, day, n))
+        return out
+
+    def test_shape_14_points_zero_filled_and_days_ascending(self):
+        s = self.series()
+        self.assertEqual(sorted(s), ["a1", "a2"])                          # Inactive excluded by default
+        for pts in s.values():
+            self.assertEqual([p[0] for p in pts], list(range(14)))
+            self.assertEqual(pts[0][1], "2026-09-29"); self.assertEqual(pts[13][1], "2026-10-12")
+            self.assertEqual([p[2] for p in pts], [0] * 14)                # no activity -> 14 zeros
+        self.assertEqual(sorted(self.series(inactive=True)), ["a1", "a2", "in"])
+
+    def test_rows_are_ordered_by_name_then_day(self):
+        names = [r[1] for r in self.rows(self.c)]
+        self.assertEqual(names, sorted(names))
+
+    def test_counts_all_three_sources_and_only_listed_system_events(self):
+        self.note("n1", "a1", "2026-10-12T10:00:00.000Z")
+        self.audit("a1", "task", "completed", "2026-10-12T11:00:00.000Z")
+        self.audit("a1", "task", "updated", "2026-10-12T11:30:00.000Z")        # not a timeline event
+        self.audit("a1", "bams_object", "created", "2026-10-12T11:40:00.000Z")  # not a timeline event
+        self.audit("a1", "server_upgrade", "updated", "2026-10-12T12:00:00.000Z")
+        self.c.execute("INSERT INTO bams_objects(id,client_id,name) VALUES ('o1','a1','srv')")
+        self.c.execute("INSERT INTO bams_metrics(id,object_id,metric_name,ticker) VALUES ('m1','o1','CPU','T1')")
+        self.c.execute("INSERT INTO bams_alert_events(id,metric_id,alert_type,severity,message,opened_at,recovered_at,closed_at,status,"
+                       "trigger_value) VALUES ('e1','m1','fixed_threshold','Warning','x','2026-10-11T10:00:00.000Z',"
+                       "'2026-10-11T12:00:00.000Z','2026-10-12T09:00:00.000Z','closed',90)")
+        s = self.series()["a1"]
+        self.assertEqual((s[13][2], s[12][2]), (4, 2))                      # note+task+upgrade+closed / opened+recovered
+        self.assertEqual(sum(p[2] for p in s), 6)
+
+    def test_deleted_note_vanishes_but_its_audit_event_counts(self):
+        self.note("n1", "a1", "2026-10-12T10:00:00.000Z")
+        self.assertEqual(self.series()["a1"][13][2], 1)
+        self.c.execute("DELETE FROM notes WHERE id='n1'")
+        self.audit("a1", "note", "deleted", "2026-10-12T10:30:00.000Z")
+        self.assertEqual(self.series()["a1"][13][2], 1)                     # the deletion event, as in Activity
+        self.audit("a1", "note", "created", "2026-10-12T10:31:00.000Z")     # notes appear as notes, never twice
+        self.assertEqual(self.series()["a1"][13][2], 1)
+
+    def test_accounts_are_independent_and_unassigned_audit_ignored(self):
+        self.note("n1", "a1", "2026-10-12T10:00:00.000Z")
+        self.audit(None, "task", "completed", "2026-10-12T10:00:00.000Z")   # no account
+        s = self.series()
+        self.assertEqual(s["a1"][13][2], 1); self.assertEqual(s["a2"][13][2], 0)
+
+    def test_window_edges_utc(self):
+        self.note("lo_out", "a1", "2026-09-28T23:59:59.999Z"); self.note("lo_in", "a1", "2026-09-29T00:00:00.000Z")
+        self.note("hi_in", "a1", "2026-10-12T23:59:59.999Z"); self.note("hi_out", "a1", "2026-10-13T00:00:00.000Z")
+        s = self.series()["a1"]
+        self.assertEqual((s[0][2], s[13][2], sum(p[2] for p in s)), (1, 1, 2))
+
+    def test_local_day_buckets_and_dst(self):
+        # New York, window Oct 12 minus 13 days .. spans no DST change: day 13 = [Oct 12 04:00Z, Oct 13 04:00Z)
+        self.note("a", "a1", "2026-10-12T03:59:59.999Z"); self.note("b", "a1", "2026-10-12T04:00:00.000Z")
+        s = self.series(tz=NY)["a1"]
+        self.assertEqual((s[12][2], s[13][2]), (1, 1))
+        # A window that contains the fall-back day: today = Nov 3 2026; Nov 1 (index 11) is 25 hours long.
+        self.DAY = dt.date(2026, 11, 3)
+        self.note("c", "a2", "2026-11-02T04:30:00.000Z")                     # 23:30 EST Nov 1 -> index 11, not Nov 2
+        self.note("d", "a2", "2026-11-02T05:00:00.000Z")                     # 00:00 EST Nov 2 -> index 12
+        s = self.series(tz=NY)["a2"]
+        self.assertEqual(s[11][1], "2026-11-01"); self.assertEqual((s[11][2], s[12][2]), (1, 1))
+
+    def test_all_zero_account_in_a_busy_seed_and_parity_with_activity_timeline(self):
+        c = seeded(self.DAY)
+        c.execute("INSERT INTO clients(id,name,status) VALUES ('quiet','Quiet Mock Fund','Active')")
+        p = seed_mock.trend_params(self.DAY, UTC)
+        series = {}
+        for cid, _n, idx, _d, n in c.execute(TREND_SQL, p):
+            series.setdefault(cid, [0] * 14)[idx] = n
+        self.assertEqual(series["quiet"], [0] * 14)
+        inactive_ids = {r[0] for r in c.execute("SELECT id FROM clients WHERE status='Inactive'")}
+        self.assertTrue(inactive_ids and not (inactive_ids & set(series)))
+        edges = [p[f"b{i}"] for i in range(15)]
+        busy = 0
+        for cid, pts in series.items():
+            entries = c.execute(TIMELINE_SQL, dict(client_id=cid, filter="all", q_like=None, before_ts=None,
+                                                   before_key=None, limit=100000)).fetchall()
+            expect = [0] * 14
+            for e in entries:
+                ts_ = e[0]
+                for i in range(14):
+                    if edges[i] <= ts_ < edges[i + 1]:
+                        expect[i] += 1
+            self.assertEqual(pts, expect, cid)
+            busy += sum(pts)
+        self.assertGreater(busy, 40)
+
+    def test_uses_per_account_indexes(self):
+        plan = " ".join(str(r[-1]) for r in self.c.execute("EXPLAIN QUERY PLAN " + TREND_SQL,
+                                                           seed_mock.trend_params(self.DAY, UTC)))
+        self.assertIn("ix_notes_client_ts", plan)
+        self.assertIn("ix_audit_client_ts", plan)
+
+
+class T61_SeedSamplesAndVerifier(unittest.TestCase):
+    def test_sparkline_history_is_seven_days_deterministic_and_covers_the_cases(self):
+        day = dt.date(2026, 10, 12)
+        c = seeded(day)
+        rows = c.execute("SELECT m.id, o.name, m.metric_name, count(*), min(s.sampled_at), max(s.sampled_at), "
+                         "count(DISTINCT s.sampled_at) FROM bams_metric_samples s JOIN bams_metrics m ON m.id=s.metric_id "
+                         "JOIN bams_objects o ON o.id=m.object_id GROUP BY m.id").fetchall()
+        self.assertEqual(len(rows), 24)
+        for _id, _o, _m, n, lo, hi, distinct in rows:
+            self.assertEqual((n, distinct), (60, 60))                       # 36 four-hourly + 24 hourly, no duplicates
+            span = (seed_mock.parse_instant(hi) - seed_mock.parse_instant(lo)).total_seconds() / 86400
+            self.assertAlmostEqual(span, 7.0, places=3)                     # 168 h
+        self.assertGreaterEqual(len({r[1] for r in rows}), 3)               # at least three servers
+        no_samples = c.execute("SELECT count(*) FROM bams_objects o WHERE o.enabled=1 AND NOT EXISTS (SELECT 1 FROM bams_metrics m "
+                               "JOIN bams_metric_samples s ON s.metric_id=m.id WHERE m.object_id=o.id)").fetchone()[0]
+        self.assertGreaterEqual(no_samples, 1)
+        nonc = c.execute("SELECT count(*) FROM bams_alert_events e JOIN bams_metrics m ON m.id=e.metric_id WHERE e.status='open' "
+                         "AND e.alert_type<>'stale' AND m.metric_name NOT LIKE '%CPU%' AND EXISTS "
+                         "(SELECT 1 FROM bams_metric_samples s WHERE s.metric_id=m.id)").fetchone()[0]
+        self.assertGreaterEqual(nonc, 1)
+        plan = " ".join(str(r[-1]) for r in c.execute(
+            "EXPLAIN QUERY PLAN SELECT sampled_at, value FROM bams_metric_samples WHERE metric_id=? AND sampled_at>=? "
+            "ORDER BY sampled_at", ("m", "2026-10-05T00:00:00.000Z")))
+        self.assertIn("ix_bams_metric_samples_metric_ts (metric_id=? AND sampled_at>?)", plan)
+        # the final sample of each metric equals the metric's current reading's timestamp (rebase is now-relative)
+        self.assertEqual(c.execute("SELECT count(*) FROM bams_metrics m WHERE (SELECT max(sampled_at) FROM bams_metric_samples s "
+                                   "WHERE s.metric_id=m.id) > m.last_received").fetchone()[0], 0)
+
+    def test_seed_is_additive_only_for_the_untouched_tables(self):
+        data = seed_mock.Gen().build()["tables"]
+        self.assertEqual(len(data["clients"]), 12)
+        self.assertEqual(len(data["notes"]), 210)
+        self.assertEqual(len(data["server_upgrades"]), 82)
+
+    def test_verifier_fails_when_the_done_today_history_is_missing(self):
+        day = dt.date(2026, 10, 12)
+        c = seeded(day)
+        c.execute("PRAGMA foreign_keys = OFF")
+        triggers = c.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='audit_events'").fetchall()
+        for (name,) in triggers:
+            c.execute(f'DROP TRIGGER "{name}"')
+        c.execute("DELETE FROM audit_events WHERE object_type='task' AND action='completed' AND timestamp >= ?",
+                  ("2026-10-12T00:00:00.000Z",))
+        with redirect_stdout(io.StringIO()) as out:
+            ok = seed_mock.verify(c, day)
+        self.assertFalse(ok)
+        self.assertIn("[FAIL] progress: several plan tasks done today", out.getvalue())
 
 
 class QA_4_ScannerAdversarialCorpus(unittest.TestCase):
