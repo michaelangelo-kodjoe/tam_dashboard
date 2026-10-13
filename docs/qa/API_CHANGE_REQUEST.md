@@ -10,3 +10,15 @@ Raised by the frontend-dev-agent against `docs/04_API_CONTRACT.md` (frozen for r
 | FE-AC-4 | Low | done (2026-10-12) | Add `next_upgrade: {"date", "server"} \| null` to each `infrastructure[client_id]` entry in `GET /api/state` (and to the per-account infrastructure response). | The Account context rail shows "next upgrade (date and server)". The adapter computes it from `server_upgrades` (min `scheduled_date >= today`, status not Completed/Deferred), which duplicates the rule from `account_summary.sql`. |
 
 No change is requested to any frozen field, route or error code.
+
+## Run 2 (raised by pm-agent, 2026-10-13; D-26 to D-36, `docs/01_PM_SPEC.md` §10)
+All additive; no frozen field, route or error code changes; **no schema change**. Owner: backend-dev-agent (tasks T-62 to T-64). The frontend `MockDataSource` mirrors each (T-72).
+
+| ID | Sev | Status | Request | Why |
+|---|---|---|---|---|
+| PM-AC-1 | Medium | open | `GET /api/today` adds `progress: {day, total, done, open, done_other}` per PM §10.2 (tasks with `due <= today`, Active or no account; done = status Complete now and a `task`/`completed` audit row inside the local-day window; open = not Complete and not archived; `total = done + open`). Day window = local midnights of `today` and `today+1` converted to UTC separately (DST-safe). Reference query `db/queries/day_progress.sql` (DA, T-61). | "Done today N of M" ring (D-29). |
+| PM-AC-2 | Low | open | New `GET /api/accounts/activity-trend?days=14` returning `{ok, today, days, series: {client_id: [int x days, oldest first]}}` for Active accounts: Activity-timeline entries (same union as `activity_timeline.sql`) per local day. | Accounts table activity sparkline (D-31); keeps `/api/state` light (§42). |
+| PM-AC-3 | Low | open | `GET /api/client/{id}/infrastructure` adds `servers: [{name, environment, version, alert_severity, spark}]` per distinct server name; `spark = {metric, window_hours, points: [[iso_utc, value] x <= 28]}` or `null` (metric: highest-severity open alert, else a "cpu" metric, else null; window = min(7 days, available)). Reads only the window from `bams_metric_samples` (§45). | Server tiles with sparklines (D-31). |
+
+`GET /api/today` `queue` order and item shape are unchanged.
+

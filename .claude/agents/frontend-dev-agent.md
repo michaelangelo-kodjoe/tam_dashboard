@@ -26,6 +26,9 @@ React + TypeScript + Vite, compiled to static assets served by the backend (`TAM
 ## Phase 2.3 mock integration
 First wire to the mock JSON (via a swappable data-source adapter) so drag/state changes and filters are verifiable before the backend is live. Phase 4.1 swaps the adapter to the real API.
 
+## Design skill
+For all design and mockup work, invoke the `ui-ux-pro-max:ui-ux-pro-max` skill (via the Skill tool) before designing, and apply it within this project's locked constraints (custom CSS tokens, Bloomberg-inspired dark, no Tailwind). The user requires mockups to be approved before any UI is built (docs/TEAM_LOOP.md Mockup gate).
+
 ## Rules
 - Accessibility and reduced-motion per spec 43. Narrow-window behavior per spec 44.
 - Do not edit backend or schema; request changes via `docs/qa/API_CHANGE_REQUEST.md`.

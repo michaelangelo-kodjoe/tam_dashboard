@@ -6,6 +6,7 @@
 | Date | 2026-10-12 |
 | For | frontend-dev-agent (2.2, 2.3); QA uses it as the visual and accessibility checklist |
 | Sources | `docs/SPEC.md` §6, §43, §44, §49, §54, §55; decisions in `docs/01_PM_SPEC.md` §0 |
+| Run 2 amendment | 2026-10-13, pm-agent: §15 (grouped panels, tiles, instruments, triage layout) is added under D-26 to D-36 and **supersedes** the Run 1 rules "one continuous context rail" and "no card-in-card" (§2 Panels, §14). Everything else in this file still holds. |
 
 **Principle:** this is a Bloomberg-inspired operational console. It is dark, dense and calm, and amber means "you can act here". Where clarity and decoration conflict, clarity wins (§55). Implement everything below with custom CSS custom properties. Tailwind and UI kits are not allowed. Icons come from `lucide-react` (D-14).
 
@@ -82,11 +83,11 @@ Contrast values were computed against WCAG 2.x formulas.
 | Control height | 32px (md, default) or 28px (sm, in table rows and filter bars) |
 | Drawer width | 480px (full width below 640px) |
 | Dialog width | 600px for Quick Capture, 440px for confirm dialogs |
-| Context rail | 320px; the Today right column is 360px |
+| Context column | 320px (a grouped panel, §15.1). The Run 1 Today right column (360px) no longer exists (D-26). |
 
-**Breakpoints:** 1440 (wide), 1280 (the rail collapses), 1200 (the Today right column drops below the queue), 1100 (the Account context rail becomes a collapsible "Account brief"), 1024 (gutters tighten), 768 (minimum supported; tables scroll horizontally inside their container). The page never scrolls horizontally at 768px and above. Primary work (the Today queue, the Account tabs and their content) is never hidden or collapsed. Secondary context collapses first (§44).
+**Breakpoints:** 1440 (wide), 1280 (the rail collapses), 1200 (the Today list narrows from 420px to 340px and the detail pane's columns stack; the Account two-column grid becomes one column), 1100 (the Account context rail becomes a collapsible "Account brief"), 1024 (gutters tighten), 768 (minimum supported; tables scroll horizontally inside their container). The page never scrolls horizontally at 768px and above. Primary work (the Today queue, the Account tabs and their content) is never hidden or collapsed. Secondary context collapses first (§44).
 
-**Panels:** a `--surface-1` background, 1px `--border`, `--r-lg` radius, and a 12px/16px internal header with a `--fs-label` title. Do not nest cards inside cards. The Account context rail is **one** panel whose sections are separated by `--border` dividers (§10, §49).
+**Panels:** a `--surface-1` background, 1px `--border`, `--r-lg` radius, and a 12px/16px internal header with a `--fs-label` title. *(Run 2, D-36: the Run 1 sentences "Do not nest cards inside cards" and "The Account context rail is one panel whose sections are separated by dividers" are superseded by §15.1 to §15.3. Panels are grouped by purpose; a panel may contain one level of inset tiles; the context column is a grouped panel.)*
 
 ---
 
@@ -327,7 +328,7 @@ Every data view implements all of these. QA checks each one.
 - Show every button state.
 - Use the custom Select everywhere.
 - Use tabular numerals on dates and numbers.
-- Use a single continuous context rail.
+- Group related content into panels (§15.1); keep the Account context column a grouped panel.
 - Keep manual notes and system events distinct.
 - Show the focus ring on every interactive element.
 - Keep the DEV badge visible in DEV mode.
@@ -336,7 +337,10 @@ Every data view implements all of these. QA checks each one.
 **Don't:**
 - Native white buttons or select popups
 - Gradients, purple, glassmorphism or blur
-- Large rounded cards or card-in-card layouts
+- Large rounded cards, panels inside panels, or more than one level of inset tile (§15.3)
+- Gradients of any kind, including the `linear-gradient(tint, tint)` overlay trick; use the solid tint-surface tokens (§15.2)
+- Animated, glowing, pulsing or auto-playing instruments; sparklines or meters that rely on colour alone
+- Any score, grade or composite health number per account (§55)
 - Badges on every cell
 - Health scores or sales fields
 - Hover-move animations
@@ -344,3 +348,95 @@ Every data view implements all of these. QA checks each one.
 - Icons without a text equivalent
 - Title or tab flashing for alerts
 - Raw HTML rendering of user text (use `RichText`)
+
+
+---
+
+## 15. Run 2: grouped panels, instruments and the triage layout (D-26 to D-36)
+
+Approved mockups: `TAM_Command_Center/mockups/today-C.html`, `account-workspace.html`, `accounts.html`. They are the visual reference for layout and density only; content, counts and sort order come from `docs/01_PM_SPEC.md` §10 (D-35). The goal is unchanged: a Bloomberg-dark console that is **dense but calm**. The refresh adds structure and a small set of instruments; it does not add colour, motion or decoration.
+
+### 15.1 Panel types
+
+| Type | What it is | Rules |
+|---|---|---|
+| **Panel** | The Run 1 panel (§2): `--surface-1`, 1px `--border`, `--r-lg`, header with `--fs-label` title | Unchanged. |
+| **Grouped panel** | One panel whose content is several sections separated by 1px `--border` dividers (no gaps, no inner borders around sections). Replaces "single continuous context rail". Used for the Account context column and for any multi-topic side column | One header per section at most (`--fs-label`). Sections never have their own background or radius. Collapses as one unit below 1100px ("Account brief"). |
+| **Header band** | The Account header: a `--surface-2` block with 1px `--border-strong`, name row on top, then a row of 3 to 5 **metric cells** on `--surface-1` separated by 1px `--border` vertical dividers | Each cell: a `--fs-label` caption, a value (max `--fs-xl`, tabular), at most one instrument (meter bar or dot row) and one legend/sub line. Cells wrap to 3, then 2 columns below 1200 and 768px. |
+| **Tile strip** | A row of 2 to 3 equal panels at the top of a list page (Accounts) | Each tile: a caption, one instrument, one summary line. Same height. Stacks to one column below 1100px. |
+| **Triage pair** | The Today list panel plus the detail pane | List panel `--surface-1`; detail pane `--surface-1` with a `--surface-2` header block carrying a 4px left bar in the tier colour. Both are ordinary panels side by side with a 12px gap. |
+| **Tab-bar panel** | A panel that is only a tab bar (36px) and, when a tab is open, its content below a 1px divider | Used for Today's "Later" tabs. Closed by default. Tab semantics per §11. |
+| **Server tile** | An inset tile (§15.3) inside the Infrastructure panel | See §15.3. |
+
+Panels sit on a 12-column grid with a 12px gap (`--sp-3`). Page content is capped at 1240px and centred above 1440px. Account Overview: main 7 columns, context 5 columns (or fluid main plus the 320px context column); stack to 12 below 1200px.
+
+### 15.2 Tokens added
+
+No new hues. Instruments use only the existing status tokens. Added to `tokens.css` (still the only file with raw colour values; QA greps for hex elsewhere):
+
+| Token | Value | Use |
+|---|---|---|
+| `--hover-row` | `rgba(255,255,255,0.03)` | Hover on list rows and tab buttons (already used by the mockups) |
+| `--surface-warning` | `#2B2A20` (= `--warning` at 12% over `--surface-1`) | Solid tinted background of an alerting tile; replaces the mockup's gradient overlay |
+| `--surface-danger` | `#2E1E23` (= `--danger` at 12% over `--surface-1`) | Same, for Critical |
+| `--surface-accent` | `#2D251D` (= `--accent` at 12% over `--surface-1`) | Selected list row on a solid base when a translucent tint would stack |
+| `--meter-h` | `6px` | Height of meter and stack bars |
+| `--spark-h` | `30px` (tile) / `20px` (table cell) | Sparkline heights |
+| `--ring-size` | `44px` | Progress ring diameter |
+| `--row-h-triage` | `44px` | Today list row height |
+| `--r-round` | `50%` | Allowed only for the shapes in §15.4 |
+
+The three solid surface values must be recomputed if `--surface-1` or a status colour ever changes; a unit test pins them to the computed blend.
+
+Series colours: danger = overdue/critical, warning = waiting/alert, info = upcoming/upgrade, accent = today/selected, `--border-strong` = "other"/remainder, `--surface-3` = track, `--muted` = neutral line. **Healthy is quiet:** healthy servers, clear accounts and zero counts use `--muted`/`--subtle`; `--success` is only used for text or a dot labelled "healthy"/"passed", never as a fill area.
+
+### 15.3 Nesting rule (replaces "no card-in-card")
+
+- **Allowed:** panel, then section (divider only), then **one inset tile level**. An inset tile is a flat `--surface-2` (or `--surface-1` on a `--surface-2` parent) block with a 1px `--border`, `--r-md`, 12px padding, no header bar, no shadow. The Infrastructure server tiles are the model: a 5-up grid in a panel, separated by 1px `--border` gaps (the mockup's `gap:1px` over a `--border` background) or by 8px gaps with tile borders.
+- **Forbidden:** a panel inside a panel, a tile inside a tile, a tile with its own tab bar or form, a tile that is clickable in more than one way, any shadow on tiles, radius above `--r-md` on tiles.
+- A tile that needs attention changes its background to `--surface-warning` or `--surface-danger` and keeps its text label ("Disk 87%"). It does not glow, pulse or gain an icon-only badge.
+
+### 15.4 Instruments
+
+All instruments are inline SVG or CSS, no chart library (D-19 stands; Recharts stays reserved for BAMS trends in Phase 4). All are static: **no animation, no hover growth, no auto-play, no gradients, no fills under lines, no axes or gridlines** except the labelled endpoints noted below.
+
+| Instrument | Spec |
+|---|---|
+| **Meter / stack bar** (`MeterBar`, `StackBar`) | Height `--meter-h`, track `--surface-3`, segments flush with 1px gaps, radius 1px. Segments are mutually exclusive and ordered danger (overdue), warning (waiting), `--border-strong` (other). Always paired with a legend or number text. `role="img"` with an `aria-label` that states the numbers ("12 open: 3 overdue, 2 waiting, 7 other"). |
+| **Sparkline** | 1.5px polyline, `stroke-linejoin: round`, `vector-effect: non-scaling-stroke`, no fill. Default stroke `--muted`; `--warning` or `--danger` only if the series' metric has an open alert of that severity. `preserveAspectRatio="none"`. 120x30 in tiles, 64x20 in table cells. A latest-value dot is optional. Named by an `aria-label` ("CPU, last 7 days, latest 43%") and a `<title>`. No tooltip is required. If a series has fewer than 2 points it is not drawn and the text "No trend data" is shown. |
+| **Due histogram** (`DueHistogram`) | 20 bars, 48px tall, 3px gap, bars are `<i>` blocks with a 3px minimum height (a zero is a 3px stub in `--surface-3`). Overdue bins `--danger`, today `--accent`, future `--surface-3`. Axis labels only at the left ("6d overdue"), at today ("Today") and the right ("+14d"), `--fs-label` `--subtle`. Each bar has `title="13 Oct: 2 tasks"`; the group has a text summary and the full list is available as a visually hidden table. |
+| **Timeline track** (`TimelineTrack`) | 2px `--border-strong` line, today tick (2px `--accent`), markers 16px rings (2px border in the status colour, `--surface-1` fill) with a text label beside each; markers that would overlap stack their labels vertically. A hidden table lists the same events. Out-of-window markers pin to an edge with their real date. |
+| **Progress ring** (`ProgressRing`) | `--ring-size`, 4px stroke, track `--surface-3`, arc `--accent`, no animation on change. Text "N of M tasks done" beside it (`--fs-base`, tabular). The ring is `aria-hidden`. Definition in `01_PM_SPEC.md` §10.2. |
+| **Summary chips** (`SummaryChips`) | A full-width strip, 1px `--border-control` outline, `--r-md`, buttons separated by 1px `--border`. Each chip: a `--fs-sm` caption on top, a 16px bold tabular count under it. Selected chip `--accent-tint` with `--accent` text and count. 8 chips; they wrap on narrow widths (min 110px each). `role="radiogroup"`; this is the one allowed exception to the "segmented control = 2 to 5 options" guidance in §6.2. Empty tiers show a muted `0` and are `aria-disabled`. |
+| **Dot row** (`DotRow`) | One 8px dot per server (12px squares with `--r-sm` in the workspace header), max 12 shown then "+n". Neutral by default; a dot is `--warning`/`--danger` only for a server with an open alert. Accessible name states the totals. |
+| **Pills** | The Next upgrade and Next contact cells: a bordered `--r-sm` chip with the date (tabular) and a muted relative text; overdue relative text `--danger`, today `--accent`. Not rounder than `--r-sm`. |
+| **Avatar initials** | 28px circle, `--surface-3`, 1px `--border-strong`, two letters, `--muted`. Decorative (`aria-hidden`); the name is adjacent text. |
+
+**Round shapes allowed (`--r-round`):** status dots, the ring, avatar initials, and timeline marker rings. Nothing else (no pills, no round buttons, no round badges).
+
+### 15.5 Accessibility and honesty of instruments
+
+- Every instrument has a text equivalent that carries the same numbers; none relies on colour alone (§43). Colour pairs follow §4; danger and warning are always accompanied by the word or number.
+- Tooltips never hold information that is not available elsewhere on the page.
+- Reduced motion: nothing animates, so no special case is required; the existing 120ms colour/opacity transitions go to 0.
+- Cached or missing data is stated, not drawn: no sparkline for a series without samples ("No trend data"); stale data keeps the `StaleDataBanner` (§12).
+- Contrast: bars and lines against `--surface-1`/`--surface-2` must stay at least 3:1 (WCAG 1.4.11). `--border-strong` as the "other" segment is decorative because its count is in text; `--muted` lines are at least 5.98:1.
+
+### 15.6 How to keep it dense but calm (checklist for FE and QA)
+
+1. **One focal point per screen.** Today: the selected row and its detail. Workspace: the header band, then the main column. Accounts: the table. Instruments support the table; they never outrank it.
+2. **Colour is for exceptions.** In steady state at most three saturated areas per viewport: tier bars, the selected-row outline, status badges and text, and the ring. Healthy is muted. No coloured section backgrounds except an alerting tile (§15.3).
+3. **Instrument budget.** At most one instrument per metric cell or table cell; at most 3 different instrument types on one screen above the fold; none inside a drawer or dialog.
+4. **Density numbers stay as §2:** rows 32px (44px for the Today triage rows), headings max 20px, 12px gaps, 16px/24px gutters. Do not add padding to make instruments breathe; remove an instrument instead.
+5. **Typography:** numbers tabular; mono only for identifiers (server names, BPID, versions); labels `--fs-label` uppercase; no heading above 20px (the mockups' `--fs-xl` header values are the maximum).
+6. **No motion:** no count-up numbers, no animated ring, no skeleton shimmer under reduced motion.
+7. **No decoration:** no gradients (including the `linear-gradient(tint, tint)` overlay in the workspace mockup), no blur, no glow, no shadows except `--shadow-pop`, no purple, no icons without text.
+8. **Plain copy:** why-sentences and reasons are deterministic templates in sentence case with no exclamation marks, no emoji, no scores or grades.
+9. **Quiet empties:** a metric with nothing to show renders `-` in `--subtle`; a zero is `0` in `--subtle`; an instrument with no data is replaced by one muted sentence.
+10. **QA greps (T-70, T-76):** no raw hex outside `tokens.css`; no `gradient(`, `backdrop-filter`, `box-shadow` other than `--shadow-pop`, `@keyframes` or `animation` in `frontend/src`; no `<select>`; `border-radius` only from tokens (`--r-sm/md/lg/round`).
+
+### 15.7 Component and layout notes by screen
+
+- **Today:** header (title, date, ring, refresh), then chips, then the triage pair, then the tab-bar panel. List row 44px: number (22px column), 3px tier bar, title plus account (two lines), date label right. Detail header block `--surface-2` with the 4px tier bar, then two columns (Why it is here | Key facts) separated by a vertical `--border`, then a footer with the primary Open button and the key hint. Below 1200px the columns stack. The detail pane never contains steps, next actions or a completion control (D-28).
+- **Account Workspace:** breadcrumb, then the header band (name, tags, Edit account; metric cells: Open tasks with stack bar, Servers with dot row, Alerts, Next upgrade with a thin progress track to the date, Next client touch), then tabs, then the 12-column grid. Overview main: Top item panel (a `--surface-2` panel with a 4px left bar in the tier colour), Open tasks (rows 38px with a 4px left marker, due histogram above the rows), Infrastructure (server tiles), Upgrades timeline, Recent activity. Context column: grouped panel with Account details, Contacts, Next client touch.
+- **Accounts:** title row with count, search and filters, then the tile strip (Portfolio, Open load by account, Next 15 days), then the Needs attention list, then the dense table (32px rows, sticky header, instruments in cells; an overdue-heavy account gets no row background change, only its Overdue number turns `--danger`).

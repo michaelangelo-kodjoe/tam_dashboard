@@ -7,6 +7,7 @@
 | Source of truth | `docs/SPEC.md` (cited below as `§n`) |
 | Process | `docs/TEAM_LOOP.md` |
 | User confirmations | Q-1 to Q-5 (defaults behind D-01, D-04, D-07, D-08, D-12, D-22) were confirmed by the user on 2026-10-12. |
+| Run 2 amendments | 2026-10-13, pm-agent: the user approved the mockups in `TAM_Command_Center/mockups/` (Today direction C, account workspace, accounts). Binding decisions D-26 to D-36 (§0) and the detail in §10. Where §3.1, §4.3, §4.5, US-3.x, US-4.1 or US-5.5 differ from §10, **§10 wins**. |
 | Scope | Spec §51 Phase 1 (Foundation) and Phase 2 (CRM Workspace): foundation, Today, Accounts, Account Workspace, Quick Capture |
 | Downstream consumers | data-architect-agent (1.2), qa-guardrail-agent (1.3, 3.2), backend-dev-agent (2.1, 4.1), frontend-dev-agent (2.2, 2.3), deployment-agent (4.3), pm-agent (4.2) |
 
@@ -23,7 +24,7 @@ The spec leaves these open or ambiguous. Each one is binding for this run unless
 | D-01 | **Version line.** This rebuild starts at app version `0.1.0-dev`, schema version `1`. No in-place upgrade from the legacy v8.5.4 / schema 7 DB. Migrating legacy data is the Phase 5 importer's job (Inspect → Preview → Apply, §37). | Spec says exact version numbers need not be preserved. A clean schema line avoids inheriting legacy migration debt. |
 | D-02 | **Schema is complete from day one.** `db/schema.sql` creates every §33 table, including Operations and BAMS tables. This run builds no CRUD for them. They are filled by mock seed data and read by Today, Accounts and Infrastructure. | Lets the §52 Today tests ("active BAMS alert appears", "near-term upgrade appears") and "Infrastructure shows BAMS and upgrade records" pass without building Phases 3-4, and keeps migrations stable. |
 | D-03 | **Activity = manual notes ∪ system events.** System events are not copied into `notes`. The Activity timeline merges `notes` (manual, editable) with read-only rows derived from `audit_events` (task, contact and account lifecycle, server-upgrade changes) and `bams_alert_events` (opened / recovered / closed). | §12 forbids editing system history as if it were a note. One source per fact avoids drift. |
-| D-04 | **Today ranking.** Six tiers, defined exactly in §3.1 below. Every object lands in exactly one place: its highest qualifying queue tier, or else Upcoming. All due-today tasks share tier 2 and are sorted by priority inside it. | §7 says ranking is "roughly". This keeps Medium/Low due-today work from sinking below upgrades. |
+| D-04 | **Today ranking.** Six tiers, defined exactly in §3.1 below. Every object lands in exactly one place: its highest qualifying queue tier, or else Upcoming. All due-today tasks share tier 2 and are sorted by priority inside it. *(Clarified 2026-10-13, D-32: inside tier 1, upgrades have no priority and rank after all tasks, by scheduled date; the sort is exactly `today_queue.sql`.)* | §7 says ranking is "roughly". This keeps Medium/Low due-today work from sinking below upgrades. |
 | D-05 | **Horizon constants.** Near-term upgrade in the queue = scheduled within 14 days. Upcoming panel = next 14 days for tasks and client touches, next 30 days for upgrades. "Upcoming tasks" queue tier = due in the next 3 days. These are named constants in one backend module. | Keeps the queue actionable. They can become settings later without touching the schema. |
 | D-06 | **"Today" is the workstation's local calendar date**, computed by the backend. All-day fields (`due`, `next_update`, `next_contact`, `last_contact`, `scheduled_date`) are stored as `YYYY-MM-DD` with no timezone. Instants (`created_at`, `updated_at`, note `timestamp`, audit `timestamp`) are stored as ISO-8601 UTC (`...Z`). The Local/GMT setting changes only how instants are displayed. | §39 local vs GMT display. Date-only fields must not shift across timezones. |
 | D-07 | **Next Client Touch** = `clients.next_contact`. Quick Capture "Client Follow-Up" creates a task with category `Client Follow-Up`. If the task's due date is earlier than the current `next_contact`, or `next_contact` is empty, it also sets `next_contact` to that date, in the same transaction with its own audit row. A checkbox in the form (on by default) can turn this off. | §31 lists Client Follow-Up as its own capture type. §10 needs a Next Client Touch. This links the two without a new table. |
@@ -45,6 +46,18 @@ The spec leaves these open or ambiguous. Each one is binding for this run unless
 | D-23 | **One queue entry per follow-up obligation (QA-1-12a).** When an account has an open, non-archived task with category `Client Follow-Up` whose `due` equals `clients.next_contact`, the Today queue and the Upcoming panel suppress the account-level `client_follow_up` item and keep only the task. The task row shows the context "Next Client Touch". If the dates differ, both items appear. | The task is the actionable, completable object. Two rows for one obligation add noise (§55). This needs no schema change: it is a NOT EXISTS predicate in `today_queue.sql` (owner: data-architect-agent) mirrored in the backend service and `MockDataSource`. |
 | D-24 | **Exception upgrades always appear in the queue (QA-1-12b).** Tier 5 also includes any upgrade with status `Exception`, whatever its date (one in the past already lands in tier 1). `Deferred` upgrades stay out of the queue and appear only in Upcoming when they fall in its window. | An Exception needs TAM action now, and §24 lists it under Needs Attention. Deferred is a deliberate "not now", so it belongs in the Phase 3 Operations Needs Attention view, not the daily queue. |
 | D-25 | **Write and DB-open contracts** (from `03_DATA_MODEL.md` §2.1 and §12, QA-1-2/QA-2-2, QA-1-14). (a) No DB write ever uses REPLACE in any spelling (`REPLACE INTO`, `INSERT OR REPLACE`, `UPDATE OR REPLACE`, ORM equivalents). Allowed idioms are plain INSERT, `INSERT … ON CONFLICT(…) DO UPDATE`, and (insert-once cases such as the BAMS notification log) `ON CONFLICT DO NOTHING` / `INSERT OR IGNORE`; widened by the orchestrator 2026-10-12 to match `03_DATA_MODEL.md` §2.1 and QA-2-1. And `db/sql_safety_scan.py` fails the build on violations. (b) `channel` (`dev`/`prod`) is a required argument on every DB open and migrate call; there is no default. (c) The release must ship `db/schema.sql`, `db/migrations/` and `db/queries/`, because `assert_guards` reads `schema.sql` at startup. | REPLACE deletes and reinserts rows, which silently bypasses audit and FK semantics. A required channel prevents a DEV process from opening a PROD DB by default. A missing `schema.sql` would stop the app from starting. |
+
+| D-26 | **Today layout is direction C, "Triage Split"** (`mockups/today-C.html`). Left: a numbered list. Right: a detail pane for the selected item. Above both: a strip of summary chips that filter the list. Below: a tab bar for Upcoming, Recently changed and Account load (D-30). This replaces the two-column queue plus 360px right column of §4.3. Arrow keys move the selection. | User-approved 2026-10-13. One screen, one decision at a time, calm by default. Detail in §10.1. |
+| D-27 | **The default list shows strictly the top 10 queue items across all tiers, in PM tier order** (the `queue` array order of `GET /api/today`, first 10). Everything else is behind "View all": the full queue, all tiers, no cap, tier headings as dividers. "View all" is also reachable from the chips (an "All" chip and each tier chip). The mockup's "Plan" chip (tiers 1-2 only, 7 rows) is **not** built. | User-approved. Strict cap = a bounded, calm screen. §10.1 has the chip set and URL state. |
+| D-28 | **No "What to do" steps and no next-action field anywhere.** The detail pane shows: why it is here, account, type, due/event date with relative label, urgency, waiting-on/context, and a link to open the underlying object. The mockup's "Mark complete" button is **not** in the Today detail pane (see §10.1; flagged for the user). Nothing in this run adds a field to `tasks`, `clients` or any table to hold a next action. | User-approved. A "next action" field is a CRM-style construct (§55). The existing task drawer and row hover action already complete tasks. |
+| D-29 | **The "done today N of M" progress ring is a real feature, tasks only.** M = plan tasks = non-archived tasks with `due <= T` on an Active (or no) account that are either still open or were completed today. N = the plan tasks completed today (a `completed` audit event inside today's local-day window and `status = Complete` now). N cannot exceed M by construction. The ring is live (no start-of-day snapshot), so M can change during the day. Served as `progress` on `GET /api/today`; **no schema change**. Exact rules, edge cases and SQL shape: §10.2. | User-approved with the definition delegated to the PM. Tasks are the only objects with a clean, auditable completion event; BAMS alerts and upgrades leave the plan by other lifecycles. A snapshot denominator would need a new table, which this feature does not justify. |
+| D-30 | **Upcoming, Recently changed and Account load are tabs under the list** (mockup C "Later" bar), not a drawer. The tab bar is always visible and the panel is collapsed by default (click a tab to expand it, click it again to collapse). Account load keeps the US-3.4 rule: at most 8 rows plus an "All accounts" link (the mockup's "Account load (24)" count is the link text, not the row count). | User-approved. Keeps secondary context one click away without crowding the triage pair. |
+| D-31 | **The visual refresh in `account-workspace.html` and `accounts.html` is approved:** layered header meters, due histogram, server tiles with sparklines, upgrade timeline, accounts tile strip with load bars, a servers-dots column, an activity-trend column. It is built **only from data derivable without schema changes**. §10.4 rules on each new datum (include, include with limits, or defer). `docs/02_DESIGN_GUIDELINES.md` §15 holds the visual rules; it deliberately replaces the Run 1 rules "single continuous context rail" and "no card-in-card". | User-approved. |
+| D-32 | **Upgrade ranking inside tier 1 (answers the open question; D-04 stays valid).** Order: (1) open Critical BAMS alerts; (2) overdue tasks by priority High, Medium, Low, then due date ascending; (3) overdue upgrades, after all tasks, by `scheduled_date` ascending, then id. Upgrades have no priority, so they never interleave with tasks. This is exactly what `db/queries/today_queue.sql` and `frontend/src/data/mock/today.ts` already do (prio rank 3 for non-task kinds); no code change. Mockup C interleaves an upgrade between a High and a Medium task; the build follows this rule instead (§10.3, §10.5). | A deterministic total order with no invented priority. An overdue upgrade is still above every tier 2 item. If the user wants upgrades higher (e.g. right after Critical alerts), that is a one-line change in two files; it is listed under "needs a user decision" as optional. |
+| D-33 | **Accounts "Needs attention" list is a transparent rule, not a score.** At most 4 accounts, only accounts with at least one signal, ordered by the lexicographic key in §10.4 (open Critical alert, overdue upgrade, overdue task count, open Warning alert, client touch due or overdue, then name). The reason text is built from the same signals. There is no health score, grade, colour ranking or composite number anywhere (§55, Run 1 rule stays). | The mockup needs an ordering; making it explicit keeps it testable and non-CRM. |
+| D-34 | **The workspace "Do first for this account" panel is kept as "Top item for this account", with no steps and no Mark complete.** It shows the highest-ranked queue item (tiers 1-5 only) for the account, taken from the same `queue` array filtered by `client_id`, with title, why-it-is-here sentence, date, and an Open link. It is hidden when the account has none. | Consistent with D-28. Derived from the existing ranking, so it can never disagree with Today. |
+| D-35 | **Mockups are illustrative; the spec wins.** The mockups' sample content, hand-written "why" strings, invented context (e.g. "3 terminals affected", ticket numbers), sort order and counts are not requirements. Every place a mockup deviates from this spec is listed in §10.5 with what the build does instead. QA reviews against §10, not against pixels. | Prevents the mockups from silently overriding tier logic (D-04, D-23, D-24, D-32). |
+| D-36 | **Design rules are amended** in `docs/02_DESIGN_GUIDELINES.md` §15 and §2/§14: grouped panels replace the single-context-rail rule; one level of inset tiles replaces the no-card-in-card rule; instruments (meters, sparklines, histogram, ring, timeline track, chips) are allowed under strict calm rules (no gradients, no animation, text equivalents, status colours only). All new colour comes from existing tokens plus three solid tint-surface tokens. | Keeps the console Bloomberg-dark, dense but calm. |
 
 ---
 
@@ -112,7 +125,7 @@ Format: **US-x.y**: story. *Trace:* spec sections. **AC:** testable acceptance c
 
 ### E3 Today: daily action workspace (§7)
 
-**US-3.1** Today is the default landing page and shows a prioritized work queue. *Trace:* §7, D-04, D-05.
+**US-3.1** Today is the default landing page and shows a prioritized work queue. *Trace:* §7, D-04, D-05. *(Run 2: the layout and default list are superseded by D-26/D-27 and US-3.6 to US-3.9 in §10.7. The ranking ACs below still hold.)*
 - AC1: Queue items are ranked by the tiers in §3.1 below.
 - AC2: Each item shows the account, type label, title, urgency/status, date with a relative label, and context (waiting owner, server, or metric).
 - AC3 **[§52]**: An overdue task appears before a normal upcoming task.
@@ -121,14 +134,14 @@ Format: **US-x.y**: story. *Trace:* spec sections. **AC:** testable acceptance c
 - AC6 **[§52]**: Clicking an item navigates to the underlying object, following the route table in §4.2. Pressing Enter on a focused item does the same.
 - AC7: The landing page honours the "default landing page" setting.
 
-**US-3.2** Upcoming shows the next 14 days of obligations (30 days for upgrades), excluding anything already in the queue. *Trace:* §7.
+**US-3.2** *(Run 2: shown as a tab under the list, D-30.)* Upcoming shows the next 14 days of obligations (30 days for upgrades), excluding anything already in the queue. *Trace:* §7.
 - AC1: Items are grouped by date ("Tomorrow", then weekday or date headings) and include tasks, next client touches and server upgrades.
 
-**US-3.3** Recently Changed shows the latest 20 account-level changes as one-line sentences. *Trace:* §7.
+**US-3.3** *(Run 2: shown as a tab under the list, D-30.)* Recently Changed shows the latest 20 account-level changes as one-line sentences. *Trace:* §7.
 - AC1: The list includes note created, task completed, upgrade updated, BAMS alert opened, recovered or closed, and contact changed. Settings and backup events are excluded.
 - AC2: Clicking a row opens that account's Activity tab.
 
-**US-3.4** Account Load is a compact table below the queue. *Trace:* §7.
+**US-3.4** *(Run 2: shown as a tab under the list, D-30.)* Account Load is a compact table below the queue. *Trace:* §7.
 - AC1: Columns are Account, Open, Overdue, Waiting, Alerts and Next Contact. Rows are sorted by overdue (descending), then open (descending). At most 8 rows are shown, with an "All accounts" link.
 - AC2: Clicking a row opens the account Overview.
 - AC3: The table is visually subordinate to the queue (smaller heading, lower position).
@@ -137,7 +150,7 @@ Format: **US-x.y**: story. *Trace:* spec sections. **AC:** testable acceptance c
 
 ### E4 Accounts directory (§8)
 
-**US-4.1** Accounts is a dense, sortable table. *Trace:* §8.
+**US-4.1** Accounts is a dense, sortable table. *Trace:* §8. *(Run 2: columns and the tile strip are amended by D-31 and US-4.2 in §10.7.)*
 - AC1: Columns are Account, Open Tasks, Overdue, Waiting, BAMS Alerts, Next Upgrade and Next Contact. Numbers use tabular numerals and are right-aligned.
 - AC2: There is no health score and there are no commercial fields.
 - AC3: A search box filters by name or BPID. A status filter offers Active (default), Inactive and All.
@@ -159,7 +172,7 @@ Format: **US-x.y**: story. *Trace:* spec sections. **AC:** testable acceptance c
 
 **US-5.4** Overview shows the 10 most recent Activity entries, with manual notes and system events visually distinct (guidelines §9). "View all" opens the Activity tab. *Trace:* §10, §12.
 
-**US-5.5** A continuous context rail (one surface with internal dividers, not separate cards) shows the following. *Trace:* §10.
+**US-5.5** The context column is a grouped panel (D-31, D-36; guidelines §15) that shows the following. *(Run 1 wording was "a continuous context rail, one surface with internal dividers, not separate cards"; superseded.)* *Trace:* §10.
 - Next Client Touch: date, relative timing, primary contact name, inline "Set date" action, and last contact.
 - Infrastructure Snapshot: server count, active alerts, next upgrade (date and server), and an environment summary (e.g. `PROD 4 · DEV 1`, regions).
 - Contacts: up to 5, primary first, showing name, role, team, email (as a `mailto:` link) and a primary marker.
@@ -286,7 +299,7 @@ The data architect owns the details. These requirements come from the decisions 
 
 | Tier | Label | Qualifies when | Sort within tier |
 |---|---|---|---|
-| 1 | Overdue / Critical | Task with `due < T`; BAMS event `status=open` with `severity=Critical`; upgrade with `scheduled_date < T` and status not in (Completed, Deferred) | Critical alerts first, then priority High→Low, then date ascending |
+| 1 | Overdue / Critical | Task with `due < T`; BAMS event `status=open` with `severity=Critical`; upgrade with `scheduled_date < T` and status not in (Completed, Deferred) | Critical alerts first, then tasks by priority High→Low then date ascending, then upgrades by date ascending (D-32) |
 | 2 | Due today | Task with `due = T` | Priority High→Low, then title |
 | 3 | Infrastructure alerts | BAMS event `status=open` with severity Warning or Info, or `status=recovered` (awaiting close) | open before recovered, Warning before Info, then `opened_at` ascending |
 | 4 | Waiting / follow-up | Task with `status=Waiting` and (`next_update ≤ T` or `next_update` null); account with `next_contact ≤ T`, unless suppressed by D-23 | Date ascending, nulls last |
@@ -348,6 +361,8 @@ Queue item targets:
 | server_upgrade | `/accounts/:cid/infrastructure?server=<server_name>` |
 
 ### 4.3 Today
+> **Superseded in Run 2 by D-26 and §10.1** (Triage Split). The wireframe below is kept for history; do not build it. Tier headings, the six-column row and the 360px right column no longer exist.
+
 ```
 Today · Mon 12 Oct 2026                               Last refreshed 14:05 ⟳
 ┌───────────────────────────── Work queue (n) ──────────────┐┌─ Upcoming ─────────┐
@@ -370,6 +385,8 @@ Today · Mon 12 Oct 2026                               Last refreshed 14:05 ⟳
 A header row holds the "Accounts" title, a count, search, status filter, and the "+ Account" button. Below it is the dense table (32px rows, sticky header) with the columns from US-4.1. The default sort is Overdue descending, then name. A zero count renders as a muted "0". An empty Next Upgrade or Next Contact renders as a muted "-".
 
 ### 4.5 Account Workspace
+> **Amended in Run 2 by D-31, D-34, D-36 and §10.4.** The header gains meters, Overview gains a due histogram, server tiles and an upgrade timeline, and the context rail becomes a grouped panel. Routes, tabs, URL state and breakpoints below still hold.
+
 ```
 ‹ Accounts
 Acme Capital Partners   BPID 1234567 · Terminal, B-PIPE                   [Edit account]
@@ -428,6 +445,8 @@ A title and icon, one paragraph on what the page will do (from §15/§29/§30), 
 | `QuickCaptureDialog`, `ConfirmDialog`, `Dialog` base | | Focus trap |
 | `Toast` / `ToastRegion` | | `aria-live` |
 | `StatusBadge`, `PriorityLabel`, `DateCell` (relative + absolute), `CountStat` | | |
+| **Run 2 (D-26 to D-36):** `TriageList`/`TriageRow`, `TriageDetail`, `SummaryChips`, `ProgressRing`, `LaterTabs` | Today | §10.1, guidelines §15. Replace `QueueList`/`QueueRow`/`UpcomingList` layout (the data components are reused inside `LaterTabs`). |
+| **Run 2:** `GroupedPanel`, `Tile`, `MeterBar`/`StackBar`, `Sparkline`, `DueHistogram`, `TimelineTrack`, `TileStrip`, `DotRow` | Workspace, Accounts, Today | Pure presentational, props in, no data fetching. Each has a text equivalent (§15.5). |
 | `RichText` | notes, tasks | Escaped plain text with line breaks (D-16) |
 | `EmptyState`, `ErrorBanner`, `SkeletonRows`, `StaleDataBanner` | | |
 | `PlaceholderPage` | | |
@@ -500,6 +519,26 @@ Owners: **DA** data-architect-agent · **QA** qa-guardrail-agent · **BE** backe
 | T-42 | 4.3 | DEP | §47 launchers, `requirements.txt`, README/VERSION/VALIDATION, release zip and SHA-256 manifest | | release folder | T-41 | The smoke test boots DEV from the zip. The archive scan finds no DB, and finds `db/schema.sql`, `db/migrations/` and `db/queries/` present (D-25c). Windows items are flagged as untested. |
 | T-50 | every | all | Update `TAM_PROJECT_STATE.md` and `CHANGELOG.md` | | those files | | Done on every substantive change (§50). |
 
+**Run 2 task board (2026-10-13; D-26 to D-36).** No packaging or release tasks. Owners as above. Paths relative to repo root. Every task also ends with T-50 (state and changelog).
+
+| ID | Phase | Owner | Task | Inputs | Outputs | Depends on | Definition of done |
+|---|---|---|---|---|---|---|---|
+| T-60 | R2-1 | PM | Record D-26 to D-36, guidelines §15, API change requests, state and changelog | user approval | this doc §10, `02_DESIGN_GUIDELINES.md`, `qa/API_CHANGE_REQUEST.md`, state, changelog | none | **Done 2026-10-13.** |
+| T-61 | R2-2 | DA | Seed and query support. (a) `db/seed_mock.py`: add today's `task.completed` audit rows covering the §10.2 cases (several plan tasks completed today; one completed then reopened; one completed today that was due in the future; one completed today with `due` NULL; one completed on an Inactive account; one completed yesterday); keep the seed deterministic and relative-dated. (b) `bams_metric_samples` for at least 3 servers across 7 days (4-hourly is enough) including one with an open alert on a non-CPU metric and one server with no samples. (c) `db/queries/day_progress.sql` reference query for `progress`; `db/queries/activity_trend.sql` for the 14-day per-account series. (d) Document both in `03_DATA_MODEL.md`. **No schema change** (if the DA finds one is needed, write `docs/qa/SCHEMA_CHANGE_REQUEST.md` and stop). | §10.2, §10.4 | the files listed | T-60 | Seed verifier and `db/tests` pass; `sql_safety_scan.py` 0 violations; query output on the seed matches a hand-computed table in the doc; index use confirmed with `EXPLAIN QUERY PLAN` (`ix_audit_ts`, `ix_audit_client_ts`, `ix_bams_metric_samples_metric_ts`). |
+| T-62 | R2-3 | BE | `progress` on `GET /api/today`: `{day, total, done, open, done_other}`, local-day UTC window computed in Python from the same `today` the endpoint returns (DST-safe, §10.2), executing `day_progress.sql`. Update `docs/04_API_CONTRACT.md`. | T-61(c), PM-AC-1 | `server/` | T-61 | pytest: every §10.2 case; a DST day (23h and 25h) test with an injected timezone; midnight boundary; `done <= total` property test; ranking output of `queue` unchanged (existing tests untouched). |
+| T-63 | R2-3 | BE | `GET /api/accounts/activity-trend?days=14` (PM-AC-2) using `activity_trend.sql` (same union as `activity_timeline.sql`, bucketed by local day). | T-61(c) | `server/`, contract doc | T-61 | pytest: bucket edges, deleted notes, Inactive accounts excluded by default, accounts with no activity return 14 zeros. |
+| T-64 | R2-3 | BE | Per-server tile data in `GET /api/client/{id}/infrastructure` (PM-AC-3): `environment`, `version`, `spark` (metric name, window, up to 28 points) or null, per distinct server name, rules in §10.4. | T-61(b) | `server/`, contract doc | T-61 | pytest: alert-metric choice, CPU fallback, server with upgrade rows only (no spark), server with no samples (spark null), points never exceed 28, no sample rows loaded outside the window (§45). |
+| T-70 | R2-4 | FE | Tokens and instruments: the three `--surface-*` solid tint tokens and layout tokens (§15.2), `GroupedPanel`, `Tile`, `MeterBar`/`StackBar`, `Sparkline`, `DueHistogram`, `TimelineTrack`, `ProgressRing`, `SummaryChips`, `DotRow`, each with its text equivalent; sandbox page entries. | guidelines §15 | `frontend/src/components/ui`, `styles/tokens.css` | T-60 | Vitest per component (props to DOM, a11y name present, no inline colours); repository guards still pass (no raw hex outside `tokens.css`, plus a new guard: no `gradient(`, no `backdrop-filter`, no `animation`/`@keyframes` in `src/`). |
+| T-71 | R2-4 | FE | Today Triage Split: chips, top 10, View all, `?show=` URL state, arrow-key list, detail pane (why sentences, key facts, open link), progress ring, `LaterTabs`. Remove the old right column. | §10.1, §10.2 | `frontend/src/pages/TodayPage.tsx` and children | T-70, T-72 | Vitest + App tests for every AC in US-3.6 to US-3.9; keyboard matrix test; no `steps`, "What to do" or "Mark complete" string exists in the Today components (guard test). |
+| T-72 | R2-4 | FE | `MockDataSource` parity: `progress` (same rules as `day_progress.sql`), activity trend, tile spark, built over `mock_data.json`; extend `today.test.ts` parity to the new fields on three dates. | T-61 | `frontend/src/data/mock/` | T-61 | Parity tests prove TS equals the reference SQL on the seed for `progress` and `activity_trend`. |
+| T-73 | R2-5 | FE | Workspace refresh: layered header meters, due histogram, server tiles, upgrade timeline, "Top item" panel, grouped context panel, breakpoints. | §10.4, §10.5 | `frontend/src/pages/workspace/` | T-70, T-72, T-64 | Vitest for each derivation (meter exclusivity, histogram bins, timeline clamping, tile fallbacks); screenshots at 1440, 1280, 1024, 768. |
+| T-74 | R2-5 | FE | Accounts refresh: tile strip, load bars, servers dots, next upgrade/contact pills, activity trend column, Needs attention list (D-33). | §10.4 | `frontend/src/pages/AccountsPage.tsx` | T-70, T-72, T-63 | Vitest for the attention ordering key (all tie-breaks) and for column sorting; US-4.1 AC1-AC5 still pass. |
+| T-75 | R2-5 | FE | `ApiDataSource` wiring for the three additive fields; contract tests against the live DEV backend. | T-62..T-64 | `frontend/src/data/` | T-62, T-63, T-64, T-71, T-73, T-74 | Adapter tests; one e2e run driving Today, a workspace and Accounts on the live DEV backend. |
+| T-76 | R2-6 | QA | Run 2 gate: verify D-26 to D-36 and every AC in §10.7; ring edge cases against a real DB; tier order and the D-32 rule; instrument accessibility (text equivalents, contrast, reduced motion, keyboard); guideline greps (hex, gradients, blur, animation, native select); screenshots at four widths. | all | `docs/qa/ERROR_LOG_<n>.md` | T-62..T-75 | Verdict line present; loop to PASS (0 open Blocker/High). |
+| T-77 | R2-7 | PM | Update the traceability matrix with the Run 2 rows and re-validate. | T-76 PASS | `docs/05_TRACEABILITY.md` | T-76 | No FAIL or MISSING for in-scope Run 2 items. |
+
+Run 2 critical path: T-60 → T-61 → (T-62 ∥ T-63 ∥ T-64 ∥ T-70) → T-72 → (T-71 ∥ T-73 ∥ T-74) → T-75 → T-76 → T-77.
+
 Critical path: T-01 → T-05 → (T-10…T-13 ∥ T-20…T-22) → T-23 → T-30 → T-31 loop → T-40 → T-41 → T-42.
 
 ---
@@ -519,6 +558,7 @@ Each item is deferred to the named spec phase. The listed seam must be left clea
 | Production promotion; validation on the Bloomberg workstation (§56) | 6 / user | Packaging flags remain "untested on Windows" |
 | Multi-user, auth/JWT/RBAC, vector DB/RAG, Docker/Terraform, health scores, sales fields, CMDB, support_cases UI | never (locked) | none |
 | Creating tasks automatically from note Action Items | not planned | none |
+| Run 2: "What to do" steps, any next-action field, a Mark complete button in the Today detail pane, per-account health or attention scores, a historical open-load trend (needs snapshots, a new table), a frozen start-of-day plan snapshot for the ring, "terminals affected" and other invented mockup context | not planned / needs user decision | none; see §10.4 and §10.5 |
 
 ---
 
@@ -549,3 +589,240 @@ The in-scope [§52] acceptance tests and the stories that own them:
 | Safety: no DB in release | US-12.2 AC1 |
 
 Deferred §52 tests (reported as deferred, not failed): all Operations tests, all BAMS tests, and "imported malformed workbook does not partially write" (Phase 5).
+
+
+---
+
+## 10. Run 2: Today triage and visual refresh (D-26 to D-36)
+
+Approved by the user on 2026-10-13 after reviewing `TAM_Command_Center/mockups/` (`today-C.html`, `account-workspace.html`, `accounts.html`). The mockups are not edited. Visual rules are in `docs/02_DESIGN_GUIDELINES.md` §15.
+
+### 10.1 Today: Triage Split
+
+```
+Today · Tue 13 Oct 2026                    (ring) 3 of 8 tasks done      Last refreshed 14:05 ⟳
+[ Top 10 ] [ Overdue / critical 6 ] [ Due today 5 ] [ Alerts 7 ] [ Waiting 14 ] [ Upgrades 8 ] [ Next 3 days 28 ] [ All 68 ]
+┌ list (420px) ───────────────┐┌ detail pane ───────────────────────────────────────┐
+│ 1 ▌ CPU sustained at 96%…  ││ ▌ BAMS alert · Overdue / Critical          [Critical]│
+│     Castellan Peak  opened ││ CPU sustained at 96% on bxa-ln-02                    │
+│ 2 ▌ Send entitlement…      ││ Castellan Peak Global Markets                        │
+│ …                           ││ WHY IT IS HERE          │ KEY FACTS                  │
+│ 10                          ││ Critical alert, still   │ Account / Type / Opened /  │
+│ Showing 10 of 68  View all ›││ open. Critical alerts…  │ Urgency / Context          │
+└─────────────────────────────┘│ [ Open infrastructure → ]            ↑↓ moves · Enter opens │
+Later  [Upcoming (11)] [Recently changed (20)] [Account load]     (collapsed by default)
+```
+
+**Chips (`SummaryChips`).** One row, in this order, each showing a label and the count of the **full** queue for that scope (counts are never capped):
+
+| Chip | Scope | Label source |
+|---|---|---|
+| Top 10 (default) | first 10 items of the queue array | count shown is `min(10, queue length)` |
+| Overdue / critical | tier 1 | tier label |
+| Due today | tier 2 | tier label |
+| Alerts | tier 3 | short form of "Infrastructure alerts" |
+| Waiting | tier 4 | short form of "Waiting / follow-up" |
+| Upgrades | tier 5 | short form of "Upgrade actions" |
+| Next 3 days | tier 6 | the spec tier label is "Upcoming tasks"; the chip says "Next 3 days" so it is not confused with the Upcoming **tab** (which is a different window, D-05) |
+| All | the full queue | |
+
+- Chips are a single-select group (`role="radiogroup"`, roving tabindex, Left/Right arrows). Empty tiers stay visible with a muted `0` and are not selectable. State is in the URL as `?show=top|all|t1..t6` (default `top`; unknown values fall back to `top`), so Back and reload keep it.
+- A tier chip lists **every** item of that tier (the list scrolls inside its panel; no cap, no "Showing 7 of 11" truncation). `All` lists the whole queue with tier headings as dividers (`--fs-label`, with counts). `Top 10` has no headings; each row carries a tier colour bar instead.
+- The footer under the list reads "Showing N of M" and, on `Top 10` only, a "View all (M)" link that sets `?show=all`. "Show everything" in the mockup is this link.
+- The list contains **only queue items**. Upcoming-only objects never appear in it.
+
+**List rows.** Number (position within the current list, 1-based), tier colour bar (3px; tier 1 danger, 2 accent, 3 warning, 4 warning, 5 info, 6 neutral, matching the mockup), title (ellipsis, full text in `title`), account name below it (muted), and on the right the date label ("3d overdue", "Today", "opened 09:12", "19 Oct") with `--fs-sm` tabular numerals. One badge at most, per guidelines §4. Row height 44px.
+
+**Selection and keyboard.** The list is `role="listbox"`; rows are `role="option"`; the listbox is focusable and uses `aria-activedescendant`.
+
+| Key | Effect |
+|---|---|
+| Down / Up | Move the selection one row; no wrap |
+| Home / End | First / last row |
+| Enter | Open the selected item's underlying object (the §4.2 target) |
+| Left / Right when focus is on a chip | Move between chips |
+| Click on a row | Select it (does not navigate) |
+| Double-click on a row | Open the object |
+
+The first row is selected on load and whenever the chip changes. After a refresh the selection stays on the same `(kind, id)` if it is still in the list, otherwise on the row now at the same index (clamped). Selection is not stored in the URL.
+
+**Detail pane (`TriageDetail`) shows exactly these fields, all taken from the existing `QueueItem` (no new API fields):**
+
+| Field | Source |
+|---|---|
+| Header: type label and tier label, optional status/priority/severity badge, title, account name | `type_label`, `tier_label` (frozen labels), `priority`/`severity`/`status`, `title`, `client_name` (account name links to the workspace; "No account" for unassigned tasks) |
+| Why it is here | A sentence generated by the frontend from `tier`, `urgency`, `priority`, `severity`, `days_delta`, `date`, `context`. Table below. |
+| Key facts | Account; Type; the date with its kind label ("Due", "Next update", "Next client touch", "Opened", "Scheduled") and relative text; Urgency (tier label); Priority, Severity or Status when present; Context (Waiting on …, Next Client Touch, alert message, upgrade summary) when present. Facts that are null are omitted, never shown as blank. |
+| Open link | One primary button, "Open task", "Open account" or "Open infrastructure", to the §4.2 target. Enter does the same. |
+
+It shows **no steps, no next-action text, no Mark complete** (D-28). The pane footer hint is "Up/Down moves · Enter opens".
+
+Why-it-is-here sentences (deterministic, frontend constants; `{…}` filled from the item):
+
+| `urgency` (and kind) | Sentence |
+|---|---|
+| `critical` | "Open Critical alert on {server_name}. Critical alerts always rank first." |
+| `overdue` (task) | "Overdue: due {date}, {n} days ago. {Priority} priority." |
+| `overdue` (server_upgrade) | "Upgrade scheduled for {date}, {n} days ago, and not Completed or Deferred." |
+| `due_today` | "Due today. {Priority} priority." |
+| `alert` | "Open {severity} alert on {server_name}." |
+| `recovered` | "Alert recovered and waiting to be closed." |
+| `waiting` | "Waiting{ on {waiting}}. Next update {date or "is not set"}." |
+| `follow_up` | "Next client touch is due {date}." |
+| `upgrade` | "Upgrade scheduled for {date}, within 14 days." or, for status Exception, "Upgrade exception: needs attention at any date." |
+| `validation` | "Upgrade needs validation: {Validation Required / validation Failed / Completed with validation Pending}." |
+| tier 6 task (`upcoming` with a tier) | "Due {date}, within the next 3 days." |
+
+Plural and singular are handled ("1 day ago"). A missing value drops its clause rather than printing a placeholder.
+
+**States.** Loading: skeleton list rows and a skeleton pane. Empty queue: the list panel reads "Nothing needs attention." plus "Next item: {first Upcoming}" when one exists; the detail pane is hidden; the ring and chips still render. Error and stale banners per guidelines §12.
+
+**Layout.** Content max width 1240px. List 420px and detail fluid; below 1200px the list is 340px and the detail's two columns stack; below 900px the detail pane moves under the list and is no longer sticky. The detail pane is sticky below the top bar on wide screens. Primary work (the list and the detail) is never hidden or collapsed (§44).
+
+**Later tabs (D-30).** `role="tablist"` with Upcoming (n), Recently changed (n), Account load. `aria-selected` on the open tab; none selected means collapsed. Panel contents reuse US-3.2, US-3.3, US-3.4 unchanged except Account load shows at most 8 rows. Items in the Upcoming tab link to their object exactly as queue items do.
+
+### 10.2 The "done today" progress ring (D-29)
+
+**What it is.** A small ring plus text "N of M tasks done" in the Today header. It counts tasks only. BAMS alerts, upgrades and client touches are never in the ring (they are cleared by other lifecycles, and tier 1/2 non-task items still appear in the list and chips).
+
+**Definitions.** `T` = the server's local date (D-06). Window = `[local midnight of T, local midnight of T+1)` converted to UTC instants. The backend converts each of the two local midnights separately, so a 23-hour or 25-hour DST day is exact. All times come from the same clock/timezone the endpoint uses for `today`.
+
+| Term | Rule |
+|---|---|
+| Plan task | A task with `due IS NOT NULL AND due <= T` whose account is Active or null, and that is either **open** (status not Complete, `archived = 0`) or **done today**. These are exactly the tier 1 and tier 2 tasks, plus tasks that were in them and have since been completed. |
+| Done today (N) | A plan task with `status = 'Complete'` now AND at least one `audit_events` row with `object_type='task'`, `object_id=task.id`, `action='completed'`, `timestamp` inside the window. Counted once per task however many times it was completed. Source (`GUI`, `System`, `Bulk Import`…) is ignored. `archived` is ignored for done tasks (completing then archiving still counts). |
+| Open (R) | Plan tasks that are open now. |
+| Total (M) | `N + R`. |
+| done_other | Tasks completed today under the same rules but not in the plan (`due > T` or `due IS NULL`). Not in the ring; shown only in the ring's tooltip as "+K other tasks completed". |
+
+**Can N exceed M?** No. M is defined as N + R, so `N <= M` always. M is **live** and can move during the day: it grows when a task is created or re-dated into the plan, and shrinks when an open plan task is re-dated to the future, archived, deleted, or its account becomes Inactive. N falls when a completed task is reopened (it returns to R and M is unchanged). The ring fraction is `N / M`.
+
+**Why live, not a start-of-day snapshot.** A frozen denominator needs a stored snapshot (a new table or an `app_meta` blob), which is a schema/persistence cost for a cosmetic benefit. The live rule never lies about what is still open. This is a deliberate trade-off; if the user wants a frozen M, it needs a schema change request.
+
+**Display rules.**
+- `M = 0`: no ring; text "No tasks due today". `N = M > 0`: full ring with a check and "All done" in addition to "N of M". Otherwise the ring fills `N/M` in `--accent` over a `--surface-3` track. Never red/green: it is progress, not alarm. The text "N of M tasks done" is always present (the ring is decorative, `aria-hidden`; the text carries the meaning, plus `role="img"` `aria-label` on the group only if the text is visually hidden at narrow widths).
+- It refreshes with Today (auto-refresh and after every mutation). When the local date changes (`today` in the payload differs from the previous one, or the tab becomes visible on a new day) Today refetches immediately, which resets the ring at local midnight.
+- A completed-then-reopened task is not counted. A task completed yesterday and reopened and completed again today is counted today.
+
+**Edge cases the tests must cover:** completed today then reopened; completed today with `due` in the future (done_other); completed today with `due` NULL (done_other); completed on an Inactive account (excluded); completed and archived (counted); deleted after completing (not counted; the task row is gone); completed yesterday 23:30 local vs today 00:30 local, in a non-UTC timezone; a DST day; `M = 0`; `N = M`. Known limit: the plan test uses the task's **current** `due`; if a user clears the due date while completing, that completion counts as done_other. Accepted.
+
+**API (additive, PM-AC-1).** `GET /api/today` gains:
+```json
+"progress": {"day": "2026-10-13", "total": 8, "done": 3, "open": 5, "done_other": 1}
+```
+`day` echoes `today`. No existing field changes. Reference query: `db/queries/day_progress.sql` (T-61), parameters `:today`, `:day_start_utc`, `:day_end_utc`. It uses `ix_audit_ts` for the range and primary-key lookups on `tasks`. **No schema change is required, so `docs/qa/SCHEMA_CHANGE_REQUEST.md` is not created.**
+
+### 10.3 Ranking inside tier 1 (D-32) and D-04 consistency
+
+The full tier 1 order is the `ORDER BY` in `db/queries/today_queue.sql` (and the mirrored comparator in `frontend/src/data/mock/today.ts`):
+
+1. open Critical BAMS alerts, by `opened_at` ascending, then id;
+2. overdue tasks: priority High, Medium, Low, then `due` ascending, then id;
+3. overdue upgrades (`scheduled_date < T`, status not Completed or Deferred): `scheduled_date` ascending, then id.
+
+Upgrades have no priority field, so they are never ranked against task priorities. D-04 (six tiers, one tier per object, tier 2 sorted by priority then title, "first qualifying tier") is unchanged; only the previously unstated tier 1 upgrade position is now written down. No code change is needed. The parity test in `today.test.ts` already pins this.
+
+Tier 2 note: within equal priority the order is **title ascending**, not insertion order (mockup C lists "Prepare QBR agenda" before "Confirm terminal count for renewal"; the build lists "Confirm…" first).
+
+### 10.4 Rulings on new derived data (D-31, D-33)
+
+Verdicts: **Include** = built from existing tables/columns with no schema change. **Include (limits)** = built with the stated limits. **Defer** = not built this run, with the note.
+
+| # | Data (mockup) | Derivation | Verdict | API |
+|---|---|---|---|---|
+| 1 | Header meter: open tasks split Overdue / Waiting / Other | From open tasks. Segments are **mutually exclusive** in the order Overdue, then Waiting (not overdue), then Other. The labelled header counts keep the §3.2 definitions (a task that is overdue and Waiting is counted in both counts but only once in the bar). The legend carries a tooltip saying so. | Include | existing `/api/state` |
+| 2 | Header: Servers "PROD 4 · DEV 1", "1 warning" | Distinct server names (US-5.1). Environment from `bams_objects.environment`, else `server_upgrades.environment`. Servers with no known environment are counted in the total but not in PROD/DEV ("+n unknown" if any). "warning" = servers with an open Warning alert. | Include (limits) | existing infra data |
+| 3 | Header: Alerts with worst metric ("Disk 87%") | Highest-severity open alert, then earliest `opened_at`; text from the alert message/metric. | Include | existing |
+| 4 | Header: Next upgrade, "2 open upgrades" | `account_summary.sql` rule; count of upgrades not Completed or Deferred. | Include | existing |
+| 5 | Due histogram (20 bars, overdue / today / future) | Open non-archived tasks bucketed by `due`: bins for T-6 … T+13 (20 bars). Older overdue tasks fall into the first bin; due after T+13 or with no due date are not drawn (the axis says "+14d"). Bar colours: overdue danger, today accent, future `--surface-3`/`--border-strong`. Each bar has a title "{date}: {n} tasks" and the chart has a text summary. | Include | existing tasks |
+| 6 | Server tiles (name, version, health dot) | One tile per **distinct server name** (US-5.1). Dot = worst of its open alerts (Critical danger, Warning warning, otherwise none; a healthy server shows a muted dot with the word "healthy" in text). Version = `current_version` of the server's earliest open upgrade, else the `target_version` of its latest Completed upgrade, else omitted. | Include | `GET /api/client/{id}/infrastructure` additive (PM-AC-3) |
+| 7 | Server tile sparkline ("CPU 7 days") | `bams_metric_samples` for one metric per server: the metric of its highest-severity open alert, else a metric whose name contains "cpu" (case-insensitive), else none. Window = the last 7 days or the span available, whichever is shorter, downsampled server-side to at most 28 points (bucket maximum). Label states the metric and real window ("CPU 24h", "Disk 7d"). Servers with no samples, and servers that exist only as upgrade records, show no sparkline and the text "No trend data". The seed has 24 hourly samples only, so T-61 extends it to 7 days; **PROD shows no sparklines until the Phase 4 monitor writes samples** (cached data is never invented, §55). Freshness wording follows `metric_freshness.sql`. | Include (limits) | PM-AC-3 |
+| 8 | Upgrade timeline (30 days) | Upgrades with `T <= scheduled_date <= T+30` not Completed or Deferred, plus any Exception at any date. Past or beyond-window markers are pinned to the left/right edge and labelled with their real date. A "today" tick at 0. Marker colour by status via the §4 status map. The track has a list equivalent (visually hidden table). | Include | existing upgrades |
+| 9 | "Top item for this account" panel | D-34. | Include | existing `GET /api/today` |
+| 10 | Contacts with initials avatars | Initials from the contact name; role and team text. Avatars may be circles (guidelines §15.4). | Include | existing |
+| 11 | Account details: Regions | Distinct `bams_objects.region`, else "-". | Include | existing |
+| 12 | Accounts tile: Portfolio "24 active · 5 overdue · 4 alerts · 15 clear" | Counts of **accounts**: with overdue > 0; with active alerts > 0 (open or recovered); with neither ("clear"). An account with both counts in both numbers, so the three need not sum to the total; "clear" is the neither group. | Include | existing `/api/state` |
+| 13 | Accounts tile: Open load by account (6 bars) | Top 6 accounts by overdue desc, open desc, then name (same order as Account Load). Exclusive segments as in #1. | Include | existing |
+| 14 | Accounts tile: next 15 days strip (upgrades 6, client touches 9) | Day cells T … T+14 (15 cells). Upgrade marker: an upgrade not Completed or Deferred scheduled that day. Contact marker: an Active account `next_contact` that day. The two counts are totals over the window. | Include | existing |
+| 15 | Accounts table: Load stacked bar | Open count text plus the exclusive bar from #1. `aria-label` "12 open: 3 overdue, 2 waiting, 7 other". Sorts by open count. | Include | existing |
+| 16 | Accounts table: servers dots | One dot per distinct server; a dot is warning-coloured only if **that** server has an open alert (the mockup colours the first dot; the build uses the real server). Accessible name "5 servers, 1 with an alert". Sorts by server count. | Include | existing infra summary |
+| 17 | Accounts table: Next upgrade / Next contact pills | Existing derived dates with relative text. | Include | existing |
+| 18 | Accounts table: Activity trend sparkline (12 pts) | Count of Activity-timeline entries (D-03: manual notes plus the system events listed in §3.2) per **local day** for the last 14 days, per account, 14 points (the mockup's 12 is illustrative). Deleted objects are excluded as in Activity. Not sortable. New aggregate endpoint so `/api/state` stays light (§42). | Include (limits) | `GET /api/accounts/activity-trend` (PM-AC-2) |
+| 19 | "Needs attention" list (4 rows with reasons) | D-33. Accounts with at least one signal, ordered by the key: (1) has an open Critical alert; (2) has an overdue upgrade; (3) overdue task count, descending; (4) has an open Warning alert; (5) has a client touch due today or overdue; (6) name ascending. At most 4 rows. Reason text lists up to two signals in key order ("Critical alert, upgrade 3d overdue"). Dot colour: danger if rule 1 or 2 applies, else warning. No numeric score is shown or stored. | Include | existing `/api/state` + infra summary |
+| 20 | "Open load history" / trend of open tasks over time | Needs a daily snapshot table. | **Defer** | needs a schema change; out of this run |
+| 21 | "3 terminals affected", ticket numbers, "Pilot group of 12 users" and other free-text context in mockup items | Not data the system holds. The build shows `context` as served (alert message, waiting owner, upgrade summary). | **Defer / not applicable** | none |
+| 22 | Frozen start-of-day ring denominator | See §10.2. | **Defer** | needs a schema change request if wanted |
+
+### 10.5 Where the mockups deviate from the spec, and what the build does
+
+| Mockup | Deviation | Build rule |
+|---|---|---|
+| today-C | Default chip "Plan" = tiers 1-2 only (11 items), list capped at 7 | Default is "Top 10" across all tiers, strict cap 10 (D-27). No "Plan" chip. |
+| today-C | Tier-1 order places an upgrade between a High and a Medium task | Upgrades rank after all tier 1 tasks (D-32, §10.3). |
+| today-C | Tier-2 order puts "Prepare QBR agenda" before "Confirm terminal count" (both High) | Priority, then title ascending (`today_queue.sql`). |
+| today-C | Detail pane has "What to do" steps and a "Mark complete" button | Removed (D-28). |
+| today-C | Hand-written "why" strings and invented context/facts (SR-41872, 3 terminals, "Pilot group of 12 users", "Last contact 29 Sep" as ctx) | Generated why-sentences (§10.1); facts only from `QueueItem` fields. |
+| today-C | Titles such as "Waiting: sign-off from J. Okafor" | Title is the task text; "Waiting on …" appears as context. |
+| today-C | "Upcoming" chip for tier 6 and an Upcoming tab with a different meaning | Chip is "Next 3 days" (§10.1). |
+| today-C | "Account load (24)" tab | Tab lists at most 8 rows; the count belongs to the "All accounts (24)" link (D-30). |
+| today-C | "Alerts" chip count 7 includes only tier 3; Critical alerts are in "Overdue / critical" | Same, and intended. Chip labels stay short forms of the frozen tier labels. |
+| today-A/B | Not selected | Not built. |
+| account-workspace | "Do first for this account" with 3 steps and Mark complete | "Top item for this account" without steps or Mark complete (D-34). |
+| account-workspace | Header meter "Overdue 3 · Waiting 2 · Other 7" | Exclusive segments (§10.4 #1); the labelled counts stay §3.2. |
+| account-workspace | Server tile uses a `linear-gradient` to tint an alert tile; avatars, dots, step circles use 50% radius | Use the solid tint-surface tokens, no gradients (guidelines §15.2). Round shapes only where §15.4 allows. |
+| account-workspace | Sparklines show 7-day CPU for every server | Only where samples exist (§10.4 #7). |
+| account-workspace | Upgrade timeline marker at a fixed position for an Exception | Real position; past or out-of-window markers pinned to an edge with the real date. |
+| accounts | Dots: the first server dot is warning when the account has an alert | The dot of the server that has the alert. |
+| accounts | Activity sparkline of 12 points | 14 daily points (§10.4 #18). |
+| accounts | Attention reasons are prose | Generated from the D-33 signals only. |
+| all three | Static sample data (dates, counts, names) | Never copied into code or tests; the real data and the seed drive everything. |
+
+Mockup "Do next" items versus tier logic: apart from the tier 1 and tier 2 ordering rows above, the mockup's tier assignments agree with §3.1 (critical alert and overdue upgrade in tier 1; due-today tasks in tier 2; Warning and recovered alerts in tier 3; Waiting tasks with `next_update <= T` and a due client touch in tier 4; scheduled, Exception and Validation Required upgrades in tier 5; tasks due T+1 to T+3 in tier 6). Its chip counts (6, 5, 7, 14, 8, 28 = 68) are sample data.
+
+### 10.6 API additions (all additive; no existing field, route or code changes)
+
+Recorded in `docs/qa/API_CHANGE_REQUEST.md` as PM-AC-1 to PM-AC-3. The backend freezes final shapes in `docs/04_API_CONTRACT.md` (T-62 to T-64).
+
+| ID | Change |
+|---|---|
+| PM-AC-1 | `GET /api/today` adds `progress {day, total, done, open, done_other}` (§10.2). |
+| PM-AC-2 | New `GET /api/accounts/activity-trend?days=14` returns `{"ok": true, "today": "…", "days": 14, "series": {"<client_id>": [n, … 14 ints, oldest first]}}` for Active accounts. |
+| PM-AC-3 | `GET /api/client/{id}/infrastructure` adds a `servers` array: `{name, environment, version, alert_severity, spark}` per distinct server name, where `spark` is `{metric, window_hours, points: [[iso_utc, value], … ≤ 28]}` or `null`. |
+
+**Schema:** none of D-26 to D-36 needs a schema change. The ring uses `audit_events` (`ix_audit_ts`); the trend uses `ix_audit_client_ts` and `notes`; sparklines use `bams_metric_samples` (`ix_bams_metric_samples_metric_ts`). The only items that would need one are the deferred #20 and #22.
+
+### 10.7 User stories and acceptance criteria (Run 2)
+
+**US-3.6** The Today list is a top-10 triage list with a detail pane. *Trace:* §7, D-26, D-27, D-28.
+- AC1: On load the list shows the first 10 items of the queue in queue order, numbered 1 to 10, with the first selected and its detail visible. With fewer than 10 queue items, all are shown.
+- AC2: "View all" and the `All` chip show the whole queue, with tier headings; tier chips show every item of that tier. `?show=` restores the state after reload and Back.
+- AC3: Chip counts equal the number of queue items per tier, regardless of the 10-item cap.
+- AC4: Up/Down/Home/End move the selection, Enter opens the underlying object per §4.2, double-click opens it, single click only selects.
+- AC5: The detail pane shows the fields in §10.1 and **no** steps, next-action text or Mark complete. Null facts are omitted.
+- AC6: Item order equals `GET /api/today` `queue` order, including D-32 and the tier 2 title tie-break.
+- AC7: Upcoming-only objects never appear in the list.
+
+**US-3.7** The "done today" ring is correct. *Trace:* D-29.
+- AC1: N, M, open and done_other equal the §10.2 rules on the seeded DB, for each listed edge case.
+- AC2: `N <= M` always. Reopening a completed task lowers N by one and leaves M unchanged.
+- AC3: The ring resets when the local date changes without a page reload.
+- AC4: M = 0 shows "No tasks due today" and no ring; N = M > 0 shows "All done".
+- AC5: Text "N of M tasks done" is present for assistive tech.
+
+**US-3.8** Later tabs. *Trace:* D-30.
+- AC1: Upcoming, Recently changed and Account load are tabs below the list, collapsed by default, with counts; Account load shows at most 8 rows and an "All accounts" link.
+- AC2: No drawer exists for these panels.
+
+**US-3.9** Today stays calm. *Trace:* D-36.
+- AC1: In steady state the only saturated colour areas on the Today screen are tier bars, the selected-row outline, status badges and at most the ring fill; no gradients, no animation beyond the 120ms colour/opacity transitions.
+
+**US-4.2** Accounts overview instruments. *Trace:* D-31, D-33.
+- AC1: The tile strip shows Portfolio, Open load by account and Next 15 days per §10.4 #12-#14.
+- AC2: Table columns are Account, Load (bar), Overdue, Waiting, Alerts, Servers (dots), Next upgrade, Next contact, Activity (trend); US-4.1 AC2-AC5 still hold (no health score; filter; row opens Overview; "+ Account").
+- AC3: Needs attention follows the D-33 key with every tie-break tested; it never shows a number that implies a score.
+- AC4: Each bar, dot row and sparkline has a text equivalent.
+
+**US-5.6** Workspace instruments. *Trace:* D-31, D-34.
+- AC1: Header meters, due histogram, server tiles, upgrade timeline and Top item panel follow §10.4 #1-#11.
+- AC2: A server with no samples or only upgrade records shows its tile without a sparkline and with "No trend data".
+- AC3: The context column is a grouped panel; Run 1 content of US-5.5 is unchanged.

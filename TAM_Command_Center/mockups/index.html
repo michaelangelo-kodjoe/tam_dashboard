@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TAM CC Mockups Index</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0d10;--s1:#11151b;--s2:#171c24;--b:#2b3441;--bs:#3d4a5c;--t:#e6e9ee;--m:#9aa3b0;--a:#fa9a28;--i:#5aaeff;--f:#7cc4ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:13px/20px 'Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:32px 24px 48px}h1{font-size:20px;line-height:28px;margin:0 0 4px}h2{font-size:14px;margin:0 0 6px}
+.lead{color:var(--m);margin-bottom:24px;max-width:760px}.lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;color:var(--m);margin:28px 0 10px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.c{background:var(--s1);border:1px solid var(--b);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.c p{margin:0;color:var(--m)}.c b{color:var(--t);font-weight:600}
+a.o{margin-top:auto;display:inline-flex;align-items:center;height:32px;padding:0 12px;background:var(--a);color:#0b0d10;font-weight:600;border-radius:4px;text-decoration:none;align-self:flex-start}
+a.o.s{background:#1f2630;color:var(--t);border:1px solid #647186}a:focus-visible{outline:2px solid var(--f);outline-offset:2px}
+.rec{border-color:var(--a)}.tag{font-size:11px;color:var(--a);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+</style></head><body><main>
+<h1>TAM Command Center: design mockups, round 2</h1>
+<p class="lead">Static mockups with sample data (Tue 13 Oct 2026, 14:05, 68 items in the queue). Nothing here is built into the app. All three Today options use the PM tier order (overdue/critical, due today, alerts, waiting, upgrades, upcoming) and move Upcoming, Recently changed and Account load out of the main view. Pages are interactive where noted (filters, drawer, selection).</p>
+<div class="lab">Today: three directions</div>
+<div class="g">
+<div class="c rec"><span class="tag">Recommended</span><h2>A. Focus Deck</h2><p><b>Shown:</b> a six-chip summary strip that filters the list (Plan 11, Overdue/critical 6, Due today 5, Alerts 7, Waiting 14, Upgrades 8, Upcoming 28), one large "Do this first" card, the next six items numbered 2 to 7 in order, a daily progress ring (3 of 14 done), and a "Show everything (68)" link. <b>Hidden:</b> items 8 and later of the plan (one expander), every non-plan tier until its chip is clicked, and Upcoming, Recently changed and Account load, which live in a right-hand drawer opened from three quiet buttons. The calmest option and the closest to the current build: same data, far less on screen.</p><a class="o" href="today-A.html">Open A</a></div>
+<div class="c"><h2>B. Day Timeline</h2><p><b>Shown:</b> a read-only count strip with today's plan highlighted, a suggested afternoon agenda from now to 18:00 with a NOW marker, estimated durations and the plan items placed in tier order, what was already done this morning, and a "do first" card with three steps. <b>Hidden:</b> items that do not fit before 18:00 (listed small as "does not fit today"), all non-plan tiers (counts only), and the three Later lists behind buttons. Best at making the day feel planned, but it needs a new estimated-duration field and a scheduling rule that the spec does not have yet.</p><a class="o s" href="today-B.html">Open B</a></div>
+<div class="c"><h2>C. Triage Split</h2><p><b>Shown:</b> a segmented summary (the same six groups plus Plan) that switches the list, a compact numbered list of seven items on the left, and a detail pane on the right with "What to do" steps, "Why it is here" and key facts for the selected item. Arrow keys move the selection. <b>Hidden:</b> everything beyond seven rows, and Upcoming, Recently changed and Account load in a collapsed "Later" tab bar under the split. Best at "know exactly what to do", but the step text needs a next-action field or a convention to be real.</p><a class="o s" href="today-C.html">Open C</a></div>
+</div>
+<div class="lab">Visual refresh, in the style of Option A</div>
+<div class="g">
+<div class="c"><h2>Account Workspace</h2><p>A layered header with inline meters (task stack bar, server status squares, upgrade and next-touch countdown bars), a "Do first for this account" card, a due-date histogram above the task list, server tiles with CPU sparklines, an upgrade track, and one context panel for contacts and activity. Asymmetric 5/7 grid.</p><a class="o s" href="account-workspace.html">Open workspace</a></div>
+<div class="c"><h2>Accounts directory</h2><p>A four-tile portfolio strip (status split, open load per account, 15-day calendar, needs attention) above the same required columns, now with load bars, alert pills, server squares, upgrade and contact countdowns, and a 12-week activity sparkline.</p><a class="o s" href="accounts.html">Open accounts</a></div>
+</div>
+</main></body></html>

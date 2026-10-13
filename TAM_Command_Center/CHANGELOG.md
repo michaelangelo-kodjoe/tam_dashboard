@@ -12,6 +12,13 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
   - `README.txt`, `VALIDATION.txt` (honest: untested on Windows and Bloomberg, not production-ready, deferred phases 3-5).
 - `VERSION.txt` is now `0.1.0-rc1` (channel dev in the source tree; the release archive rewrites it to prod).
 
+### Changed
+- 2026-10-13, pm-agent (Run 2 planning, T-60): the user approved the mockups in `mockups/` (Today direction C "Triage Split", account workspace, accounts). No code or mockup was changed; documents only.
+  - `docs/01_PM_SPEC.md`: new binding decisions **D-26 to D-36** (Triage Split layout; strict top-10 default list with View all and chips; no steps / next-action field / Mark complete in the Today detail pane; the "done today N of M" ring defined as tasks only, live, `N <= M`, via `progress` on `GET /api/today`, no schema change; Upcoming / Recently changed / Account load as tabs; approved visual refresh limited to schema-free derived data; tier 1 upgrade ranking rule; Needs attention rule with no score; workspace "Top item" panel; mockups are illustrative; design amendments). New §10 with details, the derived-data rulings, the mockup deviation register, API additions (PM-AC-1 to PM-AC-3), acceptance criteria (US-3.6 to US-3.9, US-4.2, US-5.6) and Run 2 tasks T-60 to T-77 (no packaging tasks). D-04 clarified (no behaviour change).
+  - `docs/02_DESIGN_GUIDELINES.md`: new §15 (panel types, grouped panels, inset tiles, instruments, tokens, calm checklist). The Run 1 rules "single continuous context rail" and "no card-in-card" are superseded (§2, §14 updated).
+  - `docs/qa/API_CHANGE_REQUEST.md`: PM-AC-1 to PM-AC-3 (additive).
+  - No `docs/qa/SCHEMA_CHANGE_REQUEST.md` was created: none of D-26 to D-36 requires a schema change.
+
 ### Fixed
 - 2026-10-12, backend-dev-agent: requirements split. `server/requirements.txt` is now runtime-only (fastapi, uvicorn, pydantic and their pinned transitive deps; no optional uvicorn extras, no test/audit tools) and installs cleanly on Python 3.10-3.12 on Linux/macOS/Windows. New `server/requirements-dev.txt` (`-r requirements.txt` plus pytest, httpx, pip-audit, bandit and the optional extras; uvloop is skipped on win32 and websockets only on Python 3.11+). Audited pins unchanged; `exceptiongroup==1.3.1` added for Python < 3.11 (anyio dependency). `tools/build_release.py` docstring/header updated; its filter is kept as a guard. Verified on Python 3.10.14: fresh venv `pip install -r server/requirements.txt`, `pip check` clean, DEV server on a scratch DB answers `/api/state` 200, `pytest server db tests` 267 passed, `tools/smoke_release.py` PASS.
 

@@ -1,0 +1,357 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TAM CC Account Workspace Refresh</title><style>/* Design tokens (docs/02_DESIGN_GUIDELINES.md §1). The ONLY file that contains raw colour values. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --bg: #0b0d10;
+  --surface-1: #11151b;
+  --surface-2: #171c24;
+  --surface-3: #1f2630;
+  --border: #2b3441;
+  --border-strong: #3d4a5c;
+  --border-control: #647186;
+
+  /* text */
+  --text: #e6e9ee;
+  --muted: #9aa3b0;
+  --subtle: #6b7482;
+
+  /* accent */
+  --accent: #fa9a28;
+  --accent-hover: #ffb052;
+  --accent-press: #db8318;
+  --on-accent: #0b0d10;
+  --accent-tint: rgba(250, 154, 40, 0.12);
+
+  /* status */
+  --info: #5aaeff;
+  --success: #3fc77f;
+  --warning: #e8c547;
+  --danger: #ff5c5c;
+  --neutral: #9aa3b0;
+  --info-tint: rgba(90, 174, 255, 0.12);
+  --success-tint: rgba(63, 199, 127, 0.12);
+  --warning-tint: rgba(232, 197, 71, 0.12);
+  --danger-tint: rgba(255, 92, 92, 0.12);
+  --neutral-tint: rgba(154, 163, 176, 0.12);
+
+  --focus: #7cc4ff;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --hover-row: rgba(255, 255, 255, 0.03);
+
+  /* type */
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, 'SF Mono', monospace;
+  --fs-label: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --lh-label: 16px;
+  --lh-sm: 16px;
+  --lh-base: 20px;
+  --lh-md: 20px;
+  --lh-lg: 24px;
+  --lh-xl: 28px;
+
+  /* spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* radius / elevation / motion */
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --dur: 120ms;
+  --ease: ease-out;
+
+  /* layout */
+  --topbar-h: 48px;
+  --rail-w: 208px;
+  --gutter: 24px;
+  --ctrl-h: 32px;
+  --ctrl-h-sm: 28px;
+  --row-h: 32px;
+  --row-h-comfy: 40px;
+  --drawer-w: 480px;
+  --context-w: 320px;
+  --today-side-w: 360px;
+}
+
+@media (max-width: 1279px) {
+  :root { --rail-w: 56px; }
+}
+@media (max-width: 1023px) {
+  :root { --gutter: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur: 0ms; }
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font:400 var(--fs-base)/var(--lh-base) var(--font-sans);min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{appearance:none;background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.s{width:14px;height:14px}svg.i.l{width:18px;height:18px}
+.num{font-variant-numeric:tabular-nums}.mono{font-family:var(--font-mono)}
+.muted{color:var(--muted)}.subtle{color:var(--subtle)}.acc{color:var(--accent)}.dng{color:var(--danger)}.wrn{color:var(--warning)}.inf{color:var(--info)}.ok{color:var(--success)}
+.label{font-size:var(--fs-label);line-height:var(--lh-label);text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--muted)}
+.sm{font-size:var(--fs-sm);line-height:var(--lh-sm)}
+/* shell */
+.app{display:grid;grid-template-columns:var(--rail-w) 1fr;grid-template-rows:var(--topbar-h) 1fr;min-height:100vh}
+.top{grid-column:1/3;display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-4);background:var(--surface-1);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20}
+.brand{width:calc(var(--rail-w) - var(--sp-4));font-weight:600;letter-spacing:.04em;display:flex;align-items:center;gap:8px;font-size:var(--fs-md)}
+.brand b{display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:1px}
+.jump{display:flex;align-items:center;gap:8px;height:var(--ctrl-h);width:min(420px,40vw);padding:0 10px;background:var(--surface-3);border:1px solid var(--border-control);border-radius:var(--r-md);color:var(--muted)}
+.jump kbd{margin-left:auto;font:var(--fs-label) var(--font-mono);color:var(--subtle);border:1px solid var(--border-strong);border-radius:2px;padding:0 4px}
+.sp{flex:1}
+.envb{font-size:var(--fs-label);font-weight:600;letter-spacing:.06em;color:var(--warning);background:var(--warning-tint);padding:1px 6px;border-radius:var(--r-sm)}
+.clock{color:var(--muted)}
+.rail{background:var(--bg);border-right:1px solid var(--border);padding:var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:2px;position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h))}
+.ni{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--r-md);color:var(--muted);position:relative}
+.ni:hover{background:var(--surface-2);color:var(--text)}
+.ni.on{background:var(--accent-tint);color:var(--accent)}
+.ni.on::before{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:2px;background:var(--accent)}
+.ni .later{margin-left:auto;font-size:var(--fs-label);color:var(--subtle);border:1px solid var(--border);padding:0 4px;border-radius:2px}
+.ni.bt{margin-top:auto}
+.main{padding:var(--sp-5) var(--gutter) var(--sp-8);min-width:0}
+@media(max-width:1279px){.brand{width:auto}.rail{padding:var(--sp-3) 6px}.ni span,.ni .later{display:none}.ni{justify-content:center;padding:0}.ni.on::before{left:-6px}}
+@media(max-width:767px){.jump{display:none}.clock{display:none}}
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--ctrl-h);padding:0 12px;border-radius:var(--r-md);font-weight:500;white-space:nowrap;transition:background var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.btn.sm{height:var(--ctrl-h-sm);font-size:var(--fs-sm)}
+.btn.pri{background:var(--accent);color:var(--on-accent);font-weight:600}.btn.pri:hover{background:var(--accent-hover)}
+.btn.sec{background:var(--surface-3);border:1px solid var(--border-control)}.btn.sec:hover{background:var(--surface-2);border-color:var(--muted)}
+.btn.gh{color:var(--muted)}.btn.gh:hover{background:var(--surface-3);color:var(--text)}
+.badge{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:var(--r-sm);font-size:var(--fs-sm);white-space:nowrap}
+.b-dng{background:var(--danger-tint);color:var(--danger)}.b-wrn{background:var(--warning-tint);color:var(--warning)}.b-inf{background:var(--info-tint);color:var(--info)}.b-ok{background:var(--success-tint);color:var(--success)}.b-neu{background:var(--neutral-tint);color:var(--neutral)}.b-acc{background:var(--accent-tint);color:var(--accent)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--neutral);flex:none}
+.dot.dng{background:var(--danger)}.dot.wrn{background:var(--warning)}.dot.ok{background:var(--success)}.dot.inf{background:var(--info)}.dot.acc{background:var(--accent)}
+.panel{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-lg)}
+.ph{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.ph .more{margin-left:auto;font-size:var(--fs-sm);color:var(--muted);display:inline-flex;align-items:center;gap:2px}.ph .more:hover{color:var(--text)}
+.pb{padding:12px 14px}
+.stack{display:flex;height:6px;border-radius:1px;overflow:hidden;background:var(--surface-3);gap:1px}
+.stack i{display:block;height:100%}
+.c-dng{background:var(--danger)}.c-wrn{background:var(--warning)}.c-ok{background:var(--success)}.c-inf{background:var(--info)}.c-acc{background:var(--accent)}.c-neu{background:var(--border-strong)}
+.ptr{font-size:var(--fs-sm);white-space:nowrap}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity var(--dur) var(--ease);z-index:40}.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(var(--drawer-w),100vw);background:var(--surface-2);border-left:1px solid var(--border-strong);box-shadow:var(--shadow-pop);transform:translateX(24px);opacity:0;pointer-events:none;transition:transform var(--dur) var(--ease),opacity var(--dur) var(--ease);z-index:50;display:flex;flex-direction:column}
+.drawer.open{transform:none;opacity:1;pointer-events:auto}
+.drawer header{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);font-size:var(--fs-lg);font-weight:600;gap:8px}
+.dtabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border)}
+.dtabs button{height:36px;padding:0 10px;color:var(--muted);border-bottom:2px solid transparent}
+.dtabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}
+.dbody{padding:8px 16px 24px;overflow:auto}
+.dg{margin:14px 0 4px}
+.drow{display:grid;grid-template-columns:96px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.dt{display:flex;flex-direction:column}.dt small{font-size:var(--fs-sm)}
+.dload{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}.dload th{text-align:right;color:var(--muted);font-weight:600;padding:8px 4px;border-bottom:1px solid var(--border);font-size:var(--fs-label);text-transform:uppercase;letter-spacing:.06em}.dload th:first-child,.dload td:first-child{text-align:left}.dload td{padding:8px 4px;border-bottom:1px solid var(--border);text-align:right}
+
+.pg{max-width:1240px;margin:0 auto}
+.crumb{color:var(--muted);display:inline-flex;align-items:center;gap:4px;margin-bottom:8px}
+.crumb:hover{color:var(--text)}
+.head{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-lg);overflow:hidden}
+.ht{display:flex;align-items:flex-start;gap:16px;padding:16px 20px 14px;flex-wrap:wrap}
+.ht h1{font-size:var(--fs-xl);line-height:var(--lh-xl);font-weight:600}
+.tags{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center}
+.tag{font-size:var(--fs-sm);color:var(--muted);border:1px solid var(--border-strong);padding:0 6px;border-radius:2px}
+.kp{display:grid;grid-template-columns:1.5fr 1.1fr .7fr 1.2fr 1.2fr;border-top:1px solid var(--border);background:var(--surface-1)}
+.k{padding:12px 16px;border-right:1px solid var(--border);min-width:0}.k:last-child{border-right:0}
+.k .v{font-size:var(--fs-xl);font-weight:600;line-height:28px;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:8px}
+.k .v small{font-size:var(--fs-sm);font-weight:400;color:var(--muted)}
+.k .stack{margin:6px 0 6px}
+.lg{display:flex;gap:10px;font-size:var(--fs-sm);color:var(--muted);flex-wrap:wrap}.lg i{display:inline-block;width:8px;height:8px;margin-right:4px;border-radius:1px}
+.dots{display:flex;gap:5px;margin:10px 0 8px}.dots .dot{width:12px;height:12px;border-radius:2px}
+.cd{height:6px;background:var(--surface-3);border-radius:1px;margin:10px 0 6px;position:relative}.cd i{position:absolute;left:0;top:0;bottom:0;background:var(--info);border-radius:1px}
+.tabs{overflow-x:auto;display:flex;gap:2px;margin:16px 0 12px;border-bottom:1px solid var(--border)}
+.tabs a{white-space:nowrap;flex:none;display:flex;align-items:center;gap:6px;height:38px;padding:0 14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a:hover{color:var(--text)}.tabs a.on{color:var(--text);border-bottom-color:var(--accent)}.tabs a .c{font-size:var(--fs-sm);color:var(--muted);font-variant-numeric:tabular-nums}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px;align-items:start}
+.s5{grid-column:span 5}.s7{grid-column:span 7}.s4{grid-column:span 4}.s8{grid-column:span 8}
+.nba{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-lg);padding:16px 18px 16px 22px;position:relative;overflow:hidden}
+.nba::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--danger)}
+.nba h2{font-size:var(--fs-lg);line-height:var(--lh-lg);font-weight:600;margin:6px 0 2px}
+.nba .st{display:flex;gap:8px;margin-top:8px;color:var(--muted)}.nba .st span:first-child{color:var(--accent);font-variant-numeric:tabular-nums}
+.due{display:flex;align-items:flex-end;gap:3px;height:48px;padding:0 14px;margin-top:12px}
+.due i{flex:1;background:var(--surface-3);border-radius:1px 1px 0 0;min-height:3px}.due i.o{background:var(--danger)}.due i.t{background:var(--accent)}
+.dax{display:flex;justify-content:space-between;padding:4px 14px 10px;color:var(--subtle);font-size:var(--fs-label)}
+.tr{display:grid;grid-template-columns:4px minmax(0,1fr) 92px 78px 16px;gap:10px;align-items:center;min-height:38px;padding:0 12px 0 0;border-top:1px solid var(--border);cursor:pointer}
+.tr:hover{background:var(--hover-row)}
+.tr .m{align-self:stretch;background:var(--mc,transparent)}
+.tr .tt{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr .dd{text-align:right;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+.srv{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--border)}
+.sv{background:var(--surface-1);padding:12px}
+.sv .n{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:var(--fs-sm)}
+.sv .ver{color:var(--muted);font-size:var(--fs-sm);margin-top:2px}
+.sv svg.sp{width:100%;height:30px;margin-top:8px;display:block}
+.sv.al{background:linear-gradient(0deg,var(--warning-tint),var(--warning-tint)),var(--surface-1)}
+.trk{padding:14px 18px 16px;position:relative}
+.trk .ln{position:relative;height:44px}
+.trk .ln::before{content:"";position:absolute;left:0;right:0;top:20px;border-top:2px solid var(--border-strong)}
+.trk .mk{position:absolute;top:12px;transform:translateX(-50%);text-align:center}
+.trk .mk i{display:block;width:16px;height:16px;border-radius:50%;border:2px solid var(--c);background:var(--surface-1);margin:0 auto}
+.trk .mk span{position:absolute;top:22px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:var(--fs-sm);color:var(--muted)}
+.trk .td{position:absolute;top:8px;bottom:8px;width:2px;background:var(--accent)}
+.rail2 .sec{padding:14px 16px;border-top:1px solid var(--border)}.rail2 .sec:first-child{border-top:0}
+.av{width:28px;height:28px;border-radius:50%;background:var(--surface-3);border:1px solid var(--border-strong);display:grid;place-items:center;font-size:var(--fs-sm);font-weight:600;color:var(--muted);flex:none}
+.ct{display:flex;align-items:center;gap:10px;padding:5px 0}
+.act{padding:4px 14px 10px}
+.ne{background:var(--surface-2);border-left:2px solid var(--c);padding:8px 10px;margin-top:6px;border-radius:0 var(--r-md) var(--r-md) 0}
+.se{display:flex;gap:8px;align-items:center;height:28px;color:var(--muted);font-size:var(--fs-sm)}
+.dh2{margin:10px 0 0;color:var(--subtle)}
+@media(max-width:1199px){.s5,.s7,.s4,.s8{grid-column:span 12}.kp{grid-template-columns:1fr 1fr 1fr}.k{border-bottom:1px solid var(--border)}.srv{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:767px){.kp{grid-template-columns:1fr 1fr}.tr{grid-template-columns:4px minmax(0,1fr) 70px}.tr .st,.tr svg{display:none}.srv{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="calendar-check" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></symbol>
+<symbol id="building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></symbol>
+<symbol id="list-checks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8"/></symbol>
+<symbol id="server" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
+<symbol id="activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+<symbol id="messages" viewBox="0 0 24 24"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2zM18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></symbol>
+<symbol id="settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+<symbol id="alarm" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3 2 6M22 6l-3-3"/></symbol>
+<symbol id="hourglass" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/></symbol>
+<symbol id="siren" viewBox="0 0 24 24"><path d="M7 18v-6a5 5 0 1 1 10 0v6M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2zM21 12h1M2 12h1M12 2v1M4.9 4.9l.7.7M19.1 4.9l-.7.7"/></symbol>
+<symbol id="upgrade" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></symbol>
+<symbol id="chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+<symbol id="history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></symbol>
+<symbol id="layout" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></symbol>
+<symbol id="star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></symbol>
+<symbol id="phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+<symbol id="file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM14 2v6h6M8 13h8M8 17h8"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></symbol>
+<symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+<symbol id="pencil" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+<symbol id="panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></symbol>
+<symbol id="arrow-r" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+</defs></svg>
+<div class="app"><header class="top"><div class="brand"><b></b><span>TAM CC</span></div>
+<div class="jump"><svg class="i" aria-hidden="true"><use href="#search"/></svg><span>Jump to account</span><kbd>Ctrl+K</kbd></div><div class="sp"></div>
+<span class="envb">DEV</span><span class="clock num">14:05 Local</span><button class="btn pri sm"><svg class="i s" aria-hidden="true"><use href="#plus"/></svg>Capture</button></header><nav class="rail" aria-label="Primary"><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#calendar-check"/></svg><span>Today</span></a><a class="ni on" href="#" aria-current="page"><svg class="i l" aria-hidden="true"><use href="#building"/></svg><span>Accounts</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#list-checks"/></svg><span>Tasks</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#server"/></svg><span>Operations</span><span class="later">Later</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#activity"/></svg><span>BAMS</span><span class="later">Later</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#messages"/></svg><span>Bridge</span><span class="later">Later</span></a><a class="ni bt" href="#"><svg class="i l" aria-hidden="true"><use href="#settings"/></svg><span>Settings</span></a></nav><main class="main"><div class="pg">
+<a class="crumb sm" href="accounts.html"><svg class="i s"><use href="#chev" style="transform:scaleX(-1)"/></svg>Accounts</a>
+<header class="head">
+ <div class="ht"><div><h1>Halvorsen Fjord Asset Management</h1><div class="tags"><span class="mono muted sm">BPID 4417201</span><span class="tag">Terminal</span><span class="tag">B-PIPE</span><span class="tag">Entitlements</span></div></div><div class="sp"></div><button class="btn sec"><svg class="i s"><use href="#pencil"/></svg>Edit account</button></div>
+ <div class="kp">
+  <div class="k"><div class="label">Open tasks</div><div class="v">12 <small><span class="dng">3 overdue</span> &middot; 2 waiting</small></div><div class="stack" role="img" aria-label="3 overdue, 2 waiting, 7 other"><i class="c-dng" style="flex:3"></i><i class="c-wrn" style="flex:2"></i><i class="c-neu" style="flex:7"></i></div><div class="lg"><span><i class="c-dng"></i>Overdue 3</span><span><i class="c-wrn"></i>Waiting 2</span><span><i class="c-neu"></i>Other 7</span></div></div>
+  <div class="k"><div class="label">Servers</div><div class="v">5 <small>PROD 4 &middot; DEV 1</small></div><div class="dots" role="img" aria-label="4 healthy, 1 warning"><span class="dot ok"></span><span class="dot ok"></span><span class="dot ok"></span><span class="dot wrn"></span><span class="dot ok"></span></div><div class="lg"><span class="wrn">1 warning</span></div></div>
+  <div class="k"><div class="label">Alerts</div><div class="v wrn">1 </div><div class="lg" style="margin-top:14px"><span>Disk 87%</span></div></div>
+  <div class="k"><div class="label">Next upgrade</div><div class="v">27 Oct <small>in 14d</small></div><div class="cd" role="img" aria-label="14 of 30 days"><i style="width:47%"></i></div><div class="lg"><span class="mono">bxa-ny-02</span><span>2 open upgrades</span></div></div>
+  <div class="k"><div class="label">Next client touch</div><div class="v">15 Oct <small>in 2d</small></div><div class="cd" role="img" aria-label="2 of 30 days"><i style="width:93%;background:var(--accent)"></i></div><div class="lg"><span>J. Lindqvist</span><span>last 02 Oct</span></div></div>
+ </div>
+</header>
+<nav class="tabs" aria-label="Account sections"><a class="on" href="#" aria-current="page"><svg class="i"><use href="#layout"/></svg>Overview</a><a href="#"><svg class="i"><use href="#list-checks"/></svg>Tasks <span class="c">12</span></a><a href="#"><svg class="i"><use href="#history"/></svg>Activity</a><a href="#"><svg class="i"><use href="#server"/></svg>Infrastructure <span class="c">5</span></a><a href="#"><svg class="i"><use href="#users"/></svg>Contacts <span class="c">4</span></a></nav>
+
+<div class="g">
+ <div class="s5" style="display:flex;flex-direction:column;gap:12px"><article class="nba" aria-label="Do first for this account">
+  <div class="label dng">Do first for this account &middot; 3d overdue</div>
+  <h2>Send entitlement summary to J. Lindqvist</h2><div class="muted">High priority &middot; In Progress &middot; Due 10 Oct</div>
+  <div class="st"><span>1</span><span>Pull the current entitlement export</span></div><div class="st"><span>2</span><span>Attach to the draft saved in the task and send</span></div>
+  <div style="margin-top:14px;display:flex;gap:8px"><button class="btn pri">Open task <svg class="i s"><use href="#arrow-r"/></svg></button><button class="btn sec">Mark complete</button></div>
+ </article>
+ <section class="panel"><div class="ph"><span class="label">Account details</span></div><div class="pb sm" style="display:grid;grid-template-columns:90px 1fr;gap:6px 8px"><span class="muted">BPID</span><span class="mono">4417201</span><span class="muted">Products</span><span>Terminal, B-PIPE, Entitlements</span><span class="muted">Regions</span><span>New York, London</span><span class="muted">Notes</span><span>Renewal 01 Nov. Client prefers email summaries on Fridays.</span></div></section></div>
+ <section class="panel s7"><div class="ph"><span class="label">Open tasks</span><span class="muted sm">by due date, next 14 days</span><a class="more" href="#">View all (12) <svg class="i s"><use href="#chev"/></svg></a></div>
+  <div class="due" id="due" aria-hidden="true"></div><div class="dax"><span>6d overdue</span><span>Today</span><span>+14d</span></div>
+  <div id="tasks"></div></section>
+
+ <section class="panel s7"><div class="ph"><span class="label">Infrastructure</span><span class="muted sm">PROD 4 &middot; DEV 1 &middot; CPU 7 days</span><a class="more" href="#">Open tab <svg class="i s"><use href="#chev"/></svg></a></div>
+  <div class="srv" id="srv"></div>
+  <div class="ph" style="border-top:1px solid var(--border)"><span class="label">Upgrades, next 30 days</span></div>
+  <div class="trk"><div class="ln" id="trk"></div></div></section>
+ <aside class="panel rail2 s5">
+  <div class="sec"><div class="label" style="margin-bottom:8px">Contacts</div>
+   <div class="ct"><span class="av">JL</span><div style="flex:1"><div>J. Lindqvist <svg class="i s acc" style="vertical-align:-2px;fill:currentColor"><use href="#star"/></svg></div><div class="muted sm">Head of Market Data &middot; Ops</div></div></div>
+   <div class="ct"><span class="av">KH</span><div style="flex:1"><div>K. Haugen</div><div class="muted sm">Desktop lead &middot; Infra</div></div></div>
+   <div class="ct"><span class="av">OD</span><div style="flex:1"><div>Ops desk</div><div class="muted sm">Shared mailbox</div></div></div></div>
+  <div class="sec"><div class="label" style="margin-bottom:4px">Recent activity <a class="more sm" style="float:right;text-transform:none;letter-spacing:0;font-weight:400" href="#">View all</a></div>
+   <div class="ne" style="--c:var(--accent)"><div class="sm muted" style="display:flex;gap:6px">Meeting note &middot; <span class="num">13 Oct 14:02</span></div><div>Call with J. Lindqvist: summary due Friday</div></div>
+   <div class="se"><svg class="i s"><use href="#siren"/></svg><span class="label">System</span><span>BAMS alert opened: disk on bxa-ny-04</span></div>
+   <div class="se"><svg class="i s"><use href="#cog"/></svg><span class="label">System</span><span>Task completed: Update contact list</span></div>
+   <div class="ne" style="--c:var(--info)"><div class="sm muted">Call note &middot; <span class="num">09 Oct</span></div><div>Renewal timing agreed for 01 Nov</div></div></div>
+ </aside>
+</div>
+</div></main></div><script>/* sample data, made up. Tier logic per PM spec 3.1. Today = Tue 13 Oct 2026, 14:05 */
+const TIERS={1:{label:'Overdue / Critical',cls:'dng'},2:{label:'Due today',cls:'acc'},3:{label:'Infrastructure alerts',cls:'wrn'},4:{label:'Waiting / follow-up',cls:'wrn'},5:{label:'Upgrade actions',cls:'inf'},6:{label:'Upcoming tasks',cls:'neu'}};
+const TOTALS={1:6,2:5,3:7,4:14,5:8,6:28};
+const ITEMS=[
+{id:1,t:1,acct:'Castellan Peak Global Markets',kind:'BAMS',icon:'siren',title:'CPU sustained at 96% on bxa-ln-02',pri:'Critical',when:'opened 09:12',rel:'5h ago',ctx:'bxa-ln-02 · 3 terminals affected',why:'Critical alert, still open. Critical alerts always sit first.',steps:['Open the appliance and check whether the CPU spike is still active','If it is, call the client contact (R. Whitlock) and agree a restart window','Add a call note and set the next update'],facts:[['Appliance','bxa-ln-02'],['Metric','CPU 96% (limit 90%)'],['Opened','13 Oct 09:12'],['Client contact','R. Whitlock']],cta:'Open infrastructure'},
+{id:2,t:1,acct:'Halvorsen Fjord Asset Management',kind:'Task',icon:'list-checks',title:'Send entitlement summary to J. Lindqvist',pri:'High',when:'3d overdue',rel:'due 10 Oct',ctx:'Promised on the 02 Oct call',why:'Overdue High priority task. Oldest High item in tier 1.',steps:['Pull the current entitlement export from the account','Attach it to the draft already saved in the task','Send, then mark complete and note it on the account'],facts:[['Due','10 Oct (3d overdue)'],['Priority','High'],['Status','In Progress'],['Contact','J. Lindqvist']],cta:'Open task'},
+{id:3,t:1,acct:'Castellan Peak Global Markets',kind:'Upgrade',icon:'upgrade',title:'Appliance bxa-ln-02 to 7.4.2',pri:'',when:'3d overdue',rel:'planned 10 Oct',ctx:'Awaiting Client',why:'Upgrade scheduled in the past and not Completed or Deferred.',steps:['Confirm with the client whether 10 Oct slipped for good','Pick a new window or mark it Deferred','Update the upgrade record'],facts:[['Planned','10 Oct'],['Status','Awaiting Client'],['Target','7.4.2'],['Validation','Pending']],cta:'Open infrastructure'},
+{id:4,t:1,acct:'Norrland Sovereign Fund',kind:'Task',icon:'list-checks',title:'Escalate stale login ticket to Support',pri:'Medium',when:'5d overdue',rel:'due 08 Oct',ctx:'Ticket SR-41872 untouched since 06 Oct',why:'Overdue Medium task. Oldest date in its priority.',steps:['Open SR-41872 and add the latest client reply','Escalate to the Support duty manager','Tell the client the new ETA'],facts:[['Due','08 Oct (5d overdue)'],['Priority','Medium'],['Status','Not Started'],['Ticket','SR-41872']],cta:'Open task'},
+{id:5,t:1,acct:'Brightwater Pension Trust',kind:'Task',icon:'list-checks',title:'Reconcile B-PIPE usage report',pri:'Medium',when:'1d overdue',rel:'due 12 Oct',ctx:'Report v2 attached',why:'Overdue Medium task.',steps:['Compare the usage report against the entitlement list','Flag any mismatch to the client','Close the task'],facts:[['Due','12 Oct (1d overdue)'],['Priority','Medium'],['Status','In Progress'],['Contact','P. Nair']],cta:'Open task'},
+{id:6,t:1,acct:'Tidewater Capital',kind:'Task',icon:'list-checks',title:'Confirm decommission of 2 terminals',pri:'Low',when:'2d overdue',rel:'due 11 Oct',ctx:'Client confirmed by phone',why:'Overdue Low priority task.',steps:['Get written confirmation from the client','Submit the decommission request','Close the task'],facts:[['Due','11 Oct (2d overdue)'],['Priority','Low'],['Status','Not Started'],['Contact','M. Eriksen']],cta:'Open task'},
+{id:7,t:2,acct:'Meridian Reinsurance',kind:'Task',icon:'list-checks',title:'Prepare QBR agenda',pri:'High',when:'Today',rel:'due 13 Oct',ctx:'Meeting Thu 15 Oct',why:'Due today, High priority.',steps:['Pull open tasks and the last 90 days of activity','Draft agenda with three discussion points','Share with the client'],facts:[['Due','Today'],['Priority','High'],['Status','In Progress'],['Meeting','Thu 15 Oct']],cta:'Open task'},
+{id:8,t:2,acct:'Halvorsen Fjord Asset Management',kind:'Task',icon:'list-checks',title:'Confirm terminal count for renewal',pri:'High',when:'Today',rel:'due 13 Oct',ctx:'Renewal 01 Nov',why:'Due today, High priority.',steps:['Check the entitlement export for active terminals','Reply to J. Lindqvist with the number','Close the task'],facts:[['Due','Today'],['Priority','High'],['Status','Not Started'],['Renewal','01 Nov']],cta:'Open task'},
+{id:9,t:2,acct:'Brightwater Pension Trust',kind:'Task',icon:'list-checks',title:'Call P. Nair about SSO rollout',pri:'Medium',when:'Today',rel:'due 13 Oct',ctx:'Pilot group of 12 users',why:'Due today, Medium priority.',steps:['Review the pilot feedback','Call and agree the rollout dates','Log a call note'],facts:[['Due','Today'],['Priority','Medium'],['Status','Not Started'],['Contact','P. Nair']],cta:'Open task'},
+{id:10,t:2,acct:'Ostrava Credit Union',kind:'Task',icon:'list-checks',title:'Update entitlement matrix',pri:'Medium',when:'Today',rel:'due 13 Oct',ctx:'3 new users',why:'Due today, Medium priority.',steps:['Add the 3 new users','Check entitlements against the contract','Close the task'],facts:[['Due','Today'],['Priority','Medium'],['Status','Not Started'],['Users','3 new']],cta:'Open task'},
+{id:11,t:2,acct:'Norrland Sovereign Fund',kind:'Task',icon:'list-checks',title:'Send BPID list to compliance',pri:'Low',when:'Today',rel:'due 13 Oct',ctx:'Annual attestation',why:'Due today, Low priority.',steps:['Export the BPID list','Send to compliance','Close the task'],facts:[['Due','Today'],['Priority','Low'],['Status','Not Started'],['BPIDs','14']],cta:'Open task'},
+{id:12,t:3,acct:'Halvorsen Fjord Asset Management',kind:'BAMS',icon:'siren',title:'Disk at 87% on bxa-ny-04',pri:'Warning',when:'opened 07:40',rel:'6h ago',ctx:'bxa-ny-04',cta:'Open infrastructure'},
+{id:13,t:3,acct:'Brightwater Pension Trust',kind:'BAMS',icon:'siren',title:'Memory at 81% on bxa-fra-01',pri:'Warning',when:'opened 12 Oct',rel:'1d ago',ctx:'bxa-fra-01',cta:'Open infrastructure'},
+{id:14,t:3,acct:'Tidewater Capital',kind:'BAMS',icon:'siren',title:'CPU recovered on bxa-ld-03',pri:'Recovered',when:'recovered 11:22',rel:'close pending',ctx:'bxa-ld-03',cta:'Open infrastructure'},
+{id:15,t:4,acct:'Meridian Reinsurance',kind:'Task',icon:'hourglass',title:'Waiting: sign-off from J. Okafor',pri:'Waiting',when:'update due 12 Oct',rel:'1d ago',ctx:'Waiting: J. Okafor',cta:'Open task'},
+{id:16,t:4,acct:'Norrland Sovereign Fund',kind:'Client touch',icon:'phone',title:'Quarterly check-in with E. Solberg',pri:'',when:'Today',rel:'next contact',ctx:'Last contact 29 Sep',cta:'Open account'},
+{id:17,t:4,acct:'Ostrava Credit Union',kind:'Task',icon:'hourglass',title:'Waiting: vendor reply on entitlement query',pri:'Waiting',when:'update due today',rel:'',ctx:'Waiting: vendor desk',cta:'Open task'},
+{id:18,t:5,acct:'Meridian Reinsurance',kind:'Upgrade',icon:'upgrade',title:'bxa-fra-01 to 7.4.2',pri:'Scheduled',when:'19 Oct',rel:'in 6d',ctx:'Pre-checks pending',cta:'Open infrastructure'},
+{id:19,t:5,acct:'Halvorsen Fjord Asset Management',kind:'Upgrade',icon:'upgrade',title:'bxa-ny-04 upgrade exception',pri:'Exception',when:'any date',rel:'exception',ctx:'Client declined window',cta:'Open infrastructure'},
+{id:20,t:5,acct:'Brightwater Pension Trust',kind:'Upgrade',icon:'upgrade',title:'bxa-ld-03 validation required',pri:'Validation',when:'done 09 Oct',rel:'validate',ctx:'Validation Required',cta:'Open infrastructure'},
+{id:21,t:6,acct:'Norrland Sovereign Fund',kind:'Task',icon:'list-checks',title:'Review SSO runbook',pri:'Medium',when:'Wed 14 Oct',rel:'tomorrow',ctx:'',cta:'Open task'},
+{id:22,t:6,acct:'Halvorsen Fjord Asset Management',kind:'Task',icon:'list-checks',title:'Renewal paperwork to client',pri:'High',when:'Thu 15 Oct',rel:'in 2d',ctx:'',cta:'Open task'},
+{id:23,t:6,acct:'Ostrava Credit Union',kind:'Task',icon:'list-checks',title:'Quarterly usage summary',pri:'Low',when:'Fri 16 Oct',rel:'in 3d',ctx:'',cta:'Open task'}
+];
+const DONE_TODAY=3;
+const LATER={
+upcoming:[['Tomorrow',[['Norrland Sovereign Fund','Task','Review SSO runbook'],['Meridian Reinsurance','Client touch','Quarterly check-in']]],['Fri 16 Oct',[['Ostrava Credit Union','Task','Quarterly usage summary']]],['Mon 19 Oct',[['Meridian Reinsurance','Upgrade','bxa-fra-01 to 7.4.2']]],['Thu 22 Oct',[['Brightwater Pension Trust','Task','Rotate service credentials']]]],
+changed:[['14:02','Halvorsen','Note created: call with J. Lindqvist'],['13:40','Ostrava','Task completed: Update contact list'],['12:15','Tidewater','BAMS alert recovered: CPU on bxa-ld-03'],['11:00','Meridian','Upgrade updated: bxa-fra-01 pre-checks'],['09:12','Castellan Peak','BAMS alert opened: CPU on bxa-ln-02'],['Mon','Brightwater','Contact changed: P. Nair now primary']],
+load:[['Castellan Peak Global Markets',7,2,1,1,'16 Oct'],['Halvorsen Fjord Asset Mgmt',12,3,2,1,'15 Oct'],['Norrland Sovereign Fund',9,2,1,0,'Today'],['Brightwater Pension Trust',8,1,3,1,'20 Oct'],['Tidewater Capital',4,1,0,0,'-'],['Meridian Reinsurance',6,0,2,0,'Thu 15 Oct']]
+};
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function ic(n,c){return '<svg class="i '+(c||'')+'" aria-hidden="true"><use href="#'+n+'"/></svg>'}
+function priBadge(p){const m={Critical:'b-dng',Warning:'b-wrn',Recovered:'b-neu',Waiting:'b-wrn',Exception:'b-dng',Validation:'b-wrn',Scheduled:'b-neu'};
+ if(!p)return '';if(p==='High')return '<span class="ptr acc">&#9650; High</span>';if(p==='Medium')return '<span class="ptr muted">&#9679; Medium</span>';if(p==='Low')return '<span class="ptr subtle">&#9661; Low</span>';
+ return '<span class="badge '+(m[p]||'b-neu')+'">'+(p==='Recovered'?'Recovered':p)+'</span>'}
+function whenCls(it){return /overdue/.test(it.when)?'dng':(it.when==='Today'||/today/.test(it.when)?'acc':'')}
+function drawerHTML(){return '<div class="dtabs" role="tablist"><button role="tab" aria-selected="true" data-d="upcoming">Upcoming</button><button role="tab" aria-selected="false" data-d="changed">Recently changed</button><button role="tab" aria-selected="false" data-d="load">Account load</button></div><div class="dbody" id="dbody"></div>'}
+function drawerBody(k){let h='';
+ if(k==='upcoming'){LATER.upcoming.forEach(g=>{h+='<div class="label dg">'+g[0]+'</div>';g[1].forEach(r=>{h+='<div class="drow"><span class="muted">'+esc(r[1])+'</span><span class="dt">'+esc(r[2])+'<small class="muted">'+esc(r[0])+'</small></span></div>'})})}
+ if(k==='changed'){LATER.changed.forEach(r=>{h+='<div class="drow"><span class="num muted">'+r[0]+'</span><span class="dt">'+esc(r[2])+'<small class="muted">'+esc(r[1])+'</small></span></div>'})}
+ if(k==='load'){h+='<table class="dload"><thead><tr><th>Account</th><th>Open</th><th>Over</th><th>Wait</th><th>Alrt</th></tr></thead><tbody>';LATER.load.forEach(r=>{h+='<tr><td>'+esc(r[0])+'</td><td class="num">'+r[1]+'</td><td class="num '+(r[2]?'dng':'subtle')+'">'+r[2]+'</td><td class="num">'+r[3]+'</td><td class="num '+(r[4]?'wrn':'subtle')+'">'+r[4]+'</td></tr>'});h+='</tbody></table>'}
+ return h}
+function wireDrawer(openBtns){const dr=document.getElementById('drawer'),sc=document.getElementById('scrim');
+ function open(k){dr.classList.add('open');sc.classList.add('open');sel(k||'upcoming')}
+ function sel(k){document.querySelectorAll('#drawer [data-d]').forEach(b=>b.setAttribute('aria-selected',b.dataset.d===k));document.getElementById('dbody').innerHTML=drawerBody(k)}
+ function close(){dr.classList.remove('open');sc.classList.remove('open')}
+ document.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>open(b.dataset.open)));
+ document.querySelectorAll('#drawer [data-d]').forEach(b=>b.addEventListener('click',()=>sel(b.dataset.d)));
+ document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',close));
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()})}
+
+const spark=(a,c)=>{const w=120,h=30,mx=100,p=a.map((v,i)=>(i*w/(a.length-1)).toFixed(1)+','+(h-2-(v/mx)*(h-4)).toFixed(1)).join(' ');return '<svg class="sp" viewBox="0 0 120 30" preserveAspectRatio="none" aria-hidden="true"><polyline points="'+p+'" fill="none" stroke="'+c+'" stroke-width="1.5"/></svg>'};
+const S=[['bxa-ny-01','7.4.1','ok',[32,35,30,34,38,33,36]],['bxa-ny-02','7.4.1','ok',[40,44,42,50,47,45,43]],['bxa-ny-03','7.4.1','ok',[22,25,24,23,26,24,25]],['bxa-ny-04','7.3.9','wrn',[48,52,60,66,74,81,87]],['bxa-ldn-01','7.4.1','ok',[28,30,29,33,31,30,32]]];
+document.getElementById('srv').innerHTML=S.map(s=>'<div class="sv'+(s[2]==='wrn'?' al':'')+'"><div class="n"><span class="dot '+s[2]+'"></span>'+s[0]+'</div><div class="ver">v'+s[1]+(s[2]==='wrn'?' &middot; disk 87%':' &middot; healthy')+'</div>'+spark(s[3],s[2]==='wrn'?'var(--warning)':'var(--muted)')+'</div>').join('');
+const bars=[3,1,0,2,0,1,1,0,2,1,0,1,0,2,1,0,0,1,1,0];const ds=document.getElementById('due');
+ds.innerHTML=bars.map((v,i)=>'<i class="'+(i<6?'o':i===6?'t':'')+'" style="height:'+(v?v*14+6:3)+'px"></i>').join('');
+const T=[['Send entitlement summary to J. Lindqvist','High','3d overdue','In Progress','dng'],['Chase Support on SR-39120','High','2d overdue','Waiting','dng'],['Archive stale terminal list','Low','6d overdue','Not Started','dng'],['Confirm terminal count for renewal','High','Today','Not Started','acc'],['Prepare renewal paperwork','High','Thu 15 Oct','Not Started',''],['Review disk growth on bxa-ny-04','Medium','Fri 16 Oct','Not Started',''],['Schedule bxa-ny-02 upgrade window','Medium','20 Oct','Not Started','']];
+document.getElementById('tasks').innerHTML=T.map(t=>'<div class="tr" style="--mc:'+(t[4]==='dng'?'var(--danger)':t[4]==='acc'?'var(--accent)':'transparent')+'"><span class="m"></span><span class="tt">'+t[0]+'</span><span class="st">'+(t[3]==='Waiting'?'<span class="badge b-wrn">Waiting</span>':t[3]==='In Progress'?'<span class="badge b-inf">In Progress</span>':'<span class="muted sm">'+t[3]+'</span>')+'</span><span class="dd '+(t[4]==='dng'?'dng':t[4]==='acc'?'acc':'muted')+'">'+t[2]+'</span><svg class="i s subtle"><use href="#chev"/></svg></div>').join('');
+document.getElementById('trk').innerHTML='<div class="td" style="left:0" title="Today"></div><div class="mk" style="left:46%;--c:var(--info)"><i></i><span>27 Oct &middot; bxa-ny-02 to 7.4.2</span></div><div class="mk" style="left:12%;--c:var(--danger)"><i></i><span>Exception &middot; bxa-ny-04</span></div><div class="mk" style="left:100%;--c:var(--border-strong)"><i></i><span>+30d</span></div>';
+</script></body></html>

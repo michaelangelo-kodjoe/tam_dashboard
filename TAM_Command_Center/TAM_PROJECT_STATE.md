@@ -2,7 +2,7 @@
 
 > This file is the current truth, not a transcript (spec §50). Update it on every substantive code, config, schema, deployment or behaviour change. History belongs in `CHANGELOG.md`.
 
-Last updated: 2026-10-12 by deployment-agent (Phase 4.3 release scaffolding). Previous: pm-agent (Phase 4.2 traceability); before that frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
+Last updated: 2026-10-13 by pm-agent (Run 2 planning: Today triage and visual refresh, D-26 to D-36; documents only, no code changed). Previous: 2026-10-12 by deployment-agent (Phase 4.3 release scaffolding). Previous: pm-agent (Phase 4.2 traceability); before that frontend-dev-agent (Phases 2.2 and 2.3: React UI and mock adapter built and tested). Previous update: backend-dev-agent (Phase 2.1).
 
 ## Current release
 | | |
@@ -84,6 +84,8 @@ Verification: 107 pytest tests pass on Python 3.12 and 3.10; real server runs ch
 Phase 1.1 planning is complete. Phase 1.2 database layer is done: schema v1, the migration runner contract (pre-migration online backup, no-op rerun), a deterministic relative-date mock seed that covers every Today tier, and reference queries. 
 
 ## Current work item
+**Run 2 (planned 2026-10-13, nothing built yet):** Today "Triage Split" (top-10 list, detail pane, chips, ring, Later tabs) and the approved visual refresh of the Account Workspace and Accounts pages. Binding decisions D-26 to D-36 and tasks T-60 to T-77 are in `docs/01_PM_SPEC.md` §0, §7 and §10; visual rules in `docs/02_DESIGN_GUIDELINES.md` §15; three additive API changes in `docs/qa/API_CHANGE_REQUEST.md` (PM-AC-1 to PM-AC-3). No schema change. Order: DA (T-61 seed and reference queries) then BE (T-62 to T-64) and FE (T-70 to T-75) in parallel, then QA (T-76) and PM traceability (T-77). The Run 1 item below is complete.
+
 Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Quick Capture). Backend 2.1 (T-10 to T-13) and frontend 2.2/2.3 (T-20 to T-23) are done. Next: Phase 3.1 checkpoint and 3.2 QA integration. The Phase 1.3 schema re-review (`SCHEMA_REVIEW_5`) is still pending.
 
 ## Validation
@@ -107,7 +109,13 @@ Run 1 covers spec phases 1-2 (foundation, Today, Accounts, Account Workspace, Qu
 4. Re-verify the DB layer, the backend and the frontend on the Windows workstation (untested there).
 
 ## User decisions
-None open. On 2026-10-12 the user confirmed Q-1 to Q-5 (the defaults), which made D-01, D-04, D-07, D-08, D-12 and D-22 in `docs/01_PM_SPEC.md` §0 final.
+Open (Run 2, defaults in force until answered; see `docs/01_PM_SPEC.md` §10):
+1. Ring scope: the ring counts tasks only (D-29). Alternative: also count Critical alerts and overdue upgrades, which needs a completion definition for them.
+2. Mark complete in the Today detail pane: left out (D-28) because it was not in the approved field list. Adding it is a small frontend change.
+3. Upgrades inside tier 1 rank after all overdue tasks (D-32). Alternative: directly after Critical alerts.
+4. Frozen start-of-day ring denominator: not built (needs a schema change request).
+
+Closed (Run 1): on 2026-10-12 the user confirmed Q-1 to Q-5 (the defaults), which made D-01, D-04, D-07, D-08, D-12 and D-22 in `docs/01_PM_SPEC.md` §0 final.
 
 ## Binding PM contracts (from `docs/01_PM_SPEC.md` §0)
 - **D-11:** optimistic concurrency uses the request field `expected_row_version` (integer). It is compared with `row_version`; a mismatch returns 409 `stale_write`.
@@ -117,3 +125,8 @@ None open. On 2026-10-12 the user confirmed Q-1 to Q-5 (the defaults), which mad
   - No REPLACE in any spelling; upserts use `ON CONFLICT … DO UPDATE` only, enforced by `db/sql_safety_scan.py`.
   - `channel` is required on every DB open and migrate call.
   - The release ships `db/schema.sql`, `db/migrations/` and `db/queries/`.
+- **Run 2 (2026-10-13, D-26 to D-36):**
+  - Today = top 10 queue items (queue order), chips, detail pane with no steps / next action / Mark complete; View all = full queue (`?show=`).
+  - Ring = tasks only, live: `total = done + open`, `done <= total`, local-day window from the server's `today`; `progress` on `GET /api/today`; no schema change.
+  - Tier 1 order: Critical alerts, tasks by priority then due, then upgrades by date (unchanged code; D-04 stands).
+  - New visuals use only existing tokens plus three solid tint surfaces; no gradients, no animation, no scores.
