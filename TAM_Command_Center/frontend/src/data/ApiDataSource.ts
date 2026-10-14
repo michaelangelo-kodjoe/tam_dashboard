@@ -10,6 +10,10 @@ import type {
   ContactInput, Freshness, Infrastructure, InfrastructureSummary, MutationResult, Note, NoteInput, QueueItem, RecentChange,
   Runtime, ServerTile, ServerUpgrade, Settings, Task, TaskInput, TaskQuery, TodayData, TodayProgress,
 } from '../types';
+import type {
+  CandidateRef, DownloadedFile, ImportApplyInput, ImportFormat, ImportPlan, ImportResult, ImportRow, ImportValues, ReasonText, SimilarCandidate, SimilarCheck,
+} from '../types';
+import { FileRefusal, MAX_BYTES, readBytes, sniff } from './importFile';
 import { DataSourceError, type ActivityQuery, type DataSource, type ErrorCode } from './DataSource';
 
 type Json = Record<string, unknown>;
@@ -134,10 +138,35 @@ export class ApiDataSource implements DataSource {
       /* non-JSON error body */
     }
     if (!res.ok || (json && json.ok === false)) {
-      const err = (json?.error ?? {}) as { code?: ErrorCode; message?: string; fields?: Record<string, string> };
-      throw new DataSourceError(err.code ?? 'internal', err.message ?? `Request failed (${res.status}).`, err.fields, res.status);
+      const err = (json?.error ?? {}) as { code?: ErrorCode; message?: string; fields?: Record<string, string>; details?: Record<string, unknown> };
+      throw new DataSourceError(err.code ?? 'internal', err.message ?? `Request failed (${res.status}).`, err.fields, res.status, err.details);
     }
     return json as T;
+  }
+
+  /** Binary upload / download helper (the only non-JSON transport; stays inside src/data). */
+  private async rawRequest(method: 'GET' | 'POST', path: string, body?: Uint8Array, headers?: Record<string, string>): Promise<Response> {
+    let res: Response;
+    try {
+      res = await fetch(this.base + path, { method, headers, body: body as BodyInit | undefined });
+    } catch {
+      throw new DataSourceError('network', 'Could not reach the TAM Command Center server. Check that it is running.');
+    }
+    if (!res.ok) {
+      let json: Json | null = null;
+      try { json = (await res.json()) as Json; } catch { /* not JSON */ }
+      const err = (json?.error ?? {}) as { code?: ErrorCode; message?: string; fields?: Record<string, string>; details?: Record<string, unknown> };
+      const code: ErrorCode = err.code ?? (res.status === 413 ? 'payload_too_large' : 'internal');
+      throw new DataSourceError(code, err.message ?? `Request failed (${res.status}).`, err.fields, res.status, err.details);
+    }
+    return res;
+  }
+
+  private async download(path: string, fallback: string): Promise<DownloadedFile> {
+    const res = await this.rawRequest('GET', path);
+    const cd = res.headers.get('Content-Disposition') ?? '';
+    const filename = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1];
+    return { blob: await res.blob(), filename: filename ? decodeURIComponent(filename) : fallback };
   }
 
   private qs(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -273,4 +302,80 @@ export class ApiDataSource implements DataSource {
   async deleteNote(input: { id: string; confirm: true }): Promise<void> {
     await this.request('POST', '/api/note/delete', input);
   }
+
+  // ---- account bulk import (contract §10) ---------------------------------------------------
+  async inspectAccountsImport(file: File): Promise<ImportPlan> {
+    // Cheap local refusals first; the server repeats every check (it never trusts this).
+    try {
+      if (file.size > MAX_BYTES) throw new FileRefusal('too_large', 'This file is larger than 5 MB. Split it and import it in parts.');
+      sniff(file.name, (await readBytes(file.slice(0, 8192))).subarray(0, 8192));
+    } catch (e) {
+      if (e instanceof FileRefusal) throw new DataSourceError('invalid_file', e.message, undefined, 422, { reason: e.reason });
+      throw e;
+    }
+    const bytes = await readBytes(file);
+    const res = await this.rawRequest('POST', '/api/import/accounts/inspect', bytes, {
+      'Content-Type': 'application/octet-stream',
+      'X-File-Name': encodeURIComponent(file.name.replace(/^.*[\\/]/, '').slice(0, 200)),
+    });
+    return mapPlan(((await res.json()) as { item: WirePlan }).item);
+  }
+  async getAccountsImport(importId: string): Promise<ImportPlan> {
+    return mapPlan((await this.request<{ item: WirePlan }>('GET', `/api/import/accounts/${encodeURIComponent(importId)}`)).item);
+  }
+  async applyAccountsImport(input: ImportApplyInput): Promise<ImportResult> {
+    return mapResult((await this.request<{ item: ImportResult }>('POST', '/api/import/accounts/apply', input)).item);
+  }
+  async downloadImportTemplate(format: ImportFormat): Promise<DownloadedFile> {
+    return this.download(`/api/import/accounts/template${this.qs({ format })}`, `tam_accounts_import_template.${format}`);
+  }
+  async downloadSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile> {
+    // contract §10.5: the file is in the upload's format; the other extension answers 404
+    return this.download(`/api/import/accounts/${encodeURIComponent(importId)}/skipped.${format}`, `tam_accounts_skipped.${format}`);
+  }
+  async checkSimilarAccount(input: { name: string; bpid: string | null }): Promise<SimilarCheck> {
+    const r = await this.request<{ item: { exact: SimilarCheck['exact']; candidates: WireCandidate[] } }>('POST', '/api/client/check-similar', input);
+    return { exact: r.item.exact ?? null, candidates: (r.item.candidates ?? []).map(mapCandidate) };
+  }
+}
+
+// ---- import mappers (exported for tests). Whitelists fields: a stray numeric score is dropped (D-42). ----
+type WireCandidate = Partial<SimilarCandidate> & { ref: CandidateRef; name: string; strength: SimilarCandidate['strength'] };
+interface WireRow extends Omit<ImportRow, 'candidates' | 'merged_into' | 'raw' | 'warnings' | 'errors' | 'unchanged'> {
+  unchanged?: boolean;
+  candidates?: WireCandidate[]; merged_into?: { row: number } | null; raw?: Record<string, string> | null; warnings?: ReasonText[]; errors?: ImportRow['errors'];
+}
+interface WirePlan extends Omit<ImportPlan, 'rows' | 'file'> {
+  rows: WireRow[];
+  file: Partial<ImportPlan['file']> & { name: string; size_bytes: number; rows_found: number };
+}
+const reasons = (l: ReasonText[] | undefined): ReasonText[] => (l ?? []).map((r) => ({ code: String(r.code), text: String(r.text) }));
+export function mapCandidate(c: WireCandidate): SimilarCandidate {
+  return {
+    ref: c.ref, name: c.name, bpid: c.bpid ?? null, products: c.products ?? null, status: c.status ?? null, next_contact: c.next_contact ?? null,
+    row_version: c.row_version, strength: c.strength, reasons: reasons(c.reasons), differences: reasons(c.differences),
+    fills: c.fills ?? {}, kept: c.kept ?? {}, notes: c.notes ?? [],
+  };
+}
+const values = (v: Partial<ImportValues> | undefined): ImportValues => ({
+  name: v?.name ?? null, bpid: v?.bpid ?? null, products: v?.products ?? null, status: v?.status ?? null, next_contact: v?.next_contact ?? null, notes: v?.notes ?? null,
+});
+export function mapPlan(w: WirePlan): ImportPlan {
+  const ext = /\.(xlsx|csv)$/i.exec(w.file.name)?.[1]?.toLowerCase() as ImportFormat | undefined;
+  return {
+    import_id: w.import_id, plan_hash: w.plan_hash, expires_at: w.expires_at,
+    file: {
+      name: w.file.name, size_bytes: w.file.size_bytes, rows_found: w.file.rows_found, format: w.file.format ?? ext ?? 'xlsx',
+      sheet: w.file.sheet ?? null, encoding: w.file.encoding ?? null, delimiter: w.file.delimiter ?? null, notes: w.file.notes ?? [],
+    },
+    limits: w.limits, counts: w.counts, warnings: reasons(w.warnings),
+    rows: w.rows.map((r) => ({
+      row: r.row, state: r.state, values: values(r.values), raw: r.raw ?? null, errors: r.errors ?? [], warnings: reasons(r.warnings),
+      match: r.match ? { ...r.match, notes: r.match.notes ?? [], reasons: reasons(r.match.reasons), fills: r.match.fills ?? {}, kept: r.match.kept ?? {} } : null,
+      merged_into: r.merged_into ?? null, unchanged: r.unchanged, candidates: (r.candidates ?? []).map(mapCandidate),
+    })),
+  };
+}
+export function mapResult(r: ImportResult): ImportResult {
+  return { ...r, backup: r.backup ?? null, created: r.created ?? [], updated: r.updated ?? [], skipped: r.skipped ?? [], breakdown: r.breakdown ?? {} };
 }

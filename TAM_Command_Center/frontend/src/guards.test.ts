@@ -94,4 +94,19 @@ describe('guards', () => {
       got.forEach((c, i) => expect(Math.abs(c - want[i]), `${tint}[${i}]`).toBeLessThanOrEqual(1));
     }
   });
+
+  it('import UI: no percentage, score or similarity text or field; calm rules in import.css (D-42, §15.6)', () => {
+    const imp = files.filter((x) => /components\/import\/|SimilarAccountPanel/.test(x) && /\.tsx?$/.test(x) && !/\.test\./.test(x)).concat(join(SRC, 'styles/import.css'));
+    expect(imp.length).toBeGreaterThan(5);
+    for (const f of imp) {
+      const t = readFileSync(f, 'utf8');
+      const name = relative(SRC, f);
+      expect(t, name).not.toMatch(/similarity|\bscore\b|percent/i);
+      if (/\.tsx?$/.test(f)) expect(t, name).not.toMatch(/\d\s?%(?![\w)])/);
+      expect(t, name).not.toMatch(/gradient\(|backdrop-filter|@keyframes|\banimation\s*:/);
+      expect(t, name).not.toMatch(/box-shadow/);
+    }
+    // the data layer never maps a numeric score either
+    expect(readFileSync(join(SRC, 'types.ts'), 'utf8').split('Account bulk import and duplicate check')[1]).not.toMatch(/similarity|score|percent/i);
+  });
 });

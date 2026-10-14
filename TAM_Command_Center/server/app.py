@@ -11,17 +11,19 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import constants as C
 from . import infra, reads, services
+from .importer import service as import_service
 from .config import Config
 from .errors import (AppError, ForbiddenOrigin, MethodNotAllowed, NotFound, NotImplementedYet, PayloadTooLarge,
                      ValidationFailed)
 from .logsetup import is_disconnect, log_connection_event, tail
 from .runtime import Runtime
-from .schemas import (ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
+from .schemas import (CheckSimilar, ImportApply, ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
                       SettingsSave, TaskArchive, TaskSave)
 from .today import build_today
 from .trends import TREND_DAYS, activity_trend
@@ -90,13 +92,14 @@ class BodyLimit:
     """Pure ASGI middleware (QA-E1-4): reject request bodies over `limit` bytes with a structured 413.
     A declared Content-Length is checked up front; chunked bodies are buffered up to the cap and replayed."""
 
-    def __init__(self, app: Any, limit: int) -> None:
-        self.app, self.limit = app, limit
+    def __init__(self, app: Any, limit: int, route_limits: Optional[Dict[str, int]] = None) -> None:
+        self.app, self.default_limit, self.route_limits = app, limit, dict(route_limits or {})
+        self.limit = limit
 
-    async def _reject(self, send: Any) -> None:
+    async def _reject(self, send: Any, limit: int) -> None:
         body = json.dumps(PayloadTooLarge(
-            f"Request body exceeds the {self.limit // (1024 * 1024)} MB limit.",
-            details={"max_bytes": self.limit}).body()).encode()
+            f"Request body exceeds the {limit // (1024 * 1024)} MB limit.",
+            details={"max_bytes": limit, "reason": "too_large"}).body()).encode()
         headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()),
                    (b"cache-control", b"no-store"), (b"connection", b"close")]
         headers += [(k.lower().encode(), v.encode()) for k, v in SECURITY_HEADERS.items()]
@@ -107,14 +110,15 @@ class BodyLimit:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        limit = self.route_limits.get(scope.get("path", ""), self.default_limit)   # documented per-route override
         declared = dict(scope["headers"]).get(b"content-length")
         if declared is not None:
             try:
-                too_big = int(declared) > self.limit
+                too_big = int(declared) > limit
             except ValueError:
                 too_big = False
             if too_big:
-                await self._reject(send)
+                await self._reject(send, limit)
                 return
             await self.app(scope, receive, send)
             return
@@ -126,8 +130,8 @@ class BodyLimit:
             if msg["type"] != "http.request":
                 break
             total += len(msg.get("body", b""))
-            if total > self.limit:
-                await self._reject(send)
+            if total > limit:
+                await self._reject(send, limit)
                 return
             if not msg.get("more_body", False):
                 break
@@ -203,9 +207,9 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
 
     if config.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=config.cors_origins, allow_methods=["GET", "POST"],
-                           allow_headers=["Content-Type"], allow_credentials=False)
+                           allow_headers=["Content-Type", "X-File-Name"], allow_credentials=False)
         app.add_middleware(PreflightGuard, origins=config.cors_origins)   # outside CORS: QA-E2-1
-    app.add_middleware(BodyLimit, limit=C.MAX_BODY_BYTES)      # outermost: rejects before anything reads the body
+    app.add_middleware(BodyLimit, limit=C.MAX_BODY_BYTES, route_limits=C.IMPORT_ROUTE_LIMITS)      # outermost: rejects before anything reads the body
 
     # ------------------------------------------------------------ error handlers
     @app.exception_handler(AppError)
@@ -332,6 +336,43 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
     @api.post("/client/save")
     def client_save(body: ClientSave) -> Dict[str, Any]:
         return services.save_client(rt, body)
+
+    @api.post("/client/check-similar")
+    def client_check_similar(body: CheckSimilar) -> Dict[str, Any]:
+        return services.check_similar(rt, body)
+
+    # ------------------------------------------------------------ account bulk import (Run 3)
+    def _file_response(f: Dict[str, Any]) -> Response:
+        return Response(content=f["data"], media_type=f["media"], headers={
+            "Content-Disposition": f'attachment; filename="{f["filename"]}"', "Cache-Control": "no-store"})
+
+    @api.get("/import/accounts/template")
+    def import_template(format: str = Query("xlsx")) -> Response:
+        return _file_response(import_service.template_file(format))
+
+    @api.post("/import/accounts/inspect")
+    async def import_inspect(request: Request) -> Dict[str, Any]:
+        data = await request.body()                      # the 5 MiB route cap is enforced by BodyLimit
+        item = await run_in_threadpool(import_service.inspect, rt, data, request.headers.get("x-file-name"))
+        return {"ok": True, "item": item, "side_effects": []}
+
+    @api.post("/import/accounts/apply")
+    def import_apply(body: ImportApply) -> Dict[str, Any]:
+        return {"ok": True, **import_service.apply(rt, body)}
+
+    @api.get("/import/accounts/{import_id}/skipped.{fmt}")
+    def import_skipped(import_id: str, fmt: str) -> Response:
+        if fmt not in ("xlsx", "csv"):
+            raise NotFound("Unknown API route.")
+        return _file_response(import_service.skipped_file(rt, import_id, fmt))
+
+    @api.get("/import/accounts/{import_id}")
+    def import_plan(import_id: str) -> Any:
+        if import_id in ("inspect", "apply"):            # write routes: GET is the wrong method
+            resp = _json(405, MethodNotAllowed("Method not allowed on this path.", details={"allowed": ["POST"]}).body())
+            resp.headers["Allow"] = "POST"
+            return resp
+        return {"ok": True, "item": import_service.get_plan(rt, import_id), "side_effects": []}
 
     @api.post("/client/delete")
     def client_delete(body: ClientDelete) -> Dict[str, Any]:

@@ -21,7 +21,7 @@ TASK_CATEGORIES = ("Client Follow-Up", "Engineering Follow-Up", "Reporting", "In
 TASK_PRIORITIES = ("High", "Medium", "Low")
 TASK_STATUSES = ("Not Started", "In Progress", "Waiting", "Complete")
 NOTE_TYPES = ("Meeting Note", "Call Note", "General Note")
-CLIENT_STATUSES = ("Active", "Inactive")
+from .constants import CLIENT_STATUSES  # noqa: E402  (single constant, pinned to the schema CHECK by a test)
 
 
 def _date(v: str) -> str:
@@ -82,6 +82,7 @@ class ClientSave(Body):
     status: Optional[str] = None
     next_contact: Optional[DateStr] = None
     notes: Optional[Annotated[str, Field(max_length=20000)]] = None
+    duplicates_confirmed: bool = False          # PM-AC-4 / D-45: create only; ignored on update
 
     @field_validator("status")
     @classmethod
@@ -192,3 +193,27 @@ class DevReseed(Body):
 
 class EmptyBody(Body):
     pass
+
+
+class CheckSimilar(Body):
+    name: Annotated[Text, Field(min_length=1, max_length=200)]
+    bpid: Optional[Annotated[Text, Field(max_length=32)]] = None
+
+
+class ImportTarget(Body):
+    type: str = Field(pattern="^(account|row)$")
+    id: Optional[str] = Field(default=None, max_length=64)
+    row: Optional[int] = Field(default=None, ge=2, le=100000)
+
+
+class ImportDecision(Body):
+    row: int = Field(ge=2, le=100000)
+    choice: str = Field(pattern="^(same|different|skip)$")
+    target: Optional[ImportTarget] = None
+
+
+class ImportApply(Body):
+    import_id: str = Field(min_length=1, max_length=64)
+    plan_hash: str = Field(min_length=1, max_length=100)
+    confirm: bool = False
+    decisions: list[ImportDecision] = Field(default_factory=list, max_length=500)

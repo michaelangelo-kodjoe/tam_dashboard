@@ -11,6 +11,13 @@ import type {
   AppState,
   BackupInfo,
   Contact,
+  DownloadedFile,
+  ImportApplyInput,
+  ImportFormat,
+  ImportPlan,
+  ImportResult,
+  SimilarCandidate,
+  SimilarCheck,
   ContactInput,
   Infrastructure,
   MutationResult,
@@ -38,6 +45,9 @@ import {
   toNote,
   toTask,
 } from './derive';
+import { compare, exactKey, orderHits } from './dupes';
+import { buildPlan, checkDecisions, computeEffects, parseGrid, type AcctRec, type Parsed } from './mockImport';
+import { FileRefusal, MAX_BYTES, parseCsv, parseXlsx, readBytes, sniff, toCsv, xlsxBlob, COLUMNS } from '../importFile';
 import { rebaseTables, type MockFile, type Row, type Tables } from './rebase';
 import { rankToday } from './today';
 import { browserLocalMidnight, bucketCounts, dayProgress, trendBounds, type LocalMidnight } from './progress';
@@ -99,6 +109,7 @@ export class MockDataSource implements DataSource {
   private logs: string[] = [];
   /** Test/dev hook: make the next N calls fail with a network error. */
   failNext = 0;
+  private imports = new Map<string, { parsed: Parsed; fileName: string; size: number; format: ImportFormat; sheet: string | null; encoding: string | null; delimiter: string | null; notes: { code: string; text: string }[]; applied: ImportResult | null; skippedRaw: Map<number, Record<string, string>> }>();
 
   constructor(opts: MockOptions = {}) {
     this.opts = opts;
@@ -438,6 +449,12 @@ export class MockDataSource implements DataSource {
     const ts = this.now();
     const side: string[] = [];
     if (!input.id) {
+      if (!input.duplicates_confirmed) {
+        const found = this.similarTo(name, clean(input.bpid));
+        if (found.candidates.length) {
+          throw new DataSourceError('possible_duplicate', 'A similar account already exists. Confirm it is a different account to create it.', undefined, 409, { candidates: found.candidates });
+        }
+      }
       const row: Row = {
         id: uuid(), name, status: input.status, bpid: clean(input.bpid), products: clean(input.products), contact: null,
         last_contact: null, next_contact: input.next_contact || null, notes: clean(input.notes),
@@ -683,5 +700,166 @@ export class MockDataSource implements DataSource {
     this.safetyBackup('pre-delete');
     this.t.notes = this.t.notes.filter((n) => n.id !== row.id);
     this.audit({ client_id: row.client_id, object_type: 'note', object_id: row.id, object_label: row.subject ?? row.note_type, action: 'deleted', old: { note_type: row.note_type, subject: row.subject, timestamp: row.timestamp } });
+  }
+
+  // ------------------------------------------------------------------ account import (D-37..D-48)
+
+  private acctRecs(): AcctRec[] {
+    return this.t.clients.map((c) => ({
+      id: c.id as string, name: c.name as string, bpid: (c.bpid as string | null) ?? null, products: (c.products as string | null) ?? null,
+      status: c.status as string, next_contact: (c.next_contact as string | null) ?? null, notes: (c.notes as string | null) ?? null, row_version: c.row_version as number,
+    }));
+  }
+
+  private similarTo(name: string, bpid: string | null): SimilarCheck {
+    const key = exactKey(name);
+    const recs = this.acctRecs();
+    const ex = recs.find((a) => exactKey(a.name) === key) ?? null;
+    const list: (SimilarCandidate & { id: string })[] = [];
+    for (const a of recs) {
+      if (ex && a.id === ex.id) continue;
+      const h = compare({ name, bpid }, { name: a.name, bpid: a.bpid });
+      if (h) list.push({ id: a.id, ref: { type: 'account', id: a.id }, name: a.name, bpid: a.bpid, products: a.products, status: a.status, next_contact: a.next_contact, row_version: a.row_version, ...h, fills: {}, kept: {}, notes: [] });
+    }
+    const candidates = orderHits(list).map(({ id: _id, ...c }) => { void _id; return c as SimilarCandidate; });
+    return { exact: ex ? { id: ex.id, name: ex.name, status: ex.status, row_version: ex.row_version } : null, candidates };
+  }
+
+  async checkSimilarAccount(input: { name: string; bpid: string | null }): Promise<SimilarCheck> {
+    await this.enter();
+    const name = clean(input.name);
+    if (!name || name.length > 200) throw new DataSourceError('validation_error', 'Fix the highlighted fields.', { name: 'Account name is required (200 characters or fewer).' });
+    return this.similarTo(name, clean(input.bpid));
+  }
+
+  private session(id: string) {
+    const s = this.imports.get(id);
+    if (!s) throw new DataSourceError('import_expired', 'This import timed out. Choose the file again.', undefined, 410);
+    return s;
+  }
+
+  private planFor(id: string): ImportPlan {
+    const s = this.session(id);
+    const exp = new Date(Date.parse(this.now()) + 60 * 60_000).toISOString();
+    return buildPlan(s.parsed, this.acctRecs(), { name: s.fileName, size_bytes: s.size, format: s.format, sheet: s.sheet, encoding: s.encoding, delimiter: s.delimiter, extraNotes: s.notes.map((n) => n.text) }, id, exp);
+  }
+
+  async inspectAccountsImport(file: File): Promise<ImportPlan> {
+    await this.enter();
+    const refuse = (e: FileRefusal) => new DataSourceError('invalid_file', e.message, undefined, 422, { reason: e.reason, ...e.extra });
+    if (file.size > MAX_BYTES) throw refuse(new FileRefusal('too_large', 'This file is larger than 5 MB. Split it and import it in parts.'));
+    try {
+      const bytes = await readBytes(file);
+      const kind = sniff(file.name, bytes);
+      let parsed: Parsed;
+      let sheet: string | null = null;
+      let encoding: string | null = null;
+      let delimiter: string | null = null;
+      const notes = kind.notes.map((text) => ({ code: 'format_mismatch', text }));
+      if (kind.format === 'xlsx') {
+        const x = await parseXlsx(bytes);
+        sheet = x.sheet;
+        parsed = parseGrid(x.grid);
+      } else {
+        const c = parseCsv(bytes);
+        sheet = 'CSV';
+        encoding = c.encoding;
+        delimiter = c.delimiter;
+        parsed = parseGrid(c.grid);
+        notes.push({ code: 'csv_read', text: `Read as CSV: encoding ${c.encoding}, delimiter ${c.delimiter}.` });
+      }
+      if (this.imports.size >= 3) this.imports.delete(this.imports.keys().next().value as string);
+      const id = uuid();
+      this.imports.set(id, { parsed, fileName: file.name.replace(/^.*[\\/]/, '').slice(0, 200), size: file.size, format: kind.format, sheet, encoding, delimiter, notes, applied: null, skippedRaw: new Map() });
+      return this.planFor(id);
+    } catch (e) {
+      if (e instanceof FileRefusal) throw refuse(e);
+      throw e;
+    }
+  }
+
+  async getAccountsImport(importId: string): Promise<ImportPlan> {
+    await this.enter();
+    return this.planFor(importId);
+  }
+
+  async applyAccountsImport(input: ImportApplyInput): Promise<ImportResult> {
+    await this.enter();
+    if (input.confirm !== true) throw new DataSourceError('confirmation_required', 'Confirmation required.');
+    const s = this.session(input.import_id);
+    if (s.applied) throw new DataSourceError('already_applied', 'This import was already applied.', undefined, 409, { result: s.applied });
+    const plan = this.planFor(input.import_id);
+    const chk = checkDecisions(plan, input.decisions);
+    if (chk.invalid) throw new DataSourceError('validation_error', chk.invalid, undefined, 422);
+    if (chk.unresolved.length) throw new DataSourceError('unresolved_duplicates', `${chk.unresolved.length} similar ${chk.unresolved.length === 1 ? 'row needs' : 'rows need'} a decision.`, undefined, 409, { rows: chk.unresolved });
+    if (plan.plan_hash !== input.plan_hash) throw new DataSourceError('preview_stale', 'Accounts changed since the preview was made.', undefined, 409, { changed: [] });
+    const fx = computeEffects(plan, input.decisions, this.acctRecs());
+    const total = fx.creates.length + fx.updates.length;
+    let backup: ImportResult['backup'] = null;
+    if (total > 0) {
+      this.safetyBackup('pre-import');
+      const b = this.backups[0];
+      backup = { name: b.name, reason: 'pre-import', size_bytes: b.size_bytes };
+    }
+    const ts = this.now();
+    const reason = (name: string, rows: number[]) => `Bulk import: ${name}, row${rows.length > 1 ? 's' : ''} ${rows.join(', ')}`;
+    const created: ImportResult['created'] = [];
+    for (const c of fx.creates) {
+      const v = c.values;
+      const row: Row = { id: uuid(), name: v.name, status: v.status ?? 'Active', bpid: v.bpid, products: v.products, contact: null, last_contact: null, next_contact: v.next_contact, notes: v.notes, created_at: ts, updated_at: ts, row_version: 1 };
+      this.t.clients.push(row);
+      this.audit({ client_id: row.id as string, object_type: 'client', object_id: row.id as string, object_label: v.name!, action: 'created', new: { bpid: row.bpid, name: v.name, status: row.status }, reason: reason(s.fileName, c.rows), source: 'Bulk Import' });
+      created.push({ id: row.id as string, name: v.name!, rows: c.rows });
+    }
+    const updated: ImportResult['updated'] = [];
+    let filled = 0;
+    for (const u of fx.updates) {
+      const row = this.t.clients.find((x) => x.id === u.id)!;
+      const old: Row = {};
+      for (const k of Object.keys(u.fills)) { old[k] = row[k] ?? null; row[k] = u.fills[k]; }
+      row.row_version = (row.row_version as number) + 1;
+      row.updated_at = ts;
+      filled += Object.keys(u.fills).length;
+      this.audit({ client_id: u.id, object_type: 'client', object_id: u.id, object_label: row.name as string, action: 'updated', old, new: { ...u.fills }, reason: reason(s.fileName, u.rows), source: 'Bulk Import' });
+      updated.push({ id: u.id, name: row.name as string, rows: u.rows, filled: Object.keys(u.fills) });
+    }
+    const result: ImportResult = {
+      import_id: input.import_id, applied_at: ts, file: { name: s.fileName, rows_found: plan.counts.rows, format: s.format },
+      counts: { created: created.length, updated: updated.length, unchanged: fx.unchanged, skipped: fx.skipped.length, invalid: plan.counts.invalid, overwritten: 0 },
+      breakdown: fx.breakdown, fields_filled: filled, audit_events: created.length + updated.length, backup, created, updated, skipped: fx.skipped,
+    };
+    for (const r of plan.rows) if (r.state === 'invalid' && r.raw) s.skippedRaw.set(r.row, r.raw);
+    s.applied = result;
+    this.log('INFO', `Bulk import applied: ${s.fileName}; created ${created.length}, updated ${updated.length}, skipped ${fx.skipped.length}`);
+    return result;
+  }
+
+  async downloadImportTemplate(format: ImportFormat): Promise<DownloadedFile> {
+    await this.enter();
+    const example = ['Example Capital Partners', '100123', 'Terminal', 'Active', '2026-11-05', 'Delete this example row'];
+    if (format === 'csv') return { blob: toCsv([[...COLUMNS], example]), filename: 'tam_accounts_import_template.csv' };
+    return { blob: xlsxBlob([[...COLUMNS]]), filename: 'tam_accounts_import_template.xlsx' };
+  }
+
+  async downloadSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile> {
+    await this.enter();
+    const s = this.session(importId);
+    if (!s.applied) throw new DataSourceError('conflict', 'This import has not been applied yet.', undefined, 409);
+    if (format !== s.format) throw new DataSourceError('not_found', 'The skipped-rows file is only available in the format of the upload.', undefined, 404);
+    const fmt = s.format;
+    const plan = this.planFor(importId);
+    const byRow = new Map(plan.rows.map((r) => [r.row, r]));
+    const head = [...COLUMNS, 'Source row', 'Reason', 'Possible duplicate of'];
+    const body = s.applied.skipped.map((k) => {
+      const r = byRow.get(k.row);
+      const v = r?.values;
+      const raw = s.skippedRaw.get(k.row);
+      const g = (f: 'name' | 'bpid' | 'products' | 'status' | 'next_contact' | 'notes') => raw?.[f] ?? v?.[f] ?? '';
+      const dup = /possible duplicate of (.+)\)$/.exec(k.reason)?.[1] ?? '';
+      return [g('name'), g('bpid'), g('products'), g('status'), g('next_contact'), g('notes'), String(k.row), k.reason, dup];
+    });
+    const rows = [head, ...body];
+    if (fmt === 'csv') return { blob: toCsv(rows), filename: 'tam_accounts_skipped.csv' };
+    return { blob: xlsxBlob(rows), filename: 'tam_accounts_skipped.xlsx' };
   }
 }

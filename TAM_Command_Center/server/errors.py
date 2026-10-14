@@ -70,3 +70,28 @@ class StartupRefused(Exception):
     def __init__(self, message: str, exit_code: int = 3) -> None:
         super().__init__(message)
         self.exit_code = exit_code
+
+
+# ---- Run 3: account bulk import (docs/04_API_CONTRACT.md section 10)
+class InvalidFile(AppError):
+    code, status = "invalid_file", 422
+
+
+class ImportExpired(AppError):
+    code, status = "import_expired", 410
+
+
+class UnresolvedDuplicates(AppError):
+    code, status = "unresolved_duplicates", 409
+
+
+class PreviewStale(AppError):
+    code, status = "preview_stale", 409
+
+
+class AlreadyApplied(AppError):
+    code, status = "already_applied", 409
+
+
+class PossibleDuplicate(AppError):
+    code, status = "possible_duplicate", 409

@@ -18,7 +18,7 @@ def _load(v: Any) -> dict:
 
 
 def system_sentence(object_type: str, action: str, label: Optional[str], old: Any = None, new: Any = None,
-                    severity: Optional[str] = None) -> str:
+                    severity: Optional[str] = None, source: Optional[str] = None) -> str:
     label = label or "(unnamed)"
     o, n = _load(old), _load(new)
     if object_type in ("bams_alert", "bams_alert_event"):
@@ -39,6 +39,8 @@ def system_sentence(object_type: str, action: str, label: Optional[str], old: An
             return f"{o.get('note_type') or 'Note'} deleted: {label}"
         return f"Note {action}: {label}"
     if object_type == "client":
+        if source == "Bulk Import" and action in ("created", "updated"):
+            return f"Account {action} by bulk import"
         if action == "next_contact_changed":
             d = n.get("next_contact")
             return f"Next client touch set to {d}" if d else "Next client touch cleared"

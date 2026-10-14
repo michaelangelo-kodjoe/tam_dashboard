@@ -29,7 +29,7 @@ LOGS_MAX_LIMIT = 1000
 BACKUPS_DEFAULT_LIMIT = 20
 
 # Backups (D-22)
-AUTO_BACKUP_REASONS = ("pre-delete", "pre-migration")
+AUTO_BACKUP_REASONS = ("pre-delete", "pre-migration", "pre-import")
 AUTO_BACKUP_KEEP = 30
 MANUAL_BACKUP_REASON = "manual"
 
@@ -50,3 +50,15 @@ SETTING_ENUMS = {
 
 # Request body cap (QA-E1-4): largest legitimate body is a 50000-char note; 2 MB leaves wide headroom.
 MAX_BODY_BYTES = 2 * 1024 * 1024
+
+# Account bulk import (Run 3, D-37..D-48). The ONE constant for Status; a test pins it to the clients.status CHECK.
+CLIENT_STATUSES = ("Active", "Inactive")
+MAX_IMPORT_BYTES = 5 * 1024 * 1024                       # per-route override of MAX_BODY_BYTES (upload route only)
+IMPORT_ROUTE_LIMITS = {"/api/import/accounts/inspect": MAX_IMPORT_BYTES}
+IMPORT_MAX_ROWS = 500
+IMPORT_SCAN_ROWS = 10000                                  # physical rows scanned in a sheet
+IMPORT_MAX_CANDIDATES = 5
+IMPORT_SESSION_TTL_SECONDS = 60 * 60
+IMPORT_MAX_SESSIONS = 3
+IMPORT_RESULT_TTL_SECONDS = 24 * 60 * 60
+IMPORT_MAX_RESULTS = 5

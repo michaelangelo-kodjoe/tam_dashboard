@@ -8,12 +8,18 @@ import type {
   BackupInfo,
   Contact,
   ContactInput,
+  DownloadedFile,
+  ImportApplyInput,
+  ImportFormat,
+  ImportPlan,
+  ImportResult,
   Infrastructure,
   MutationResult,
   Note,
   NoteInput,
   Runtime,
   Settings,
+  SimilarCheck,
   Task,
   TaskInput,
   TaskQuery,
@@ -28,6 +34,13 @@ export type ErrorCode =
   | 'conflict'
   | 'not_implemented'
   | 'backup_failed'
+  | 'invalid_file'
+  | 'payload_too_large'
+  | 'import_expired'
+  | 'unresolved_duplicates'
+  | 'preview_stale'
+  | 'already_applied'
+  | 'possible_duplicate'
   | 'network'
   | 'internal';
 
@@ -36,12 +49,15 @@ export class DataSourceError extends Error {
   code: ErrorCode;
   fields?: Record<string, string>;
   status?: number;
-  constructor(code: ErrorCode, message: string, fields?: Record<string, string>, status?: number) {
+  /** Free-form server `details` (invalid_file reason, unresolved rows, candidates, ...). */
+  details?: Record<string, unknown>;
+  constructor(code: ErrorCode, message: string, fields?: Record<string, string>, status?: number, details?: Record<string, unknown>) {
     super(message);
     this.name = 'DataSourceError';
     this.code = code;
     this.fields = fields;
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -89,4 +105,16 @@ export interface DataSource {
   getNote(id: string): Promise<Note | null>;
   saveNote(input: NoteInput): Promise<MutationResult<Note>>;
   deleteNote(input: { id: string; confirm: true }): Promise<void>;
+
+  // ---- Account bulk import (docs/04_API_CONTRACT.md §10) ------------------------------------
+  /** Upload and inspect an .xlsx or .csv. Writes nothing. The adapter sniffs the content; the extension is never trusted. */
+  inspectAccountsImport(file: File): Promise<ImportPlan>;
+  /** Re-run validation and matching on the stored rows (after preview_stale). */
+  getAccountsImport(importId: string): Promise<ImportPlan>;
+  applyAccountsImport(input: ImportApplyInput): Promise<ImportResult>;
+  downloadImportTemplate(format: ImportFormat): Promise<DownloadedFile>;
+  /** Skipped rows, in the format of the uploaded file (`ImportResult.file.format`). */
+  downloadSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile>;
+  /** Same engine as the import (D-45). No write. */
+  checkSimilarAccount(input: { name: string; bpid: string | null }): Promise<SimilarCheck>;
 }

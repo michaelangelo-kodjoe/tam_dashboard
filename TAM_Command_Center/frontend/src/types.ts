@@ -332,6 +332,8 @@ export interface AccountInput {
   next_contact: ISODate | null;
   notes: string | null;
   expected_row_version?: number;
+  /** Create only: the user confirmed 'Different account' after a similar-name check (D-45). */
+  duplicates_confirmed?: boolean;
 }
 export interface ContactInput {
   id?: string;
@@ -388,3 +390,95 @@ export interface TaskQuery {
   archived?: boolean;
   status?: TaskStatus;
 }
+
+// ---- Account bulk import and duplicate check (docs/04_API_CONTRACT.md §10, D-37..D-48) ----
+// Strength is a word plus reasons (D-42); these types carry no numeric match field at all.
+
+export type MatchStrength = 'High' | 'Medium' | 'Low';
+export interface ReasonText { code: string; text: string }
+export type CandidateRef = { type: 'account'; id: string } | { type: 'row'; row: number };
+export type ImportField = 'name' | 'bpid' | 'products' | 'status' | 'next_contact' | 'notes';
+export interface ImportValues {
+  name: string | null; bpid: string | null; products: string | null; status: string | null; next_contact: string | null; notes: string | null;
+}
+export interface FillMap { [field: string]: string }
+/** `differs` is false when the file holds the same value (nothing to say); only differing values are shown. */
+export interface KeptMap { [field: string]: { existing: string; file: string | null; differs?: boolean } }
+
+export interface SimilarCandidate {
+  ref: CandidateRef;
+  name: string;
+  bpid: string | null;
+  products: string | null;
+  status: string | null;
+  next_contact: string | null;
+  row_version?: number;
+  strength: MatchStrength;
+  reasons: ReasonText[];
+  differences: ReasonText[];
+  /** import only: what "Same account" would write / keep */
+  fills: FillMap;
+  kept: KeptMap;
+  notes: string[];
+}
+export interface ExactMatch { id: string; name: string; status: string; row_version: number }
+export interface SimilarCheck { exact: ExactMatch | null; candidates: SimilarCandidate[] }
+
+export type ImportRowState = 'new' | 'update' | 'needs_review' | 'invalid';
+export interface ImportRowError { field: string | null; code: string; text: string }
+export interface ImportRowMatch {
+  kind: 'exact';
+  account: ExactMatch;
+  fills: FillMap;
+  kept: KeptMap;
+  notes: string[];
+  reasons: ReasonText[];
+}
+export interface ImportRow {
+  row: number;
+  state: ImportRowState;
+  values: ImportValues;
+  raw: Record<string, string> | null;
+  errors: ImportRowError[];
+  warnings: ReasonText[];
+  match: ImportRowMatch | null;
+  merged_into: { row: number } | null;
+  /** update rows: matched, nothing to fill */
+  unchanged?: boolean;
+  candidates: SimilarCandidate[];
+}
+export type ImportFormat = 'xlsx' | 'csv';
+export interface ImportPlan {
+  import_id: string;
+  plan_hash: string;
+  expires_at: string;
+  file: {
+    name: string; size_bytes: number; rows_found: number; format: ImportFormat;
+    /** xlsx: the sheet read; csv: "CSV" */ sheet: string | null;
+    /** csv only: 'UTF-8', 'UTF-8 (with BOM)', 'UTF-16' or 'Windows-1252' */ encoding: string | null;
+    /** csv only: 'comma', 'semicolon', 'tab' or 'pipe' */ delimiter: string | null;
+    /** display sentences about how the file was read (csv encoding and delimiter, extension mismatch) */ notes: string[];
+  };
+  limits: { max_rows: number; max_candidates: number };
+  counts: { rows: number; valid: number; new: number; updates: number; needs_review: number; invalid: number; unchanged?: number };
+  warnings: ReasonText[];
+  rows: ImportRow[];
+}
+export type ImportChoice = 'same' | 'different' | 'skip';
+export interface ImportDecision { row: number; choice: ImportChoice; target?: CandidateRef }
+export interface ImportApplyInput { import_id: string; plan_hash: string; confirm: true; decisions: ImportDecision[] }
+export interface ImportSkipped { row: number; name: string | null; kind: 'invalid' | 'by_user'; reason: string }
+export interface ImportResult {
+  import_id: string;
+  applied_at: string;
+  file: { name: string; rows_found: number; format?: ImportFormat };
+  counts: { created: number; updated: number; unchanged: number; skipped: number; invalid: number; overwritten: number };
+  breakdown: Record<string, number>;
+  fields_filled: number;
+  audit_events: number;
+  backup: { name: string; reason: string; size_bytes: number } | null;
+  created: { id: string; name: string; rows: number[] }[];
+  updated: { id: string; name: string; rows: number[]; filled: string[] }[];
+  skipped: ImportSkipped[];
+}
+export interface DownloadedFile { blob: Blob; filename: string }

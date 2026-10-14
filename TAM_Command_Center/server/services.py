@@ -17,8 +17,9 @@ from . import constants as C
 from . import reads
 from .audit import write_audit
 from .dbkit import migrate, one, open_db, transaction
-from .errors import (AppError, Conflict, ConfirmationRequired, NotFound, StaleWrite,
+from .errors import (AppError, Conflict, ConfirmationRequired, NotFound, PossibleDuplicate, StaleWrite,
                      ValidationFailed)
+from .similar import find_similar
 from .runtime import Runtime
 from .schemas import (ClientDelete, ClientSave, ContactSave, DeleteBody, NoteSave, SettingsSave, TaskArchive,
                       TaskSave)
@@ -135,7 +136,7 @@ def _name_conflict(conn: sqlite3.Connection, name: str, exclude_id: Optional[str
 
 
 def save_client(rt: Runtime, body: ClientSave) -> Result:
-    prov = body.provided("id", "expected_row_version")
+    prov = body.provided("id", "expected_row_version", "duplicates_confirmed")
     today = rt.today()
     with rt.db() as conn:
         try:
@@ -148,6 +149,13 @@ def save_client(rt: Runtime, body: ClientSave) -> Result:
                             raise _fail(k, "cannot be null")
                     name = prov["name"]
                     _name_conflict(conn, name, None)
+                    sim = find_similar(conn, name, prov.get("bpid"))
+                    if sim["exact"] is not None:        # exact twin (case/spacing): same account, never a second one
+                        raise Conflict("An account with this name already exists.", fields={"name": "already exists"})
+                    if sim["candidates"] and body.duplicates_confirmed is not True:
+                        raise PossibleDuplicate("This looks like an account that already exists. Review the matches "
+                                                "or confirm that it is a different account.",
+                                                details={"exact": None, "candidates": sim["candidates"]})
                     cid = str(uuid.uuid4())
                     now = migrate.utc_now()
                     vals = {"id": cid, "name": name, "status": prov.get("status") or "Active",
@@ -190,6 +198,11 @@ def save_client(rt: Runtime, body: ClientSave) -> Result:
         except sqlite3.IntegrityError as exc:
             raise _map_integrity(exc, "name") from exc
     return _ok(item, side)
+
+
+def check_similar(rt: Runtime, body: Any) -> Result:
+    with rt.db() as conn:
+        return _ok(find_similar(conn, body.name, body.bpid))
 
 
 def _require_confirm(confirm: bool, what: str) -> None:

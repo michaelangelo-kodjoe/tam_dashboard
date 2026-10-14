@@ -9,6 +9,7 @@ import './styles/pages.css';
 import './styles/instruments.css';
 import './styles/today.css';
 import './styles/refresh.css';
+import './styles/import.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

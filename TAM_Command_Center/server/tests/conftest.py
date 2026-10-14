@@ -72,7 +72,7 @@ class Api:
         return self.sql(f"SELECT * FROM audit_events WHERE {clauses} ORDER BY id", tuple(where.values()))
 
     def mk_client(self, name="Acme Capital", **kw):
-        return self.ok("/api/client/save", {"name": name, **kw})["item"]
+        return self.ok("/api/client/save", {"name": name, "duplicates_confirmed": True, **kw})["item"]
 
     def mk_task(self, client_id=None, task="Do thing", **kw):
         return self.ok("/api/task/save", {"task": task, "client_id": client_id, **kw})["item"]

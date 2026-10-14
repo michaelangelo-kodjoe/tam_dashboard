@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Upload } from 'lucide-react';
 import { PageHeader } from '../components/ui/Panel';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { DataTable, cmpNum, cmpStr, type Column, type SortState } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/Badges';
 import { EmptyState } from '../components/ui/Feedback';
 import { Button } from '../components/ui/Button';
+import { ImportWizard } from '../components/import/ImportWizard';
 import { DatePill, DotRow, Sparkline, StackBar, type InstrumentTone } from '../components/ui/Instruments';
 import { useApp, useQuery } from '../store/DataContext';
 import type { AccountSummary } from '../types';
@@ -28,6 +29,7 @@ export function AccountsPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<StatusFilter>('Active');
+  const [importing, setImporting] = useState(false);
   const [sort, setSort] = useState<SortState | null>({ key: 'overdue', dir: 'desc' });
   const todayQ = useQuery('today', (ds) => ds.getToday());
   const trendQ = useQuery('activity-trend', (ds) => ds.getActivityTrend(14));
@@ -112,10 +114,13 @@ export function AccountsPage() {
         title="Accounts"
         meta={<span className="num">{rowCount} {status === 'All' ? 'accounts' : status.toLowerCase()}</span>}
         actions={
+          <>
+          <Button variant="secondary" onClick={() => setImporting(true)} icon={<Upload size={16} strokeWidth={1.5} />}>Import accounts</Button>
           <Link to="/accounts?account=new" className="btn btn--primary btn--md">
             <span className="btn__icon" aria-hidden="true"><Plus size={16} strokeWidth={1.5} /></span>
             <span className="btn__label">Account</span>
           </Link>
+          </>
         }
       >
         <div className="filterbar" role="search" aria-label="Account filters">
@@ -206,6 +211,7 @@ export function AccountsPage() {
           )
         }
       />
+      {importing && <ImportWizard onClose={() => setImporting(false)} />}
     </div>
   );
 }

@@ -3,6 +3,9 @@
 # No optional uvicorn[standard] extras (uvloop has no Windows wheels, websockets>=17 needs Python 3.11+).
 # Tests, audit tools and the optional extras live in requirements-dev.txt.
 # BLPAPI is NOT listed: it is workstation-specific and must come from the Bloomberg-provided package.
+# Run 3 (account import, T-82): xlsx template/reader/writer. Pure Python wheels, py3.10-3.12, pip-audit clean (2026-10-13).
+openpyxl==3.1.5
+et_xmlfile==2.0.0
 fastapi==0.143.0
 uvicorn==0.54.0
 pydantic==2.14.1

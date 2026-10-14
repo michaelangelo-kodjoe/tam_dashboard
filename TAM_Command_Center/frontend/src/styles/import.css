@@ -1,0 +1,112 @@
+/* Account import wizard and the similar-account panel (docs/02_DESIGN_GUIDELINES.md §15 calm rules):
+   tokens only, no gradients, no shadows, no animation. */
+.imp-steps { display: flex; gap: var(--sp-4); margin: calc(var(--sp-4) * -1) calc(var(--sp-4) * -1) var(--sp-4); padding: 0 var(--sp-4); border-bottom: 1px solid var(--border); background: var(--surface-1); overflow-x: auto; }
+.imp-steps__item { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) 0; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: var(--fs-base); }
+.imp-steps__item.is-current { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.imp-steps__item.is-skipped { color: var(--subtle); }
+.imp-steps__n { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: var(--r-round); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.imp-steps__item.is-current .imp-steps__n { border-color: var(--accent); color: var(--accent); }
+.imp-h { font-size: var(--fs-md); line-height: var(--lh-md); font-weight: 600; margin-bottom: var(--sp-3); }
+.imp-h:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.imp-file { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-6); }
+.imp-side { display: flex; flex-direction: column; gap: var(--sp-4); }
+.imp-side p { margin-top: var(--sp-1); }
+.imp-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2); text-align: center; min-height: 168px; padding: var(--sp-5); border: 1px dashed var(--border-control); border-radius: var(--r-md); background: var(--surface-1); color: var(--muted); }
+.imp-drop.is-over { border-color: var(--accent); background: var(--surface-accent); color: var(--text); }
+.imp-drop__title { color: var(--text); font-weight: 600; }
+.imp-link { color: var(--info); text-decoration: underline; padding: 0; }
+.imp-link:disabled { color: var(--subtle); }
+.imp-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
+.imp-card { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-1); flex-wrap: wrap; }
+.imp-card__text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 200px; }
+.imp-note { margin-top: var(--sp-3); }
+.imp-error { margin-top: var(--sp-3); color: var(--danger); }
+.imp-btnrow { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
+.imp-btnrow--top { margin-top: var(--sp-3); }
+.imp-rules { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-2); }
+.imp-rules li { padding-left: var(--sp-4); position: relative; color: var(--muted); }
+.imp-rules li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 6px; height: 6px; border-radius: var(--r-round); background: var(--border-strong); }
+.imp-rules b { color: var(--text); }
+
+.imp-notice { margin: 0 0 var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--border); border-left: 3px solid var(--warning); border-radius: var(--r-md); background: var(--surface-1); color: var(--text); }
+.imp-notice--list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.imp-filechip { margin-bottom: var(--sp-2); }
+.imp-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.imp-tile { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-1); min-width: 0; }
+.imp-tile__n { font-size: var(--fs-xl); line-height: var(--lh-xl); font-weight: 600; }
+.imp-preview .segmented { margin-bottom: var(--sp-3); }
+.imp-tablewrap { max-height: 360px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-1); margin-bottom: var(--sp-2); }
+.imp-tablewrap--short { max-height: 200px; }
+.imp-tablewrap:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.imp-table td.imp-detail { white-space: normal; min-width: 240px; max-width: 460px; padding-top: 6px; padding-bottom: 6px; line-height: 16px; font-size: var(--fs-sm); }
+.imp-table tbody td { height: auto; min-height: var(--row-h); }
+
+.imp-review__bar { margin-bottom: var(--sp-3); }
+.imp-progress { display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: baseline; }
+.imp-review__grid { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+.imp-list { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-1); max-height: 520px; overflow-y: auto; }
+.imp-list__item { display: flex; flex-direction: column; width: 100%; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); border-left: 3px solid transparent; min-height: 44px; }
+.imp-list li:last-child .imp-list__item { border-bottom: 0; }
+.imp-list__item:hover { background: var(--hover-row); }
+.imp-list__item.is-on { background: var(--surface-accent); border-left-color: var(--accent); }
+.imp-list__item.is-error { border-left-color: var(--danger); }
+.imp-list__item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.imp-list__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-detailpane { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.imp-filerow, .imp-cand { padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-1); display: flex; flex-direction: column; gap: var(--sp-2); }
+.imp-cand__head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.imp-facts { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); }
+.imp-reasons { display: flex; flex-direction: column; gap: 2px; }
+.imp-reasons li { position: relative; padding-left: var(--sp-3); }
+.imp-reasons li::before { content: ''; position: absolute; left: 0; top: 8px; width: 4px; height: 4px; border-radius: var(--r-round); background: var(--muted); }
+.imp-fill { border-top: 1px solid var(--border); padding-top: var(--sp-2); display: flex; flex-direction: column; gap: var(--sp-1); }
+.imp-kv { display: flex; flex-direction: column; }
+.imp-kv li { display: grid; grid-template-columns: 140px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.imp-kv li:last-child { border-bottom: 0; }
+.imp-kv__v { min-width: 0; overflow-wrap: anywhere; }
+.imp-decision, .imp-target { display: flex; flex-direction: column; gap: var(--sp-2); }
+.imp-decision { position: sticky; bottom: calc(var(--sp-4) * -1); z-index: 1; background: var(--surface-2); border-top: 1px solid var(--border-strong); margin: 0 calc(var(--sp-1) * -1); padding: var(--sp-3) var(--sp-1); }
+.imp-seg3 { display: flex; }
+.imp-seg3 .segmented__item { flex: 1; justify-content: center; min-height: 36px; }
+.imp-radios { display: flex; flex-direction: column; border: 1px solid var(--border-control); border-radius: var(--r-md); overflow: hidden; }
+.imp-radio { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); background: var(--surface-1); min-height: 44px; width: 100%; }
+.imp-radio:last-child { border-bottom: 0; }
+.imp-radio:hover:not(.is-disabled) { background: var(--hover-row); }
+.imp-radio.is-checked { background: var(--accent-tint); }
+.imp-radio.is-disabled { opacity: 0.5; cursor: not-allowed; }
+.imp-radio:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.imp-radio__mark { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid var(--border-control); border-radius: var(--r-round); display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
+.imp-radio.is-checked .imp-radio__mark { border-color: var(--accent); }
+.imp-radio__text { display: flex; flex-direction: column; min-width: 0; }
+.imp-nextrow { display: flex; justify-content: flex-end; }
+
+.imp-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; flex-wrap: wrap; }
+.imp-foot__note { flex: 1 1 240px; min-width: 0; }
+.imp-foot__btns { display: flex; gap: var(--sp-2); margin-left: auto; }
+.imp-result { display: flex; flex-direction: column; gap: var(--sp-3); }
+.imp-tiles--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.imp-facts-list { display: flex; flex-direction: column; margin: 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-1); }
+.imp-facts-list > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); }
+.imp-facts-list > div:last-child { border-bottom: 0; }
+.imp-facts-list dd { margin: 0; overflow-wrap: anywhere; }
+.imp-facts-list dt { margin: 0; }
+
+.imp-similar { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-left: 3px solid var(--warning); border-radius: var(--r-md); background: var(--surface-warning); margin-bottom: var(--sp-3); }
+.imp-similar__head { display: flex; gap: var(--sp-2); align-items: flex-start; }
+.imp-similar__title { font-size: var(--fs-base); line-height: var(--lh-base); font-weight: 600; }
+.imp-similar__title:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.imp-similar .imp-cand { background: var(--surface-1); }
+
+@media (max-width: 899px) {
+  .imp-file { grid-template-columns: minmax(0, 1fr); }
+  .imp-review__grid { grid-template-columns: minmax(0, 1fr); }
+  .imp-list { max-height: 180px; }
+  .imp-tiles, .imp-tiles--5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 639px) {
+  .imp-kv li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .imp-facts-list > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .imp-foot__btns { width: 100%; margin-left: 0; justify-content: flex-end; }
+  .overlay--dialog { padding-top: var(--sp-2); }
+}

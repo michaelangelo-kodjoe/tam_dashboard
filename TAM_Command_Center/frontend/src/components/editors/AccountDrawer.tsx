@@ -8,8 +8,10 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ErrorBanner } from '../ui/Feedback';
 import { useToast } from '../ui/Toast';
 import { ConflictBanner, FormError, focusFirstInvalid, useSaveFlow } from './shared';
+import { SimilarAccountPanel } from './SimilarAccountPanel';
+import { DataSourceError } from '../../data/DataSource';
 import { useApp, useData } from '../../store/DataContext';
-import type { AccountInput, ClientStatus } from '../../types';
+import type { AccountInput, ClientStatus, SimilarCheck } from '../../types';
 import { clean, validateAccount } from '../../lib/validate';
 import { accountPath } from '../../lib/links';
 
@@ -30,28 +32,72 @@ export function AccountDrawer({ accountId, onClose }: { accountId: string; onClo
   const initial = useRef(form);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const flow = useSaveFlow();
+  // D-45: similar-account confirmation (create only). `key` ties a result to the typed name + BPID.
+  const [similar, setSimilar] = useState<{ key: string; check: SimilarCheck; focus: boolean } | null>(null);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const [target, setTarget] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const simKey = `${form.name.trim().toLowerCase()}|${form.bpid.trim().toLowerCase()}`;
+  const panel = isNew && similar && similar.key === simKey ? similar : null;
   const bodyRef = useRef<HTMLDivElement>(null);
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(initial.current), [form]);
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
 
-  const build = (version?: number): AccountInput => ({
+  const build = (version?: number, confirmed?: boolean): AccountInput => ({
     id: account?.id, name: form.name, bpid: clean(form.bpid), products: clean(form.products), status: form.status,
     next_contact: form.next_contact, notes: clean(form.notes), expected_row_version: isNew ? undefined : (version ?? account?.row_version),
+    duplicates_confirmed: isNew && confirmed ? true : undefined,
   });
 
-  const save = async (overwrite = false) => {
+  const showSimilar = (check: SimilarCheck, focus: boolean) => {
+    setTarget(null);
+    setSimilar({ key: simKey, check, focus });
+  };
+
+  /** Same engine as the import (D-45). Returns true when the panel was shown. */
+  const checkSimilar = async (focus: boolean): Promise<boolean> => {
+    if (panel) { setSimilar({ ...panel, focus }); return true; }
+    let check: SimilarCheck | null = null;
+    await flow.run(async () => { check = await ds.checkSimilarAccount({ name: form.name.trim(), bpid: clean(form.bpid) }); });
+    const c = check as SimilarCheck | null;
+    if (c && (c.exact || c.candidates.length)) { showSimilar(c, focus); return true; }
+    return false;
+  };
+
+  const onNameBlur = () => {
+    if (!isNew || flow.busy || !form.name.trim() || form.name.trim().length > 200 || dismissed === simKey || panel) return;
+    ds.checkSimilarAccount({ name: form.name.trim(), bpid: clean(form.bpid) }).then((c) => {
+      if (c.exact || c.candidates.length) setSimilar((cur) => (cur && cur.key === simKey ? cur : { key: simKey, check: c, focus: false }));
+    }, () => { /* the check also runs on submit; a failed blur check is not shown */ });
+  };
+
+  const save = async (overwrite = false, confirmed = false) => {
     const errs = validateAccount(build());
     flow.setFieldErrors(errs);
     if (Object.keys(errs).length) { setTimeout(() => focusFirstInvalid(bodyRef.current), 0); return; }
+    if (isNew && !confirmed && (await checkSimilar(true))) return;
     let createdId: string | null = null;
+    let raced = false;
     const ok = await flow.run(async () => {
       let version = account?.row_version;
       if (overwrite && account) version = (await ds.getState()).accounts.find((a) => a.id === account.id)?.row_version ?? version;
-      const r = await ds.saveAccount(build(version));
-      createdId = r.item.id;
+      try {
+        const r = await ds.saveAccount(build(version, confirmed));
+        createdId = r.item.id;
+      } catch (e) {
+        // the server also enforces D-45: someone added a similar account since the check
+        if (e instanceof DataSourceError && e.code === 'possible_duplicate') {
+          const cands = ((e.details?.candidates as SimilarCheck['candidates'] | undefined) ?? []);
+          showSimilar({ exact: null, candidates: cands }, true);
+          raced = true;
+          return;
+        }
+        throw e;
+      }
       bump();
       toast.push({ kind: 'success', message: isNew ? 'Account created' : 'Account saved' });
     });
+    if (raced) return;
     if (ok) {
       onClose();
       if (isNew && createdId) navigate(accountPath(createdId));
@@ -100,15 +146,32 @@ export function AccountDrawer({ accountId, onClose }: { accountId: string; onClo
           <>
             <div className="foot__left" />
             <Button variant="secondary" onClick={onClose} disabled={flow.busy}>Cancel</Button>
-            <Button variant="primary" busy={flow.busy} onClick={() => void save()}>Save account</Button>
+            <Button variant="primary" busy={flow.busy} disabled={!!panel} onClick={() => void save()}>Save account</Button>
           </>
         }
       >
         <div ref={bodyRef} className="form">
           {flow.stale && <ConflictBanner onReload={reload} onOverwrite={() => void save(true)} busy={flow.busy} />}
           <FormError message={flow.formError} />
+          {panel && (
+            <>
+              <SimilarAccountPanel
+                typedName={form.name.trim()}
+                exact={panel.check.exact}
+                candidates={panel.check.candidates}
+                target={target}
+                onTarget={setTarget}
+                focusOnShow={panel.focus}
+                busy={flow.busy}
+                onSame={(id) => { onClose(); navigate(accountPath(id)); }}
+                onDifferent={() => void save(false, true)}
+                onCancel={() => { setDismissed(simKey); setSimilar(null); setTimeout(() => nameRef.current?.focus(), 0); }}
+              />
+              <p className="muted sm" role="status">Choose one of the options above to continue.</p>
+            </>
+          )}
           <Field label="Account name" required error={e.name}>
-            {(p) => <TextInput id={p.id} value={form.name} onChange={(ev) => set('name', ev.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} aria-required autoFocus data-autofocus />}
+            {(p) => <TextInput ref={nameRef} id={p.id} value={form.name} onChange={(ev) => set('name', ev.target.value)} onBlur={onNameBlur} invalid={p.invalid} aria-describedby={p.describedBy} aria-required autoFocus data-autofocus />}
           </Field>
           <Field label="BPID" error={e.bpid}>
             {(p) => <TextInput id={p.id} className="mono" value={form.bpid} onChange={(ev) => set('bpid', ev.target.value)} aria-describedby={p.describedBy} />}

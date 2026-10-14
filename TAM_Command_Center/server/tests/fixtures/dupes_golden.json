@@ -1,0 +1,1426 @@
+{
+ "version": 1,
+ "about": "Shared golden similarity fixture (PM 11.5). Generated from server/dupes.py; the PM table rows are pinned by hand in server/tests/test_import_dupes.py. Compare candidates in order: ref, strength, reasons[].code, differences[].code (and the sentences in reasons[].text). exact is the ref of the existing account whose exact_key equals the new name, else null. No numeric score exists.",
+ "limits": {
+  "max_candidates": 5
+ },
+ "cases": [
+  {
+   "id": "exact-1",
+   "note": "exact -> Update, no flag",
+   "new": {
+    "name": "Castellan Peak Global Markets",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Castellan Peak Global Markets",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": {
+     "type": "account",
+     "id": "acc-1"
+    },
+    "candidates": []
+   }
+  },
+  {
+   "id": "exact-2",
+   "note": "case and spacing ignored",
+   "new": {
+    "name": "  castellan  peak GLOBAL markets ",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Castellan Peak Global Markets",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": {
+     "type": "account",
+     "id": "acc-1"
+    },
+    "candidates": []
+   }
+  },
+  {
+   "id": "web-bpid",
+   "note": "contained + same bpid",
+   "new": {
+    "name": "Web Ltd",
+    "bpid": "104233"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Web Mgmt Ltd",
+     "bpid": "104233"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Web Mgmt Ltd",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Web also appears in Web Mgmt Ltd"
+       },
+       {
+        "code": "same_bpid",
+        "text": "Same BPID: 104233"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "web-nobpid",
+   "note": "contained only",
+   "new": {
+    "name": "Web Ltd",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Web Mgmt Ltd",
+     "bpid": "999"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Web Mgmt Ltd",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Web also appears in Web Mgmt Ltd"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "web-blank-bpid",
+   "note": "contained, existing bpid blank",
+   "new": {
+    "name": "Web Ltd",
+    "bpid": "104233"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Web Mgmt Ltd",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Web Mgmt Ltd",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Web also appears in Web Mgmt Ltd"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "halvorsen",
+   "note": "abbreviation",
+   "new": {
+    "name": "Halvorsen Fjord Asset Mgmt",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Halvorsen Fjord Asset Management",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Halvorsen Fjord Asset Management",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_words_spelled_differently",
+        "text": "Same words, spelled differently: Mgmt / Management"
+       },
+       {
+        "code": "abbreviation",
+        "text": "Mgmt may be short for Management"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "tidewater",
+   "note": "same core + bpid",
+   "new": {
+    "name": "Tidewater Capital Ltd",
+    "bpid": "103390"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Tidewater Capital",
+     "bpid": "103390"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Tidewater Capital",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_core_name",
+        "text": "Same name once words like Ltd, Inc or Group are ignored"
+       },
+       {
+        "code": "same_bpid",
+        "text": "Same BPID: 103390"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "norrland-fund",
+   "note": "contained",
+   "new": {
+    "name": "Norrland Fund",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Norrland Sovereign Fund",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Norrland Sovereign Fund",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Norrland Fund also appears in Norrland Sovereign Fund"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "pinecrest-row",
+   "note": "candidate is a file row",
+   "new": {
+    "name": "Pinecrest Advisory Group",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "row",
+      "row": 13
+     },
+     "name": "Pinecrest Advisory",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "row",
+       "row": 13
+      },
+      "name": "Pinecrest Advisory",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_core_name",
+        "text": "Same name once words like Ltd, Inc or Group are ignored"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "brightwater",
+   "note": "split word -> Low",
+   "new": {
+    "name": "Bright Water Holdings",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Brightwater Pension Trust",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Brightwater Pension Trust",
+      "strength": "Low",
+      "reasons": [
+       {
+        "code": "shared_key_words",
+        "text": "Shares key word(s): Brightwater"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "norland",
+   "note": "near spelling",
+   "new": {
+    "name": "Norland Sovereign Fund",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Norrland Sovereign Fund",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Norrland Sovereign Fund",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_words_spelled_differently",
+        "text": "Same words, spelled differently: Norland / Norrland"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "weak-capital",
+   "note": "weak word only: no flag",
+   "new": {
+    "name": "Acme Capital",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Beta Capital",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  },
+  {
+   "id": "weak-trust",
+   "note": "weak words only: no flag",
+   "new": {
+    "name": "Capital Trust",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Fund Trust",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  },
+  {
+   "id": "meridian-re",
+   "note": "re is under 3 chars",
+   "new": {
+    "name": "Meridian Re",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Meridian Reinsurance",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Meridian Reinsurance",
+      "strength": "Low",
+      "reasons": [
+       {
+        "code": "shared_key_words",
+        "text": "Shares key word(s): Meridian"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "acme-inc",
+   "note": "same core, not exact",
+   "new": {
+    "name": "ACME, Inc.",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Acme Inc",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Acme Inc",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_core_name",
+        "text": "Same name once words like Ltd, Inc or Group are ignored"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "societe",
+   "note": "accents",
+   "new": {
+    "name": "Société Générale",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Societe Generale",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Societe Generale",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_core_name",
+        "text": "Same name once words like Ltd, Inc or Group are ignored"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "smith",
+   "note": "ampersand and noise",
+   "new": {
+    "name": "Smith & Sons Ltd.",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Smith and Sons Limited",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Smith and Sons Limited",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_core_name",
+        "text": "Same name once words like Ltd, Inc or Group are ignored"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "the-group",
+   "note": "core falls back to unfiltered tokens",
+   "new": {
+    "name": "The Group",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Group",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Group",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Group also appears in The Group"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "fund-numbers",
+   "note": "numbers differ: no flag",
+   "new": {
+    "name": "Fund 1",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Fund 2",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  },
+  {
+   "id": "zeta-bpid",
+   "note": "same bpid only",
+   "new": {
+    "name": "Zeta Corp",
+    "bpid": "500100"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Omega Corp",
+     "bpid": "500100"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Omega Corp",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_bpid",
+        "text": "Same BPID: 500100"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "bpid-case",
+   "note": "bpid compare is case-insensitive",
+   "new": {
+    "name": "Zeta Corp",
+    "bpid": "ab-1"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Omega Corp",
+     "bpid": "AB-1"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Omega Corp",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_bpid",
+        "text": "Same BPID: AB-1"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "intl",
+   "note": "abbreviation intl",
+   "new": {
+    "name": "Orion Intl Bank",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Orion International Bank",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Orion International Bank",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_words_spelled_differently",
+        "text": "Same words, spelled differently: Intl / International"
+       },
+       {
+        "code": "abbreviation",
+        "text": "Intl may be short for International"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "different-bpid",
+   "note": "different bpid is shown, never hides",
+   "new": {
+    "name": "Web Ltd",
+    "bpid": "111"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Web Mgmt Ltd",
+     "bpid": "222"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Web Mgmt Ltd",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Web also appears in Web Mgmt Ltd"
+       }
+      ],
+      "differences": [
+       {
+        "code": "different_bpid",
+        "text": "Different BPID: file 111, existing 222"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "unrelated",
+   "note": "unrelated names",
+   "new": {
+    "name": "Quartz Holdings",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Marble Works",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  },
+  {
+   "id": "transposition",
+   "note": "near spelling by transposition",
+   "new": {
+    "name": "Aberdeen Standard Fund",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Abredeen Standard Fund",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Abredeen Standard Fund",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_words_spelled_differently",
+        "text": "Same words, spelled differently: Aberdeen / Abredeen"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "short-token",
+   "note": "4-letter tokens never pair as near-spelling; whole-name spelling (R5) still flags",
+   "new": {
+    "name": "Bolt Systems",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Boll Systems",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Boll Systems",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "shared_key_words",
+        "text": "Shares key word(s): Systems"
+       },
+       {
+        "code": "similar_spelling",
+        "text": "Similar spelling"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "digits-token",
+   "note": "digit tokens are identifiers",
+   "new": {
+    "name": "Delta12 Systems",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Delta13 Systems",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Delta13 Systems",
+      "strength": "Low",
+      "reasons": [
+       {
+        "code": "shared_key_words",
+        "text": "Shares key word(s): Systems"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "two-strong",
+   "note": "two shared strong words",
+   "new": {
+    "name": "Helios Quantum Capital Partners",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Helios Quantum Research",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Helios Quantum Research",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "shared_key_words",
+        "text": "Shares key word(s): Helios, Quantum"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "one-strong",
+   "note": "one shared strong word",
+   "new": {
+    "name": "Helios Energy",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Helios Retail",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Helios Retail",
+      "strength": "Low",
+      "reasons": [
+       {
+        "code": "shared_key_words",
+        "text": "Shares key word(s): Helios"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "inactive-pool",
+   "note": "pool member status does not matter to the engine",
+   "new": {
+    "name": "Nova Trading Group",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Nova Trading",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Nova Trading",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_core_name",
+        "text": "Same name once words like Ltd, Inc or Group are ignored"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "ordering",
+   "note": "High before Medium before Low; then reasons; then name",
+   "new": {
+    "name": "Vega Alpha Beta",
+    "bpid": "77"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Vega Gamma",
+     "bpid": "1"
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-2"
+     },
+     "name": "Vega Alpha Beta Gamma Delta",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-3"
+     },
+     "name": "Vega Alpha Beta Ltd",
+     "bpid": "77"
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-4"
+     },
+     "name": "Vegaalpha Beta",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-5"
+     },
+     "name": "Zed Vega",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-6"
+     },
+     "name": "Vega Retail",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-7"
+     },
+     "name": "Vega Alpha",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-3"
+      },
+      "name": "Vega Alpha Beta Ltd",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_core_name",
+        "text": "Same name once words like Ltd, Inc or Group are ignored"
+       },
+       {
+        "code": "same_bpid",
+        "text": "Same BPID: 77"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-4"
+      },
+      "name": "Vegaalpha Beta",
+      "strength": "High",
+      "reasons": [
+       {
+        "code": "same_words_spelled_differently",
+        "text": "Same words, spelled differently: Vega Alpha / Vegaalpha"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-7"
+      },
+      "name": "Vega Alpha",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Vega Alpha also appears in Vega Alpha Beta"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-2"
+      },
+      "name": "Vega Alpha Beta Gamma Delta",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Vega Alpha Beta also appears in Vega Alpha Beta Gamma Delta"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Vega Gamma",
+      "strength": "Low",
+      "reasons": [
+       {
+        "code": "shared_key_words",
+        "text": "Shares key word(s): Vega"
+       }
+      ],
+      "differences": [
+       {
+        "code": "different_bpid",
+        "text": "Different BPID: file 77, existing 1"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "limit-5",
+   "note": "at most 5 candidates",
+   "new": {
+    "name": "Orbit Systems",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-0"
+     },
+     "name": "Orbit Systems Ax",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Orbit Systems Bx",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-2"
+     },
+     "name": "Orbit Systems Cx",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-3"
+     },
+     "name": "Orbit Systems Dx",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-4"
+     },
+     "name": "Orbit Systems Ex",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-5"
+     },
+     "name": "Orbit Systems Fx",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-6"
+     },
+     "name": "Orbit Systems Gx",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-7"
+     },
+     "name": "Orbit Systems Hx",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-0"
+      },
+      "name": "Orbit Systems Ax",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Orbit Systems also appears in Orbit Systems Ax"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-1"
+      },
+      "name": "Orbit Systems Bx",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Orbit Systems also appears in Orbit Systems Bx"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-2"
+      },
+      "name": "Orbit Systems Cx",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Orbit Systems also appears in Orbit Systems Cx"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-3"
+      },
+      "name": "Orbit Systems Dx",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Orbit Systems also appears in Orbit Systems Dx"
+       }
+      ],
+      "differences": []
+     },
+     {
+      "ref": {
+       "type": "account",
+       "id": "acc-4"
+      },
+      "name": "Orbit Systems Ex",
+      "strength": "Medium",
+      "reasons": [
+       {
+        "code": "contained_name",
+        "text": "Every word of Orbit Systems also appears in Orbit Systems Ex"
+       }
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "two-exact-twins",
+   "note": "exact twin is never a candidate",
+   "new": {
+    "name": "Atlas Fund",
+    "bpid": null
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-1"
+     },
+     "name": "Atlas Fund",
+     "bpid": null
+    },
+    {
+     "ref": {
+      "type": "account",
+      "id": "acc-2"
+     },
+     "name": "ATLAS  FUND",
+     "bpid": null
+    }
+   ],
+   "expected": {
+    "exact": {
+     "type": "account",
+     "id": "acc-1"
+    },
+    "candidates": []
+   }
+  }
+ ]
+}

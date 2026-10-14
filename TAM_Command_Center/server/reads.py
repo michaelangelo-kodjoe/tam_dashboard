@@ -202,7 +202,7 @@ def activity_page(conn: sqlite3.Connection, client_id: str, *, filter_: str = "a
                           "object_type": r["object_type"], "object_id": r["object_id"], "label": label,
                           "severity": r["severity"], "source": r["source"], "server_name": server_name,
                           "sentence": system_sentence(otype, action, label, r["old_value"], r["new_value"],
-                                                      r["severity"])})
+                                                      r["severity"], r["source"])})
     nxt = _enc_cursor(rows[-1]["ts"], rows[-1]["entry_key"]) if has_more and rows else None
     return {"items": items, "next_cursor": nxt, "has_more": has_more}
 

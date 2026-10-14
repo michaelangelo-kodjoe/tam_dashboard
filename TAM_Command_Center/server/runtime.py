@@ -7,7 +7,7 @@ import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from . import logsetup
 from .audit import write_audit
@@ -32,6 +32,7 @@ class Runtime:
         self.lock = InstanceLock(config.lock_path)
         self.log_file: Optional[Path] = None
         self.startup_result: dict = {}
+        self.import_sessions: Any = None          # server.importer.sessions.SessionStore, created on first use
         self._closed = False
         # D-18: lock BEFORE the DB is opened.
         config.data_dir.mkdir(parents=True, exist_ok=True)
