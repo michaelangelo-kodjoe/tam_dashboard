@@ -54,3 +54,13 @@ Verified: Triage Split Today (top 10, chips, `?show=`, keyboard, detail pane wit
 | QA-E3-7 | Low | frontend-dev | Midnight-rollover refetch has no vitest (works in browser); page-wide arrow handler stops arrow-key page scrolling on Today (by design D-26) | next gate |
 
 New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run2_e2e.py` (24 cases, three timezones). Still open from earlier: QA-E1-5, QA-E1-6 (Low).
+
+## Run 3 gate, ERROR_LOG_4 (2026-10-13): PASS (0 open Blocker/High)
+Account bulk import verified live (pytest 473 + 22 new e2e, vitest 326, tsc 0, scan 0). New items, both Low:
+
+| ID | Sev | Owner | Item | Check at |
+|---|---|---|---|---|
+| QA-E4-1 | Low | frontend-dev / pm | Import is a modal on `/accounts`, not the `/accounts/import` page route of PM 11.1; amend spec or add route | next gate |
+| QA-E4-2 | Low | pm | Abbreviation rule (D-41) flags short real words ('Lane'/'Lantern', 'cmd'/'Commodities'); consider min length 4 | next gate |
+
+New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run3_import_e2e.py` (22 cases).
