@@ -1,0 +1,344 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Import accounts: preview</title><style>/* Design tokens (docs/02_DESIGN_GUIDELINES.md §1). The ONLY file that contains raw colour values. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --bg: #0b0d10;
+  --surface-1: #11151b;
+  --surface-2: #171c24;
+  --surface-3: #1f2630;
+  --border: #2b3441;
+  --border-strong: #3d4a5c;
+  --border-control: #647186;
+
+  /* text */
+  --text: #e6e9ee;
+  --muted: #9aa3b0;
+  --subtle: #6b7482;
+
+  /* accent */
+  --accent: #fa9a28;
+  --accent-hover: #ffb052;
+  --accent-press: #db8318;
+  --on-accent: #0b0d10;
+  --accent-tint: rgba(250, 154, 40, 0.12);
+
+  /* status */
+  --info: #5aaeff;
+  --success: #3fc77f;
+  --warning: #e8c547;
+  --danger: #ff5c5c;
+  --neutral: #9aa3b0;
+  --info-tint: rgba(90, 174, 255, 0.12);
+  --success-tint: rgba(63, 199, 127, 0.12);
+  --warning-tint: rgba(232, 197, 71, 0.12);
+  --danger-tint: rgba(255, 92, 92, 0.12);
+  --neutral-tint: rgba(154, 163, 176, 0.12);
+
+  --focus: #7cc4ff;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --hover-row: rgba(255, 255, 255, 0.03);
+
+  /* type */
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, 'SF Mono', monospace;
+  --fs-label: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --lh-label: 16px;
+  --lh-sm: 16px;
+  --lh-base: 20px;
+  --lh-md: 20px;
+  --lh-lg: 24px;
+  --lh-xl: 28px;
+
+  /* spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* radius / elevation / motion */
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --dur: 120ms;
+  --ease: ease-out;
+
+  /* layout */
+  --topbar-h: 48px;
+  --rail-w: 208px;
+  --gutter: 24px;
+  --ctrl-h: 32px;
+  --ctrl-h-sm: 28px;
+  --row-h: 32px;
+  --row-h-comfy: 40px;
+  --drawer-w: 480px;
+  --context-w: 320px;
+  --today-side-w: 360px;
+}
+
+@media (max-width: 1279px) {
+  :root { --rail-w: 56px; }
+}
+@media (max-width: 1023px) {
+  :root { --gutter: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur: 0ms; }
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font:400 var(--fs-base)/var(--lh-base) var(--font-sans);min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{appearance:none;background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.s{width:14px;height:14px}svg.i.l{width:18px;height:18px}
+.num{font-variant-numeric:tabular-nums}.mono{font-family:var(--font-mono)}
+.muted{color:var(--muted)}.subtle{color:var(--subtle)}.acc{color:var(--accent)}.dng{color:var(--danger)}.wrn{color:var(--warning)}.inf{color:var(--info)}.ok{color:var(--success)}
+.label{font-size:var(--fs-label);line-height:var(--lh-label);text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--muted)}
+.sm{font-size:var(--fs-sm);line-height:var(--lh-sm)}
+/* shell */
+.app{display:grid;grid-template-columns:var(--rail-w) 1fr;grid-template-rows:var(--topbar-h) 1fr;min-height:100vh}
+.top{grid-column:1/3;display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-4);background:var(--surface-1);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20}
+.brand{width:calc(var(--rail-w) - var(--sp-4));font-weight:600;letter-spacing:.04em;display:flex;align-items:center;gap:8px;font-size:var(--fs-md)}
+.brand b{display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:1px}
+.jump{display:flex;align-items:center;gap:8px;height:var(--ctrl-h);width:min(420px,40vw);padding:0 10px;background:var(--surface-3);border:1px solid var(--border-control);border-radius:var(--r-md);color:var(--muted)}
+.jump kbd{margin-left:auto;font:var(--fs-label) var(--font-mono);color:var(--subtle);border:1px solid var(--border-strong);border-radius:2px;padding:0 4px}
+.sp{flex:1}
+.envb{font-size:var(--fs-label);font-weight:600;letter-spacing:.06em;color:var(--warning);background:var(--warning-tint);padding:1px 6px;border-radius:var(--r-sm)}
+.clock{color:var(--muted)}
+.rail{background:var(--bg);border-right:1px solid var(--border);padding:var(--sp-3) var(--sp-2);display:flex;flex-direction:column;gap:2px;position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h))}
+.ni{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--r-md);color:var(--muted);position:relative}
+.ni:hover{background:var(--surface-2);color:var(--text)}
+.ni.on{background:var(--accent-tint);color:var(--accent)}
+.ni.on::before{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:2px;background:var(--accent)}
+.ni .later{margin-left:auto;font-size:var(--fs-label);color:var(--subtle);border:1px solid var(--border);padding:0 4px;border-radius:2px}
+.ni.bt{margin-top:auto}
+.main{padding:var(--sp-5) var(--gutter) var(--sp-8);min-width:0}
+@media(max-width:1279px){.brand{width:auto}.rail{padding:var(--sp-3) 6px}.ni span,.ni .later{display:none}.ni{justify-content:center;padding:0}.ni.on::before{left:-6px}}
+@media(max-width:767px){.jump{display:none}.clock{display:none}}
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--ctrl-h);padding:0 12px;border-radius:var(--r-md);font-weight:500;white-space:nowrap;transition:background var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.btn.sm{height:var(--ctrl-h-sm);font-size:var(--fs-sm)}
+.btn.pri{background:var(--accent);color:var(--on-accent);font-weight:600}.btn.pri:hover{background:var(--accent-hover)}
+.btn.sec{background:var(--surface-3);border:1px solid var(--border-control)}.btn.sec:hover{background:var(--surface-2);border-color:var(--muted)}
+.btn.gh{color:var(--muted)}.btn.gh:hover{background:var(--surface-3);color:var(--text)}
+.badge{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:var(--r-sm);font-size:var(--fs-sm);white-space:nowrap}
+.b-dng{background:var(--danger-tint);color:var(--danger)}.b-wrn{background:var(--warning-tint);color:var(--warning)}.b-inf{background:var(--info-tint);color:var(--info)}.b-ok{background:var(--success-tint);color:var(--success)}.b-neu{background:var(--neutral-tint);color:var(--neutral)}.b-acc{background:var(--accent-tint);color:var(--accent)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--neutral);flex:none}
+.dot.dng{background:var(--danger)}.dot.wrn{background:var(--warning)}.dot.ok{background:var(--success)}.dot.inf{background:var(--info)}.dot.acc{background:var(--accent)}
+.panel{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-lg)}
+.ph{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.ph .more{margin-left:auto;font-size:var(--fs-sm);color:var(--muted);display:inline-flex;align-items:center;gap:2px}.ph .more:hover{color:var(--text)}
+.pb{padding:12px 14px}
+.stack{display:flex;height:6px;border-radius:1px;overflow:hidden;background:var(--surface-3);gap:1px}
+.stack i{display:block;height:100%}
+.c-dng{background:var(--danger)}.c-wrn{background:var(--warning)}.c-ok{background:var(--success)}.c-inf{background:var(--info)}.c-acc{background:var(--accent)}.c-neu{background:var(--border-strong)}
+.ptr{font-size:var(--fs-sm);white-space:nowrap}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity var(--dur) var(--ease);z-index:40}.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(var(--drawer-w),100vw);background:var(--surface-2);border-left:1px solid var(--border-strong);box-shadow:var(--shadow-pop);transform:translateX(24px);opacity:0;pointer-events:none;transition:transform var(--dur) var(--ease),opacity var(--dur) var(--ease);z-index:50;display:flex;flex-direction:column}
+.drawer.open{transform:none;opacity:1;pointer-events:auto}
+.drawer header{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);font-size:var(--fs-lg);font-weight:600;gap:8px}
+.dtabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border)}
+.dtabs button{height:36px;padding:0 10px;color:var(--muted);border-bottom:2px solid transparent}
+.dtabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}
+.dbody{padding:8px 16px 24px;overflow:auto}
+.dg{margin:14px 0 4px}
+.drow{display:grid;grid-template-columns:96px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.dt{display:flex;flex-direction:column}.dt small{font-size:var(--fs-sm)}
+.dload{width:100%;border-collapse:collapse;font-size:var(--fs-sm)}.dload th{text-align:right;color:var(--muted);font-weight:600;padding:8px 4px;border-bottom:1px solid var(--border);font-size:var(--fs-label);text-transform:uppercase;letter-spacing:.06em}.dload th:first-child,.dload td:first-child{text-align:left}.dload td{padding:8px 4px;border-bottom:1px solid var(--border);text-align:right}
+
+.pg{max-width:1240px;margin:0 auto}
+.hd{display:flex;align-items:flex-end;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.hd h1{font-size:var(--fs-xl);line-height:var(--lh-xl);font-weight:600}
+.srch{display:flex;align-items:center;gap:8px;height:var(--ctrl-h);width:260px;max-width:100%;padding:0 10px;background:var(--surface-3);border:1px solid var(--border-control);border-radius:var(--r-md);color:var(--muted)}
+.seg{display:flex;border:1px solid var(--border-control);border-radius:var(--r-md);overflow:hidden}.seg button{height:30px;padding:0 12px;color:var(--muted);border-right:1px solid var(--border)}.seg button:last-child{border:0}.seg button.on{background:var(--accent-tint);color:var(--accent)}
+.pst{display:grid;grid-template-columns:.85fr 1.5fr 1.05fr 1.5fr;gap:12px;margin-bottom:12px}
+.tile{padding:14px 16px;min-width:0}
+.tile .v{font-size:28px;line-height:34px;font-weight:600;font-variant-numeric:tabular-nums}
+.hb{display:grid;grid-template-columns:150px 1fr 24px;gap:8px;align-items:center;height:22px}
+.hb .tr{height:8px;background:var(--surface-3);border-radius:1px;display:flex;overflow:hidden;gap:1px}.hb .tr i{display:block;height:100%}
+.hb span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:var(--fs-sm)}
+.cal{display:grid;grid-template-columns:repeat(15,1fr);gap:3px;margin-top:10px}
+.cal i{height:26px;border-radius:2px;background:var(--surface-3);position:relative;display:block}
+.cal i.u::after,.cal i.c::after{content:"";position:absolute;width:6px;height:6px;border-radius:50%;top:10px;left:50%;margin-left:-3px;background:var(--info)}
+.cal i.c::after{background:var(--accent)}.cal i.td{outline:1px solid var(--accent)}
+.cal i.u.c::after{left:35%;box-shadow:8px 0 0 var(--accent)}
+.body{display:block}
+.tw{overflow:auto}
+table{width:100%;min-width:900px;border-collapse:collapse}
+th{position:sticky;top:0;background:var(--surface-1);text-align:left;font-size:var(--fs-label);line-height:var(--lh-label);text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--muted);height:32px;padding:0 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+th.r,td.r{text-align:right}
+td{height:46px;padding:0 10px;border-bottom:1px solid var(--border);font-size:var(--fs-base)}
+tr.row{cursor:pointer}tr.row:hover td{background:var(--surface-2)}
+tr.row.att td:first-child{box-shadow:inset 2px 0 0 var(--danger)}
+.an{min-width:260px;white-space:nowrap}.an b{font-weight:500;display:block}td,th{white-space:nowrap}.an span{font-size:var(--fs-sm);color:var(--muted)}
+.ld{width:140px;display:flex;flex-direction:column;gap:4px}.ld .stack{height:5px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+.pill em{font-style:normal;color:var(--muted)}
+.sd{display:inline-flex;gap:3px;vertical-align:middle}.sd .dot{width:8px;height:8px;border-radius:2px}
+.sk{width:64px;height:20px;display:block}
+.att-p .ar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:6px 14px;border-top:1px solid var(--border);cursor:pointer}.att-p .ar:hover{background:var(--surface-2)}.att-p .ar:first-of-type{border-top:0}
+.att-p b{font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1199px){.body{grid-template-columns:1fr}.pst{grid-template-columns:1fr 1fr}}
+@media(max-width:767px){.pst{grid-template-columns:1fr}.pst>:last-child{grid-column:auto}.hb{grid-template-columns:110px 1fr 24px}}
+/* ---- import mockups ---- */
+.bg{pointer-events:none;user-select:none}
+.scrim.open{position:fixed;opacity:1}
+.dlg{position:fixed;left:50%;top:48px;transform:translateX(-50%);width:min(var(--w,760px),calc(100vw - 32px));max-height:calc(100vh - 80px);display:flex;flex-direction:column;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-lg);box-shadow:var(--shadow-pop);z-index:50}
+.dlg>header{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:var(--fs-lg);font-weight:600}
+.dlg .x{margin-left:auto}
+.dlg .db{padding:14px 16px;overflow:auto;min-height:0}
+.dlg>footer{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border)}
+.steps{display:flex;gap:0;padding:0 16px;border-bottom:1px solid var(--border);background:var(--surface-1)}
+.steps a{display:flex;align-items:center;gap:8px;height:34px;padding:0 14px 0 0;margin-right:14px;color:var(--subtle);font-size:var(--fs-sm);border-bottom:2px solid transparent}
+.steps a i{font-style:normal;font:600 var(--fs-label) var(--font-sans);width:18px;height:18px;border:1px solid var(--border-strong);border-radius:50%;display:inline-grid;place-items:center}
+.steps a.done{color:var(--muted)}.steps a.on{color:var(--text);border-bottom-color:var(--accent)}.steps a.on i{border-color:var(--accent);color:var(--accent)}
+.steps a.done i{background:var(--surface-3);color:var(--text)}
+.drop{border:1px dashed var(--border-control);border-radius:var(--r-md);background:var(--surface-1);padding:28px 16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+.drop:hover{border-color:var(--accent)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:var(--fs-sm)}
+.rules{list-style:none;display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.rules li{display:flex;gap:8px;color:var(--muted);font-size:var(--fs-sm)}.rules li svg{margin-top:2px;color:var(--subtle)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fld{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.fld label{font-size:var(--fs-sm);color:var(--muted)}
+.inp{display:flex;align-items:center;min-height:var(--ctrl-h);padding:4px 10px;background:var(--surface-3);border:1px solid var(--border-control);border-radius:var(--r-md)}
+.inp.err{border-color:var(--danger)}.inp.foc{border-color:var(--focus)}
+.hint{font-size:var(--fs-sm);color:var(--subtle)}
+.sumstrip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--border-control);border-radius:var(--r-md);margin-bottom:12px}
+.sumstrip div{padding:8px 12px;border-right:1px solid var(--border)}.sumstrip div:last-child{border:0}
+.sumstrip .n{font-size:var(--fs-lg);font-weight:600;font-variant-numeric:tabular-nums;line-height:24px}
+.sumstrip .zero{color:var(--subtle)}
+.ftabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:0}
+.ftabs button{height:32px;padding:0 10px;color:var(--muted);border-bottom:2px solid transparent;font-size:var(--fs-sm)}
+.ftabs button[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent)}
+.ftabs .num{color:var(--subtle);margin-left:4px}
+.tbl{width:100%;min-width:0;border-collapse:collapse}
+.tbl th{position:static;background:transparent;height:28px}
+.tbl td{height:32px;font-size:var(--fs-sm);padding:0 8px;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.tbl tr.inv td:first-child{box-shadow:inset 2px 0 0 var(--danger)}
+.tbl tr.rev td:first-child{box-shadow:inset 2px 0 0 var(--warning)}
+.tbl tr.err2 td{height:auto;padding:0 8px 6px 44px;border-bottom:1px solid var(--border);white-space:normal;color:var(--danger);font-size:var(--fs-sm)}
+.tbl tr.has-err td{border-bottom:0}
+.box{border:1px solid var(--border);border-radius:var(--r-md);overflow:auto;background:var(--surface-1)}
+.tint-w{background:#2b2a20;border:1px solid var(--border-strong);border-radius:var(--r-md)}
+.seg3{display:flex;gap:8px}
+.ch{white-space:nowrap;height:30px;padding:0 12px;border-radius:var(--r-md);background:var(--surface-3);border:1px solid var(--border-control);font-weight:500}
+.ch:hover{border-color:var(--muted)}
+.ch.sel.same{background:var(--accent-tint);border-color:var(--accent);color:var(--accent)}
+.ch.sel.diff{background:var(--info-tint);border-color:var(--info);color:var(--info)}
+.ch.sel.skip{background:var(--neutral-tint);border-color:var(--muted);color:var(--text)}
+.rv{display:grid;grid-template-columns:230px 1fr;gap:12px;min-height:0}
+.rl{border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-1);overflow:auto}
+.rl button{display:grid;grid-template-columns:14px 1fr;gap:8px;align-items:center;width:100%;text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text)}
+.rl button:last-child{border:0}.rl button:hover{background:var(--hover-row)}
+.rl button.on{background:var(--accent-tint)}
+.rl small{display:block;color:var(--muted);font-size:var(--fs-sm)}
+.rl .dot.empty{background:transparent;border:1px solid var(--border-control)}
+.sbs{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-1)}
+.sbs>div{padding:10px 12px;min-width:0}.sbs>div+div{border-left:1px solid var(--border)}
+.sbs .nm{font-size:var(--fs-md);font-weight:600;margin:2px 0 8px;overflow-wrap:anywhere}
+.fr{display:grid;grid-template-columns:92px 1fr;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:var(--fs-sm)}
+.fr:first-of-type{border-top:0}
+.fr .k{color:var(--muted)}
+.diffv{background:var(--accent-tint);color:var(--accent);padding:0 4px;border-radius:var(--r-sm)}
+.fillbox{border:1px solid var(--border);border-radius:var(--r-md);margin-top:10px}
+.fillbox .h{padding:7px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.fillbox .r{display:grid;grid-template-columns:110px 1fr auto;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);font-size:var(--fs-sm);align-items:center}
+.fillbox .r:last-child{border:0}
+.simbar{display:inline-block;width:80px;height:6px;background:var(--surface-3);border-radius:1px;vertical-align:middle;margin:0 6px;overflow:hidden}.simbar i{display:block;height:100%;background:var(--warning)}
+.prog{display:flex;align-items:center;gap:10px}
+.prog .stack{width:120px}
+.sres{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--border-control);border-radius:var(--r-md);margin-bottom:12px}
+.sres div{padding:10px 12px;border-right:1px solid var(--border)}.sres div:last-child{border:0}
+.sres .n{font-size:var(--fs-xl);line-height:28px;font-weight:600;font-variant-numeric:tabular-nums}
+.btn[disabled]{background:var(--surface-3);color:var(--subtle);cursor:not-allowed;border:1px solid var(--border)}
+.pop{position:absolute;background:var(--surface-3);border:1px solid var(--border-strong);box-shadow:var(--shadow-pop);border-radius:var(--r-md);z-index:3}
+/* spreadsheet */
+.xl{border:1px solid var(--border-strong);border-radius:var(--r-lg);background:var(--surface-1);overflow:hidden}
+.xl .bar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.xl .fx{display:flex;gap:8px;padding:5px 12px;border-bottom:1px solid var(--border);font-size:var(--fs-sm);color:var(--muted)}
+.xl .fx b{border:1px solid var(--border);padding:0 8px;font-weight:400;border-radius:2px;color:var(--text)}
+.grid{position:relative;overflow:auto}
+.grid table{min-width:0;width:auto;border-collapse:collapse;table-layout:fixed}
+.grid th,.grid td{height:24px;border:1px solid var(--border);padding:0 6px;font-size:var(--fs-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid th{position:static;background:var(--surface-2);text-align:center;color:var(--muted);font-weight:400;letter-spacing:0;text-transform:none;font-size:var(--fs-sm)}
+.grid td.rn{background:var(--surface-2);color:var(--muted);text-align:center;width:36px}
+.grid tr.hdr td{background:var(--surface-3);font-weight:600}
+.grid tr.hdr td.req{border-bottom:2px solid var(--accent)}
+.grid td.ro{background:var(--surface-2);color:var(--muted);white-space:normal;height:auto;padding:5px 8px;line-height:16px}
+.grid td.sel{outline:2px solid var(--accent);outline-offset:-2px}
+.grid td.empty{background:repeating-linear-gradient(135deg,transparent 0 6px,transparent 6px 12px)}
+.tabs{display:flex;align-items:flex-end;gap:2px;padding:6px 12px 0;background:var(--surface-2);border-top:1px solid var(--border)}
+.tabs button{height:28px;padding:0 14px;color:var(--muted);border:1px solid transparent;border-bottom:0;border-radius:var(--r-md) var(--r-md) 0 0;font-size:var(--fs-sm)}
+.tabs button[aria-selected=true]{background:var(--surface-1);color:var(--text);border-color:var(--border);border-bottom:2px solid var(--accent)}
+.tabs button.hid{font-style:italic;color:var(--subtle);border:1px dashed var(--border-strong);border-bottom:0}
+.note{position:absolute;background:var(--surface-3);border:1px solid var(--border-strong);padding:6px 8px;border-radius:var(--r-sm);font-size:var(--fs-sm);width:210px;line-height:16px;z-index:2}
+.cm{border-left:2px solid var(--accent);padding:4px 10px}
+.anno{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.anno .panel{padding:10px 12px;font-size:var(--fs-sm);color:var(--muted)}
+.anno b{color:var(--text);display:block;margin-bottom:2px}
+.fnav{display:flex;gap:6px;align-items:center;margin-bottom:12px;font-size:var(--fs-sm);color:var(--muted)}
+.fnav a{color:var(--info)}
+.spacer{height:var(--topbar-h)}
+</style></head><body><div class="bg" aria-hidden="true" inert><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="calendar-check" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/></symbol>
+<symbol id="building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></symbol>
+<symbol id="list-checks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8"/></symbol>
+<symbol id="server" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
+<symbol id="activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+<symbol id="messages" viewBox="0 0 24 24"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2zM18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></symbol>
+<symbol id="settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+<symbol id="alarm" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3 2 6M22 6l-3-3"/></symbol>
+<symbol id="hourglass" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2"/></symbol>
+<symbol id="siren" viewBox="0 0 24 24"><path d="M7 18v-6a5 5 0 1 1 10 0v6M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2zM21 12h1M2 12h1M12 2v1M4.9 4.9l.7.7M19.1 4.9l-.7.7"/></symbol>
+<symbol id="upgrade" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></symbol>
+<symbol id="chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+<symbol id="history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></symbol>
+<symbol id="layout" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></symbol>
+<symbol id="star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></symbol>
+<symbol id="phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+<symbol id="file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM14 2v6h6M8 13h8M8 17h8"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></symbol>
+<symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+<symbol id="pencil" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+<symbol id="panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></symbol>
+<symbol id="arrow-r" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+<symbol id="upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+<symbol id="download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+<symbol id="sheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></symbol>
+<symbol id="shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="alert" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3zM12 9v4M12 17h.01"/></symbol>
+</defs></svg>
+<div class="app"><header class="top"><div class="brand"><b></b><span>TAM CC</span></div>
+<div class="jump"><svg class="i" aria-hidden="true"><use href="#search"/></svg><span>Jump to account</span><kbd>Ctrl+K</kbd></div><div class="sp"></div>
+<span class="envb">DEV</span><span class="clock num">14:05 Local</span><button class="btn pri sm"><svg class="i s" aria-hidden="true"><use href="#plus"/></svg>Capture</button></header><nav class="rail" aria-label="Primary"><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#calendar-check"/></svg><span>Today</span></a><a class="ni on" href="#" aria-current="page"><svg class="i l" aria-hidden="true"><use href="#building"/></svg><span>Accounts</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#list-checks"/></svg><span>Tasks</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#server"/></svg><span>Operations</span><span class="later">Later</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#activity"/></svg><span>BAMS</span><span class="later">Later</span></a><a class="ni" href="#" ><svg class="i l" aria-hidden="true"><use href="#messages"/></svg><span>Bridge</span><span class="later">Later</span></a><a class="ni bt" href="#"><svg class="i l" aria-hidden="true"><use href="#settings"/></svg><span>Settings</span></a></nav><main class="main"><div class="pg">
+ <div class="hd"><h1>Accounts</h1><span class="muted num" style="padding-bottom:3px">24 active</span><div class="sp"></div><label class="srch"><svg class="i " aria-hidden="true"><use href="#search"/></svg><span>Search name or BPID</span></label><div class="seg"><button class="on">Active</button><button>Inactive</button><button>All</button></div><button class="btn sec"><svg class="i s" aria-hidden="true"><use href="#upload"/></svg>Import accounts</button><button class="btn pri"><svg class="i s" aria-hidden="true"><use href="#plus"/></svg>Account</button></div>
+ <section class="panel"><div class="tw"><table><thead><tr><th>Account</th><th>BPID</th><th>Products</th><th>Status</th><th>Next contact</th></tr></thead><tbody><tr class="row"><td class="an"><b>Castellan Peak Global Markets</b></td><td class="mono">100482</td><td>Terminal; B-PIPE</td><td><span class="badge b-ok">Active</span></td><td class="num">15 Oct</td></tr><tr class="row"><td class="an"><b>Halvorsen Fjord Asset Management</b></td><td class="mono">100913</td><td>Terminal; B-PIPE</td><td><span class="badge b-ok">Active</span></td><td class="num">20 Oct</td></tr><tr class="row"><td class="an"><b>Norrland Sovereign Fund</b></td><td class="mono">101554</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">22 Oct</td></tr><tr class="row"><td class="an"><b>Brightwater Pension Trust</b></td><td class="mono">120377</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">14 Oct</td></tr><tr class="row"><td class="an"><b>Tidewater Capital</b></td><td class="mono">103390</td><td>Terminal; EMSX</td><td><span class="badge b-ok">Active</span></td><td class="num">-</td></tr><tr class="row"><td class="an"><b>Web Mgmt Ltd</b></td><td class="mono">104233</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">-</td></tr><tr class="row"><td class="an"><b>Meridian Reinsurance</b></td><td class="mono">110245</td><td>Terminal; Data License</td><td><span class="badge b-ok">Active</span></td><td class="num">15 Oct</td></tr><tr class="row"><td class="an"><b>Ostrava Credit Union</b></td><td class="mono">207731</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">29 Oct</td></tr><tr class="row"><td class="an"><b>Castellan Peak Global Markets</b></td><td class="mono">100482</td><td>Terminal; B-PIPE</td><td><span class="badge b-ok">Active</span></td><td class="num">15 Oct</td></tr><tr class="row"><td class="an"><b>Halvorsen Fjord Asset Management</b></td><td class="mono">100913</td><td>Terminal; B-PIPE</td><td><span class="badge b-ok">Active</span></td><td class="num">20 Oct</td></tr><tr class="row"><td class="an"><b>Norrland Sovereign Fund</b></td><td class="mono">101554</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">22 Oct</td></tr><tr class="row"><td class="an"><b>Brightwater Pension Trust</b></td><td class="mono">120377</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">14 Oct</td></tr><tr class="row"><td class="an"><b>Tidewater Capital</b></td><td class="mono">103390</td><td>Terminal; EMSX</td><td><span class="badge b-ok">Active</span></td><td class="num">-</td></tr><tr class="row"><td class="an"><b>Web Mgmt Ltd</b></td><td class="mono">104233</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">-</td></tr><tr class="row"><td class="an"><b>Meridian Reinsurance</b></td><td class="mono">110245</td><td>Terminal; Data License</td><td><span class="badge b-ok">Active</span></td><td class="num">15 Oct</td></tr><tr class="row"><td class="an"><b>Ostrava Credit Union</b></td><td class="mono">207731</td><td>Terminal</td><td><span class="badge b-ok">Active</span></td><td class="num">29 Oct</td></tr></tbody></table></div></section>
+</div></main></div></div><div class="scrim open"></div><div class="dlg" role="dialog" aria-modal="true" aria-label="Import accounts" style="--w:1000px"><header>Import accounts<button class="btn gh sm x" aria-label="Close"><svg class="i s" aria-hidden="true"><use href="#x"/></svg></button></header><nav class="steps" aria-label="Import steps"><a class="done"><i>1</i>Choose file</a><a class="on" aria-current="step"><i>2</i>Preview</a><a class=""><i>3</i>Review duplicates</a><a class=""><i>4</i>Result</a></nav><div class="db"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><svg class="i l" aria-hidden="true"><use href="#sheet"/></svg><b>accounts_q4_import.xlsx</b><span class="muted sm">40 rows read from sheet "Accounts"</span><span class="sp"></span><button class="btn gh sm">Choose another file</button></div>
+<div class="sumstrip" role="group" aria-label="Preview summary"><div><div class="label">Valid</div><div class="n ">37</div><div class="muted sm">of 40 rows</div></div><div><div class="label">New</div><div class="n ">24</div><div class="muted sm">create</div></div><div><div class="label">Updates</div><div class="n ">6</div><div class="muted sm">fill blanks</div></div><div><div class="label">Needs review</div><div class="n wrn">7</div><div class="muted sm">confirm each</div></div><div><div class="label">Invalid</div><div class="n dng">3</div><div class="muted sm">will be skipped</div></div></div>
+<div class="ftabs" role="tablist"><button role="tab" aria-selected="true" data-f="all">All<span class="num">40</span></button><button role="tab" aria-selected="false" data-f="new">New<span class="num">24</span></button><button role="tab" aria-selected="false" data-f="upd">Updates<span class="num">6</span></button><button role="tab" aria-selected="false" data-f="rev">Needs review<span class="num">7</span></button><button role="tab" aria-selected="false" data-f="inv">Invalid<span class="num">3</span></button></div>
+<div class="box" style="max-height:330px"><table class="tbl"><thead><tr><th>Row</th><th>Account name</th><th>BPID</th><th>Products</th><th>Status</th><th>Next contact</th><th>Result</th><th>Detail</th></tr></thead><tbody id="pt"><tr data-k="new" class=""><td class="num muted" style="width:34px">2</td><td style="max-width:200px"><b style="font-weight:500">Ashgrove Capital Partners</b></td><td><span class="mono">210551</span></td><td>Terminal; B-PIPE</td><td>Active</td><td class="num">02 Nov</td><td style="width:100px"><span class="badge b-ok">New</span></td><td class="muted" style="max-width:300px" title="New account">New account</td></tr><tr data-k="upd" class=""><td class="num muted" style="width:34px">3</td><td style="max-width:200px"><b style="font-weight:500">Castellan Peak Global Markets</b></td><td><span class="mono">100482</span></td><td>Terminal; B-PIPE</td><td>Active</td><td class="num">-</td><td style="width:100px"><span class="badge b-inf">Update</span></td><td class="muted" style="max-width:300px" title="Exact name match. Fills: nothing new except Notes">Exact name match. Fills: nothing new except Notes</td></tr><tr data-k="rev" class="rev"><td class="num muted" style="width:34px">4</td><td style="max-width:200px"><b style="font-weight:500">Web Ltd</b></td><td><span class="mono">104233</span></td><td>B-PIPE</td><td>Active</td><td class="num">05 Nov</td><td style="width:100px"><span class="badge b-wrn">Needs review</span></td><td class="muted" style="max-width:300px" title="Similar to Web Mgmt Ltd: shares key word Web; same BPID">Similar to Web Mgmt Ltd: shares key word Web; same BPID</td></tr><tr data-k="new" class=""><td class="num muted" style="width:34px">5</td><td style="max-width:200px"><b style="font-weight:500">Kestrel Bay Insurance</b></td><td><span class="subtle">-</span></td><td>Terminal</td><td>Active</td><td class="num">30 Oct</td><td style="width:100px"><span class="badge b-ok">New</span></td><td class="muted" style="max-width:300px" title="New account">New account</td></tr><tr data-k="rev" class="rev"><td class="num muted" style="width:34px">6</td><td style="max-width:200px"><b style="font-weight:500">Halvorsen Fjord Asset Mgmt</b></td><td><span class="subtle">-</span></td><td><span class="subtle">-</span></td><td>Active</td><td class="num">-</td><td style="width:100px"><span class="badge b-wrn">Needs review</span></td><td class="muted" style="max-width:300px" title="Similar to Halvorsen Fjord Asset Management: similar spelling">Similar to Halvorsen Fjord Asset Management: similar spelling</td></tr><tr data-k="inv" class="inv has-err"><td class="num muted" style="width:34px">7</td><td style="max-width:200px"><b style="font-weight:500">Linden Row Pensions</b></td><td><span class="mono">330918</span></td><td>Terminal</td><td>Dormant</td><td class="num">-</td><td style="width:100px"><span class="badge b-dng">Invalid</span></td><td class="dng" style="max-width:300px" title="Status: &#x27;Dormant&#x27; is not in the list (Active, Inactive)"></td></tr><tr data-k="inv" class="err2"><td colspan="8" style="padding-left:42px"><svg class="i s" aria-hidden="true"><use href="#alert"/></svg> Row 7: Status: &#x27;Dormant&#x27; is not in the list (Active, Inactive). This row will be skipped; fix it in the file and re-upload, or leave it out.</td></tr><tr data-k="new" class=""><td class="num muted" style="width:34px">8</td><td style="max-width:200px"><b style="font-weight:500">Northgate Mutual</b></td><td><span class="mono">441092</span></td><td>Terminal</td><td>Inactive</td><td class="num">-</td><td style="width:100px"><span class="badge b-ok">New</span></td><td class="muted" style="max-width:300px" title="New account">New account</td></tr><tr data-k="inv" class="inv has-err"><td class="num muted" style="width:34px">9</td><td style="max-width:200px"><b style="font-weight:500"><span class="subtle">(empty)</span></b></td><td><span class="mono">552210</span></td><td>Terminal</td><td>Active</td><td class="num">-</td><td style="width:100px"><span class="badge b-dng">Invalid</span></td><td class="dng" style="max-width:300px" title="Account name is required"></td></tr><tr data-k="inv" class="err2"><td colspan="8" style="padding-left:42px"><svg class="i s" aria-hidden="true"><use href="#alert"/></svg> Row 9: Account name is required. This row will be skipped; fix it in the file and re-upload, or leave it out.</td></tr><tr data-k="upd" class=""><td class="num muted" style="width:34px">10</td><td style="max-width:200px"><b style="font-weight:500">Brightwater Pension Trust</b></td><td><span class="mono">120377</span></td><td>Terminal</td><td>Active</td><td class="num">14 Oct</td><td style="width:100px"><span class="badge b-inf">Update</span></td><td class="muted" style="max-width:300px" title="Exact name match. Fills: nothing, all fields already set">Exact name match. Fills: nothing, all fields already set</td></tr><tr data-k="rev" class="rev"><td class="num muted" style="width:34px">11</td><td style="max-width:200px"><b style="font-weight:500">Norrland Fund</b></td><td><span class="subtle">-</span></td><td><span class="subtle">-</span></td><td><span class="subtle">-</span></td><td class="num">28 Oct</td><td style="width:100px"><span class="badge b-wrn">Needs review</span></td><td class="muted" style="max-width:300px" title="Similar to Norrland Sovereign Fund: shares key words Norrland, Fund">Similar to Norrland Sovereign Fund: shares key words Norrland, Fund</td></tr><tr data-k="rev" class="rev"><td class="num muted" style="width:34px">12</td><td style="max-width:200px"><b style="font-weight:500">Tidewater Capital Ltd</b></td><td><span class="mono">103390</span></td><td><span class="subtle">-</span></td><td>Active</td><td class="num">-</td><td style="width:100px"><span class="badge b-wrn">Needs review</span></td><td class="muted" style="max-width:300px" title="Similar to Tidewater Capital: same name once Ltd is ignored; same BPID">Similar to Tidewater Capital: same name once Ltd is ignored; same BPID</td></tr><tr data-k="new" class=""><td class="num muted" style="width:34px">13</td><td style="max-width:200px"><b style="font-weight:500">Pinecrest Advisory</b></td><td><span class="subtle">-</span></td><td>Terminal</td><td>Active</td><td class="num">03 Nov</td><td style="width:100px"><span class="badge b-ok">New</span></td><td class="muted" style="max-width:300px" title="New account">New account</td></tr><tr data-k="rev" class="rev"><td class="num muted" style="width:34px">14</td><td style="max-width:200px"><b style="font-weight:500">Pinecrest Advisory Group</b></td><td><span class="subtle">-</span></td><td><span class="subtle">-</span></td><td><span class="subtle">-</span></td><td class="num">-</td><td style="width:100px"><span class="badge b-wrn">Needs review</span></td><td class="muted" style="max-width:300px" title="Similar to row 13 in this file: Pinecrest Advisory">Similar to row 13 in this file: Pinecrest Advisory</td></tr><tr data-k="upd" class=""><td class="num muted" style="width:34px">15</td><td style="max-width:200px"><b style="font-weight:500">MERIDIAN REINSURANCE</b></td><td><span class="mono">110245</span></td><td><span class="subtle">-</span></td><td><span class="subtle">-</span></td><td class="num">12 Nov</td><td style="width:100px"><span class="badge b-inf">Update</span></td><td class="muted" style="max-width:300px" title="Exact name match (case ignored). Fills: Next contact date">Exact name match (case ignored). Fills: Next contact date</td></tr><tr data-k="new" class=""><td class="num muted" style="width:34px">16</td><td style="max-width:200px"><b style="font-weight:500">Quillfeather Securities</b></td><td><span class="subtle">-</span></td><td>Terminal; EMSX</td><td>Active</td><td class="num"><span class="subtle">-</span></td><td style="width:100px"><span class="badge b-ok">New</span></td><td class="muted" style="max-width:300px" title="New account">New account</td></tr><tr data-k="upd" class=""><td class="num muted" style="width:34px">17</td><td style="max-width:200px"><b style="font-weight:500">Ostrava Credit Union</b></td><td><span class="mono">207731</span></td><td><span class="subtle">-</span></td><td><span class="subtle">-</span></td><td class="num"><span class="subtle">-</span></td><td style="width:100px"><span class="badge b-inf">Update</span></td><td class="muted" style="max-width:300px" title="Exact name match. Fills: nothing new except Notes">Exact name match. Fills: nothing new except Notes</td></tr><tr data-k="inv" class="inv has-err"><td class="num muted" style="width:34px">18</td><td style="max-width:200px"><b style="font-weight:500">Saffron Wharf Trading</b></td><td><span class="mono">889102</span></td><td>Terminall</td><td>Active</td><td class="num">-</td><td style="width:100px"><span class="badge b-dng">Invalid</span></td><td class="dng" style="max-width:300px" title="Products: &#x27;Terminall&#x27; is not in the list (Terminal, B-PIPE, Data License, EMSX)"></td></tr><tr data-k="inv" class="err2"><td colspan="8" style="padding-left:42px"><svg class="i s" aria-hidden="true"><use href="#alert"/></svg> Row 18: Products: &#x27;Terminall&#x27; is not in the list (Terminal, B-PIPE, Data License, EMSX). This row will be skipped; fix it in the file and re-upload, or leave it out.</td></tr></tbody></table></div>
+<div class="hint" style="margin-top:6px">Showing 17 of 40 rows (preview shows up to 500). Nothing has been written yet.</div></div><footer><span class="muted sm"><svg class="i s" aria-hidden="true"><use href="#shield"/></svg> 7 rows need your decision before you can apply. 3 invalid rows will be skipped.</span><div class="sp"></div><button class="btn gh">Back</button><button class="btn pri">Review 7 duplicates<svg class="i s" aria-hidden="true"><use href="#arrow-r"/></svg></button></footer></div><script>document.querySelectorAll('.ftabs button').forEach(function(b){b.onclick=function(){document.querySelectorAll('.ftabs button').forEach(function(x){x.setAttribute('aria-selected',x==b)});var f=b.dataset.f;document.querySelectorAll('#pt tr').forEach(function(r){r.style.display=(f=='all'||r.dataset.k==f)?'':'none'})}});</script></body></html>
