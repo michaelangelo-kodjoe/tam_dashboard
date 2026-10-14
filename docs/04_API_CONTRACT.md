@@ -340,3 +340,114 @@ One tile per **distinct server name** (case-insensitive across `bams_objects.nam
 
 Window: samples with `sampled_at` in the last 7 days (queried by `metric_id` and a `sampled_at` range only; older rows are never read, §45). `window_hours` = whole hours from the first sample in the window to now, rounded up, capped at 168 (so "CPU 24h" for a day of data, "Disk 7d" at 168). `points` = `[iso_utc, value]` pairs, oldest first, **at most 28**: if the window holds more than 28 samples, the span from the first to the last sample is split into 28 equal-time buckets and each non-empty bucket contributes its maximum value at that sample's timestamp. PROD has no `spark` until the Phase 4 monitor writes samples.
 
+
+## 10. Account bulk import and duplicate check (PROPOSAL: proposed by PM, finalized by backend)
+
+> **Status: PROPOSAL, proposed by PM (2026-10-13), finalized by backend (task T-80).** The backend writes the final text of this section **before** any frontend code depends on it and records every deviation in `docs/qa/API_CHANGE_REQUEST.md`. Items marked **BE decides** are open on purpose. Decisions D-37 to D-48 and §11 of `docs/01_PM_SPEC.md` are binding; shapes below are not. **No schema change.**
+
+Conventions as §0 except where noted. These routes replace the `/api/import/*` 501 stub for the paths below only; every other `/api/import/*` path still answers 501. All writes follow §0.1 error envelopes. New error codes:
+
+| code | HTTP | when |
+|---|---|---|
+| `invalid_file` | 422 | the upload is refused; `details.reason` is one of `not_xlsx`, `too_large` (also 413 if declared up front), `encrypted`, `corrupt`, `zip_unsafe`, `macros`, `external_links`, `embedded_objects`, `xml_unsafe`, `sheet_missing`, `header_missing`, `header_duplicate`, `no_rows`, `too_many_rows` (`details.found`, `details.limit`) |
+| `import_expired` | 410 | `import_id` unknown, expired (60 min idle) or lost by a restart |
+| `unresolved_duplicates` | 409 | Apply with flagged rows lacking a valid decision; `details.rows` lists the Excel row numbers |
+| `preview_stale` | 409 | the fresh plan differs from `plan_hash`, or a `row_version` changed inside the write transaction; nothing written; `details.changed` lists `{row, reason}` |
+| `already_applied` | 409 | second Apply of one `import_id`; `details.result` holds the stored result |
+| `possible_duplicate` | 409 | `POST /api/client/save` create with candidates and without `duplicates_confirmed`; `details.candidates` |
+
+### 10.1 `GET /api/import/accounts/template`
+Returns the workbook, **not JSON**: `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `Content-Disposition: attachment; filename="tam_accounts_import_template.xlsx"`, `Cache-Control: no-store`, generated per request with openpyxl. Sheets `Instructions`, `Accounts` (A `Account name`, B `BPID` text-formatted, C `Products`, D `Status` list-validated against `Lists!$A$1:$A$2`, E `Next contact date` formatted `yyyy-mm-dd`, F `Notes`; validation and formats for rows 2-501), `Lists` (state `hidden`; the Status values). Contains no account data. Errors use the JSON envelope.
+
+### 10.2 `POST /api/import/accounts/inspect`
+Request: the raw `.xlsx` bytes as the body. Headers: `Content-Type: application/octet-stream` (or the xlsx media type; **not trusted**), `X-File-Name: <percent-encoded name>` (display only, <= 200 chars, stripped of path parts). Body cap 5 MiB for this route (**BE decides** how to raise the global 2 MiB `payload_too_large` check for one route and keeps the other routes at 2 MiB). No multipart (no new dependency). **No database write.**
+
+Response `200`:
+```json
+{"ok": true, "item": {
+  "import_id": "b6f1…", "plan_hash": "sha256:…", "expires_at": "2026-10-13T15:12:00.000Z",
+  "file": {"name": "accounts_q4_import.xlsx", "size_bytes": 18432, "sheet": "Accounts", "rows_found": 40},
+  "limits": {"max_rows": 500, "max_candidates": 5},
+  "counts": {"rows": 40, "valid": 37, "new": 24, "updates": 6, "needs_review": 7, "invalid": 3},
+  "warnings": [{"code": "unknown_column", "text": "Column G \"Region\" is ignored."}],
+  "rows": [ <Row>, … ]
+}, "side_effects": []}
+```
+`rows` is ordered by Excel row number. **Row**:
+```json
+{"row": 4, "state": "new|update|needs_review|invalid",
+ "values": {"name": "Web Ltd", "bpid": "104233", "products": "B-PIPE", "status": "Active", "next_contact": "2026-11-05", "notes": null},
+ "raw": null,
+ "errors": [{"field": "status", "code": "status_not_allowed", "text": "Row 7: Status: 'Dormant' is not in the list (Active, Inactive). This row will be skipped; fix it in the file and re-upload, or leave it out."}],
+ "warnings": [{"code": "different_bpid", "text": "…"}],
+ "match": null,
+ "candidates": []}
+```
+- `values` holds the normalised values (status canonical case, date `YYYY-MM-DD`, empty -> `null`). For `invalid` rows `values` may hold the fields that parsed and `raw` holds the cell texts as read (strings), used by the skipped file.
+- `update` rows: `match = {"kind": "exact", "account": {"id","name","status","row_version"}, "fills": {"next_contact": "2026-11-12"}, "kept": {"bpid": {"existing": "110245", "file": "110245"}}, "notes": ["Existing account is Inactive and stays Inactive"], "reasons": [{"code":"exact_name","text":"Same name (case and spacing ignored)"}]}`. An exact in-file duplicate is not a separate row state: its row has `state: "update"` or `"new"` and `merged_into: {"row": 13}`.
+- `needs_review` rows: `candidates` (<= 5, ordered per D-42):
+```json
+{"ref": {"type": "account", "id": "…"} ,
+ "name": "Web Mgmt Ltd", "bpid": "104233", "products": "Terminal", "status": "Active", "next_contact": null,
+ "row_version": 4,
+ "strength": "High",
+ "reasons": [{"code": "contained_name", "text": "Every word of Web also appears in Web Mgmt Ltd"}, {"code": "same_bpid", "text": "Same BPID: 104233"}],
+ "differences": [],
+ "fills": {"products": "B-PIPE", "next_contact": "2026-11-05"},
+ "kept": {"products": {"existing": "Terminal", "file": "B-PIPE"}},
+ "notes": []}
+```
+`ref` is `{"type":"account","id":…}` or `{"type":"row","row":13}` (an earlier valid, non-merged row of the file). `fills` and `kept` assume "Same account" with that candidate. **There is no `score`, `similarity`, `percent` or other numeric field anywhere in this payload.** `strength` is `"High" | "Medium" | "Low"`.
+- A row is exactly one of the four states; `counts.valid = new + updates + needs_review`.
+
+Errors: `invalid_file`, `payload_too_large` (413). Sessions: at most 3 in memory; inspecting a 4th discards the oldest.
+
+### 10.3 `GET /api/import/accounts/{import_id}`
+Re-runs validation and matching against the **current** database for the stored parsed rows and returns the same `item` as 10.2 (new `plan_hash`, new `expires_at`). Used after `preview_stale`. No write. `import_expired` if unknown.
+
+### 10.4 `POST /api/import/accounts/apply`
+```json
+{"import_id": "b6f1…", "plan_hash": "sha256:…", "confirm": true,
+ "decisions": [
+   {"row": 4,  "choice": "same",      "target": {"type": "account", "id": "…"}},
+   {"row": 6,  "choice": "different"},
+   {"row": 14, "choice": "same",      "target": {"type": "row", "row": 13}},
+   {"row": 33, "choice": "skip"}
+ ]}
+```
+Rules: `confirm` must be `true` (else 409 `confirmation_required`). `decisions` has exactly one entry per `needs_review` row of the **fresh** plan: a missing one -> 409 `unresolved_duplicates`; an entry for another row, a duplicate entry, `target` missing when `same`, `target` on `different`/`skip`, or `target` not among that row's fresh candidates -> 422 `validation_error` (a candidate that disappeared or changed -> 409 `preview_stale`); `same` onto a row that is invalid or decided `skip` -> 422. The server then, in this order: (1) re-validates and recomputes `plan_hash`, 409 `preview_stale` if different; (2) if the plan changes nothing, returns the result with `backup: null` and writes nothing; (3) writes a `pre-import` safety backup (`backup_failed` 500, nothing written); (4) `BEGIN IMMEDIATE`, re-checks the `row_version` of every touched account (409 `preview_stale`, rollback), writes all creates and fills, one `audit_events` row per created or updated account (`source='Bulk Import'`), `COMMIT`. Any exception rolls the whole transaction back.
+
+Response `200`:
+```json
+{"ok": true, "item": {
+  "import_id": "b6f1…", "applied_at": "2026-10-13T14:12:08.120Z",
+  "file": {"name": "accounts_q4_import.xlsx", "rows_found": 40},
+  "counts": {"created": 26, "updated": 10, "unchanged": 0, "skipped": 4, "invalid": 3, "overwritten": 0},
+  "breakdown": {"created_new": 24, "created_marked_different": 2, "updated_exact": 6, "updated_marked_same": 4, "skipped_invalid": 3, "skipped_by_user": 1},
+  "fields_filled": 17, "audit_events": 36,
+  "backup": {"name": "tam_20261013T141208Z_pre-import_v1.db", "reason": "pre-import", "size_bytes": 2516582},
+  "created": [{"id": "…", "name": "…", "rows": [2]}],
+  "updated": [{"id": "…", "name": "…", "rows": [3, 9], "filled": ["next_contact"]}],
+  "skipped": [{"row": 7, "name": "Linden Row Pensions", "kind": "invalid", "reason": "Status: 'Dormant' is not in the list (Active, Inactive)"},
+              {"row": 33, "name": "Bright Water Holdings", "kind": "by_user", "reason": "Skipped by you (possible duplicate of Brightwater Pension Trust)"}]
+}, "side_effects": [{"type": "backup_created", "file": "tam_…_pre-import_v1.db", "reason": "pre-import"}]}
+```
+`unchanged` counts matched accounts with nothing to fill (no write, no audit, no `row_version` bump). Audit row per account: `category crm`, `object_type client`, `object_id` = account id, `object_label` = name, `action` `created` or `updated`, `old_value`/`new_value` = JSON of the changed fields only, `reason` = `Bulk import: <file name>, row N` (or `rows N, M`; <= 2000 chars), `source` `Bulk Import`. Sentences for the Activity and Recently Changed feeds follow §7 (`Account created by bulk import`, `Account updated by bulk import`; **BE decides** the exact sentence and the `sentences.py` entry).
+
+### 10.5 `GET /api/import/accounts/{import_id}/skipped.xlsx`
+The skipped-rows workbook (D-46): `Content-Disposition: attachment; filename="tam_accounts_skipped_<YYYYMMDD_HHMM>.xlsx"`. Available after Apply while the stored result lives (24 h or restart); `import_expired` / 404 JSON otherwise; 409 `conflict` if the session was never applied. Sheet `Accounts`: the six import headers, then `Source row`, `Reason`, `Possible duplicate of`. Cell values are written as strings (`data_type='s'`), never formulas.
+
+### 10.6 `POST /api/client/check-similar`
+Request `{"name": "Web Ltd", "bpid": "104233"|null}` (name 1..200, same trimming as `client/save`; unknown fields 422; no write). Response `200`:
+```json
+{"ok": true, "item": {
+  "exact": null,
+  "candidates": [ <Candidate as in 10.2 with "ref": {"type":"account","id":…}; "fills" and "kept" omitted> ]}, "side_effects": []}
+```
+`exact` is `{"id","name","status","row_version"}` when `exact_key` matches an existing account (then `candidates` may still hold others). Same engine, same ordering, same sentences as the import (US-13.8 AC7).
+
+### 10.7 `POST /api/client/save` (create) change (PM-AC-4, **BE decides** the final form)
+New optional boolean `duplicates_confirmed` (default false). On create (no `id`), if the engine finds candidates (and no exact match) and `duplicates_confirmed` is not `true` -> 409 `possible_duplicate` with `details.candidates` and nothing is written. An exact match is 409 `conflict` as today. Updates are unaffected. The existing tests that create similar-named accounts send `duplicates_confirmed: true`.
+
+### 10.8 Security and operations notes for the backend
+CSP, Origin and Host rules apply unchanged (the upload is a same-origin `fetch`). Request bodies are streamed with a hard byte count, never buffered beyond the cap. The reader never extracts to disk and never opens a file by an archive-supplied path. Uploaded bytes are held in memory only for the life of the session (not the original file; only parsed rows are kept) and are not logged; logs record file name, sizes, counts and outcomes (§40: import outcomes). Only one Apply runs at a time (a process lock); a concurrent second Apply waits or gets 409 `conflict` (**BE decides**). `GET /openapi.json` (DEV) must list the routes.

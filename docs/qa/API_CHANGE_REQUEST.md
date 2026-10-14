@@ -27,3 +27,15 @@ Backend notes (2026-10-13, T-62 to T-64; shapes frozen in `docs/04_API_CONTRACT.
 - PM-AC-2: as requested, via `activity_trend.sql` unmodified. `days` accepts only `14` (the reference query is fixed at 14 buckets; other values -> 422). Extra optional `include_inactive=true`.
 - PM-AC-3 **deviation**: the array is `server_tiles`, not `servers`, because `servers` is a frozen integer on that payload. Present on the per-account endpoint only (not in `/api/state`).
 
+
+## Run 3 (raised by pm-agent, 2026-10-13; D-37 to D-48, `docs/01_PM_SPEC.md` §11)
+Account bulk import and duplicate check. Proposal text is in `docs/04_API_CONTRACT.md` §10 ("proposed by PM, finalized by backend"). **No schema change.** Owner: backend-dev-agent (tasks T-80 to T-86). The frontend `MockDataSource` mirrors the check (T-87).
+
+| ID | Sev | Status | Request | Why |
+|---|---|---|---|---|
+| PM-AC-4 | Medium | open | **Behaviour change of a frozen route:** `POST /api/client/save` (create) returns 409 `possible_duplicate` (with candidates) when the shared similarity engine finds candidates, unless the body has the new optional `duplicates_confirmed: true`. Existing tests send the flag. | D-45: one duplicate rule for single add and import; a bypassed UI cannot create a near-duplicate. |
+| PM-AC-5 | Medium | open | New `POST /api/client/check-similar` `{name, bpid?}` -> `{exact, candidates[]}`. | Add account dialog (mockup 06). |
+| PM-AC-6 | Medium | open | New `GET /api/import/accounts/template` (xlsx, generated with openpyxl). Non-JSON response. | US-13.1. |
+| PM-AC-7 | High | open | New `POST /api/import/accounts/inspect` (raw xlsx body, 5 MiB route cap instead of 2 MiB), `GET /api/import/accounts/{id}`, `POST /api/import/accounts/apply`, `GET /api/import/accounts/{id}/skipped.xlsx`. Replace the 501 stub for these paths only. | D-38, D-39, D-44, D-46. |
+| PM-AC-8 | Low | open | Additive error codes `invalid_file`, `import_expired` (410), `unresolved_duplicates`, `preview_stale`, `already_applied`, `possible_duplicate`; `payload_too_large` for the import route uses the 5 MiB cap. | §10 of the contract. |
+| PM-AC-9 | Low | open | Backup reason `pre-import` added to the automatic reasons (retention as D-22); audit `source='Bulk Import'` rows for `client` `created`/`updated`; `openpyxl` (pinned) joins `server/requirements.txt`; activity sentences for Bulk Import events. | D-37, D-39. |
