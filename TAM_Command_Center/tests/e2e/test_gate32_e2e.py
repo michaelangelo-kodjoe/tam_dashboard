@@ -86,7 +86,7 @@ def state(c):
 @pytest.fixture()
 def acct(c):
     """A fresh account per test so tests are independent."""
-    r = post(c, "/api/client/save", {"name": f"QA Acct {time.time_ns()}"})
+    r = post(c, "/api/client/save", {"name": f"QA Acct {time.time_ns()}", "duplicates_confirmed": True})
     assert r.status_code == 200, r.text
     return r.json()["item"]
 

@@ -33,9 +33,13 @@ Account bulk import and duplicate check. Proposal text is in `docs/04_API_CONTRA
 
 | ID | Sev | Status | Request | Why |
 |---|---|---|---|---|
-| PM-AC-4 | Medium | open | **Behaviour change of a frozen route:** `POST /api/client/save` (create) returns 409 `possible_duplicate` (with candidates) when the shared similarity engine finds candidates, unless the body has the new optional `duplicates_confirmed: true`. Existing tests send the flag. | D-45: one duplicate rule for single add and import; a bypassed UI cannot create a near-duplicate. |
-| PM-AC-5 | Medium | open | New `POST /api/client/check-similar` `{name, bpid?}` -> `{exact, candidates[]}`. | Add account dialog (mockup 06). |
-| PM-AC-6 | Medium | open | New `GET /api/import/accounts/template` (xlsx, generated with openpyxl). Non-JSON response. | US-13.1. |
-| PM-AC-7 | High | open | New `POST /api/import/accounts/inspect` (raw xlsx body, 5 MiB route cap instead of 2 MiB), `GET /api/import/accounts/{id}`, `POST /api/import/accounts/apply`, `GET /api/import/accounts/{id}/skipped.xlsx`. Replace the 501 stub for these paths only. | D-38, D-39, D-44, D-46. |
-| PM-AC-8 | Low | open | Additive error codes `invalid_file`, `import_expired` (410), `unresolved_duplicates`, `preview_stale`, `already_applied`, `possible_duplicate`; `payload_too_large` for the import route uses the 5 MiB cap. | §10 of the contract. |
-| PM-AC-9 | Low | open | Backup reason `pre-import` added to the automatic reasons (retention as D-22); audit `source='Bulk Import'` rows for `client` `created`/`updated`; `openpyxl` (pinned) joins `server/requirements.txt`; activity sentences for Bulk Import events. | D-37, D-39. |
+| PM-AC-4 | Medium | done (2026-10-13, T-80..T-86) | **Behaviour change of a frozen route:** `POST /api/client/save` (create) returns 409 `possible_duplicate` (with candidates) when the shared similarity engine finds candidates, unless the body has the new optional `duplicates_confirmed: true`. Existing tests send the flag. | D-45: one duplicate rule for single add and import; a bypassed UI cannot create a near-duplicate. |
+| PM-AC-5 | Medium | done (2026-10-13, T-80..T-86) | New `POST /api/client/check-similar` `{name, bpid?}` -> `{exact, candidates[]}`. | Add account dialog (mockup 06). |
+| PM-AC-6 | Medium | done (2026-10-13, T-80..T-86) | New `GET /api/import/accounts/template?format=xlsx|csv`. Non-JSON response. | US-13.1. |
+| PM-AC-7 | High | done (2026-10-13, T-80..T-86) | New `POST /api/import/accounts/inspect` (raw xlsx body, 5 MiB route cap instead of 2 MiB), `GET /api/import/accounts/{id}`, `POST /api/import/accounts/apply`, `GET /api/import/accounts/{id}/skipped.xlsx`. Replace the 501 stub for these paths only. | D-38, D-39, D-44, D-46. |
+| PM-AC-8 | Low | done (2026-10-13, T-80..T-86) | Additive error codes `invalid_file`, `import_expired` (410), `unresolved_duplicates`, `preview_stale`, `already_applied`, `possible_duplicate`; `payload_too_large` for the import route uses the 5 MiB cap. | §10 of the contract. |
+| PM-AC-9 | Low | done (2026-10-13, T-80..T-86) | Backup reason `pre-import` added to the automatic reasons (retention as D-22); audit `source='Bulk Import'` rows for `client` `created`/`updated`; `openpyxl` (pinned) joins `server/requirements.txt`; activity sentences for Bulk Import events. | D-37, D-39. |
+
+
+### Backend notes (Run 3, T-80..T-86)
+All PM-AC-4..9 implemented; contract finalized in `docs/04_API_CONTRACT.md` section 10 (deviations in 10.9). User amendment: `.csv` accepted as well as `.xlsx` (content sniffing, `format` param on the template, skipped file in the upload format, `file.format/encoding/delimiter` in the preview). `POST /api/client/check-similar` added. Frontend: build against section 10 and `server/tests/fixtures/dupes_golden.json`. No schema change.

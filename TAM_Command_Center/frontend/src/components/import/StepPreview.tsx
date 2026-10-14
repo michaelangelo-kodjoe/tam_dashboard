@@ -51,7 +51,7 @@ export function StepPreview({ plan, notice }: { plan: ImportPlan; notice: string
   ];
   return (
     <div className="imp-preview">
-      <p className="muted sm imp-filechip">{plan.file.name}</p>
+      <p className="muted sm imp-filechip">{plan.file.name} · {plan.file.format === 'csv' ? 'CSV file' : 'Excel workbook (.xlsx)'}</p>
       {notice && <p role="status" className="imp-notice">{notice}</p>}
       {(plan.file.notes.length > 0 || plan.warnings.length > 0) && (
         <ul className="imp-notice imp-notice--list" aria-label="File notes">
