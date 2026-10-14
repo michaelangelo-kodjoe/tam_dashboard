@@ -53,3 +53,7 @@ The run is complete only when: QA verdict is `PASS (0 open Blocker/High)` **and*
 - Never mark a gate passed without reading the verdict line in the file.
 - If a loop iterates more than 3 times on one Blocker/High item, stop and ask the user.
 - Honest reporting: untested-on-Windows and untested-against-Bloomberg items stay flagged until verified on the target workstation (spec section 56).
+
+## Orchestrator token rules
+- Spawn subagents with `effort: medium` (user decision) and a tight prompt: task ID, files to read (by section), deliverables, hard constraints; no restating of docs the agent will read anyway.
+- Prefer one agent per phase; avoid running two big agents at once when the session limit is close.

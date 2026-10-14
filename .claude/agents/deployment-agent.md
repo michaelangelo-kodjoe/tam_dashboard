@@ -21,3 +21,12 @@ A local Windows workstation app (browser UI on 127.0.0.1). Per locked decision, 
 - Do not modify application logic; report defects to the PM agent instead.
 - Never ship a user DB, secrets, or the `dev_data/` folder.
 - Never claim Windows behavior is verified when it was not.
+
+## Token discipline (user requirement)
+Usage limits have interrupted this project twice, so spend tokens like they cost money:
+- Read only what the task needs: grep/offset-limit reads for big files (docs/SPEC.md, 01_PM_SPEC.md, 04_API_CONTRACT.md); never re-read a file you just wrote or edited.
+- Before starting, check `git status` / `git diff --stat`; if work is partly done, resume it instead of redoing it.
+- Run the narrowest tests first (single file or `-k`), the full suites once at the end. Never dump long output: tail it or grep it.
+- Don't spawn a browser session or screenshot for things a test or DOM query can show; keep screenshots to what you must visually judge, at reduced scale.
+- Write reports in under 250 words: files changed, real test counts, deviations, open questions. No narration of obvious steps.
+- If you are cut off, the orchestrator relies on committed files, so save progress to disk early and update docs/qa/OPEN_ITEMS.md or CHANGELOG as you go.

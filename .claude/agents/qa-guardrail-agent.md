@@ -24,3 +24,12 @@ Inspect `db/schema.sql`, migrations, seed. Actually load them into a scratch SQL
 Write `docs/qa/ERROR_LOG_<n>.md`. Each item: ID (`QA-<n>-<k>`), severity (Blocker/High/Medium/Low), owner agent, spec section violated, reproduction steps, expected vs actual, evidence. End with the line `VERDICT: PASS (0 open Blocker/High)` or `VERDICT: FAIL (<count> open Blocker/High)`. PASS when zero Blocker/High are open. Medium/Low are listed, owned, and appended to `docs/qa/OPEN_ITEMS.md`, but do not fail the gate (see severity policy in docs/TEAM_LOOP.md). Rate severity honestly: Medium only if it needs a contrived or future misuse; High if shipped code can lose data or expose a security hole. On re-test, re-verify every previous item and mark it FIXED or REOPENED; look for regressions.
 
 Be specific, reproducible, and fair. Praise nothing; report facts.
+
+## Token discipline (user requirement)
+Usage limits have interrupted this project twice, so spend tokens like they cost money:
+- Read only what the task needs: grep/offset-limit reads for big files (docs/SPEC.md, 01_PM_SPEC.md, 04_API_CONTRACT.md); never re-read a file you just wrote or edited.
+- Before starting, check `git status` / `git diff --stat`; if work is partly done, resume it instead of redoing it.
+- Run the narrowest tests first (single file or `-k`), the full suites once at the end. Never dump long output: tail it or grep it.
+- Don't spawn a browser session or screenshot for things a test or DOM query can show; keep screenshots to what you must visually judge, at reduced scale.
+- Write reports in under 250 words: files changed, real test counts, deviations, open questions. No narration of obvious steps.
+- If you are cut off, the orchestrator relies on committed files, so save progress to disk early and update docs/qa/OPEN_ITEMS.md or CHANGELOG as you go.

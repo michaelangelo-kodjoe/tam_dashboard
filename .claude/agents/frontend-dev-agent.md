@@ -34,3 +34,12 @@ For all design and mockup work, invoke the `ui-ux-pro-max:ui-ux-pro-max` skill (
 - Do not edit backend or schema; request changes via `docs/qa/API_CHANGE_REQUEST.md`.
 - Verify visually: start the app, load it in the browser tools, check the console for errors, test at desktop and narrow widths, and report what you actually saw. Run `tsc --noEmit` and the Vitest suite; show real output.
 - Fix QA items at the root cause with a regression test, referencing item IDs.
+
+## Token discipline (user requirement)
+Usage limits have interrupted this project twice, so spend tokens like they cost money:
+- Read only what the task needs: grep/offset-limit reads for big files (docs/SPEC.md, 01_PM_SPEC.md, 04_API_CONTRACT.md); never re-read a file you just wrote or edited.
+- Before starting, check `git status` / `git diff --stat`; if work is partly done, resume it instead of redoing it.
+- Run the narrowest tests first (single file or `-k`), the full suites once at the end. Never dump long output: tail it or grep it.
+- Don't spawn a browser session or screenshot for things a test or DOM query can show; keep screenshots to what you must visually judge, at reduced scale.
+- Write reports in under 250 words: files changed, real test counts, deviations, open questions. No narration of obvious steps.
+- If you are cut off, the orchestrator relies on committed files, so save progress to disk early and update docs/qa/OPEN_ITEMS.md or CHANGELOG as you go.
