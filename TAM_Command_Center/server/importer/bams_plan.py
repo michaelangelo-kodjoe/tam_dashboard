@@ -185,7 +185,7 @@ class BPlan:
                           [x["code"] for x in c["reasons"]], c["fills"], c["metrics_added"], c["metrics_existing"],
                           c["metrics_conflicts"]] for c in g["candidates"]])
         self.sigs: Dict[int, str] = {
-            e[0]: hashlib.sha1(json.dumps(e, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()[:12]
+            e[0]: hashlib.sha1(json.dumps(e, sort_keys=True, ensure_ascii=False, default=str).encode(), usedforsecurity=False).hexdigest()[:12]
             for e in parts if isinstance(e[0], int)}
         blob = json.dumps(parts, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
         return "sha256:" + hashlib.sha256(blob.encode()).hexdigest()
@@ -207,6 +207,9 @@ def _resolve_account(r: BRow, by_bpid: Dict[str, List[Dict[str, Any]]], by_name:
         return
     if by_b and by_n and by_b[0]["id"] != by_n[0]["id"]:
         _row_err(r, "account", "account_mismatch", f"the BPID belongs to {by_b[0]['name']} but the name is {by_n[0]['name']}")
+        return
+    if v["bpid"] and not by_b:      # QA-E5-1 (PM ruling): a BPID that matches no account is Invalid, even with a valid name
+        _row_err(r, "account", "account_not_found", f"BPID {v['bpid']} is not an account in the tracker (accounts are never created by this import)")
         return
     c = by_b[0] if by_b else (by_n[0] if by_n else None)
     if c is None:

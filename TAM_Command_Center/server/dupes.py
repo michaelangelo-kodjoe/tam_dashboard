@@ -44,7 +44,7 @@ STRONG_MIN_LEN = 3
 STRENGTH_RANK = {"High": 0, "Medium": 1, "Low": 2}
 
 _WS = re.compile(r"\s+")
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f​-‏  ‪-‮⁦-⁩﻿]")
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]")
 
 
 # ---------------------------------------------------------------- normalisation

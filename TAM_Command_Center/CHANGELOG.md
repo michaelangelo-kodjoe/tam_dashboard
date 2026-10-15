@@ -4,6 +4,12 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 
 ## [Unreleased] - 0.1.0-rc1
 
+### Fixed
+
+- QA-E5-1: BAMS import row with a valid account name but unknown BPID is Invalid (account_not_found); contract section 12 updated, test added. QA-E5-6: contract 12.4 audit reason allows "rows N, M". QA-E5-7: sha1 usedforsecurity=False; _CTRL regex uses \u escapes.
+
+- QA-E5-4: BAMS trend chart x-axis ticks deduped (one per label). QA-E5-5: import step tabs wrap and columns legend scrolls/wraps at 375 px.
+
 ### Added
 
 - 2026-10-14, pm-agent (Run 4, T-117, T-132): `docs/05_TRACEABILITY.md` section 7 added for US-14.1..16 and D-49..D-72 (PASS 46, FAIL 0, MISSING 0, DEFERRED 2: Windows toast). Re-ran pytest 606 and vitest 401, all green. PM ruling on QA-E5-1: unknown BPID with a valid name must be Invalid (backend-dev, Low). Windows, Bloomberg and toast remain untested.

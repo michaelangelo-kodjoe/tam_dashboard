@@ -28,6 +28,18 @@ function tick(ts: number, range: string): string {
   return range === '24h' ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
+/** One tick per distinct label (first occurrence), so date labels never repeat. */
+export function uniqueTicks(ts: number[], range: string, max = 7): number[] {
+  const seen = new Set<string>();
+  const out: number[] = [];
+  for (const t of ts) {
+    const l = tick(t, range);
+    if (!seen.has(l)) { seen.add(l); out.push(t); }
+  }
+  const step = Math.ceil(out.length / max);
+  return step > 1 ? out.filter((_, i) => i % step === 0) : out;
+}
+
 /** Recharts line + 30/60/90 day highs and rule thresholds. Colours come from tokens via CSS variables. */
 export function TrendChart({ trend }: { trend: BamsTrend }) {
   const data = useMemo(() => trend.points.map((p) => ({ ts: Date.parse(p.t), v: p.v })), [trend]);
@@ -53,7 +65,7 @@ export function TrendChart({ trend }: { trend: BamsTrend }) {
       <ResponsiveContainer width="100%" height={H}>
         <LineChart data={data} margin={{ top: TOP, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="2 4" vertical={false} />
-          <XAxis dataKey="ts" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(t: number) => tick(t, trend.range)} stroke="var(--border-strong)" tick={{ fill: 'var(--muted)', fontSize: 11 }} />
+          <XAxis dataKey="ts" type="number" ticks={uniqueTicks(data.map((d) => d.ts), trend.range)} scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(t: number) => tick(t, trend.range)} stroke="var(--border-strong)" tick={{ fill: 'var(--muted)', fontSize: 11 }} />
           <YAxis domain={[lo, hi]} width={48} allowDataOverflow tickFormatter={(v: number) => `${formatPlain(v)}%`} stroke="var(--border-strong)" tick={{ fill: 'var(--muted)', fontSize: 11 }} />
           <Tooltip
             contentStyle={{ background: 'var(--surface-2)', border: '1px solid var(--border-strong)', borderRadius: 4, fontSize: 12 }}

@@ -75,7 +75,7 @@ export function StepFile({ file, busy, error, onFile, onTemplate, templateBusy }
         </div>
       </div>
       <div className="bm-stl"><span className="label">Columns</span><span className="muted sm">Header names are fixed</span></div>
-      <div className="bm-box">
+      <div className="bm-box table-scroll">
         <table className="table table--compact">
           <caption className="sr-only">Import columns</caption>
           <thead><tr><th scope="col">Column</th><th scope="col">Need</th><th scope="col">Rules</th><th scope="col">Example</th></tr></thead>

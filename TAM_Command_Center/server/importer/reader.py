@@ -37,7 +37,7 @@ RAW_KEEP = 32767                      # Excel's own cell limit; raw text kept fo
 
 _CFB_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _ENC_MARK = "EncryptedPackage".encode("utf-16-le")
-_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f​-‏  ‪-‮⁦-⁩﻿]")
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]")
 _WS = re.compile(r"\s+")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _XML_EXT = (".xml", ".rels", ".vml")

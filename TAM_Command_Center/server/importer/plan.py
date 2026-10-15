@@ -95,10 +95,10 @@ class Plan:
                               [x["code"] for x in c["reasons"]], c["fills"]])
             parts.append(entry)
         self.sigs: Dict[int, str] = {
-            e[0]: hashlib.sha1(json.dumps(e, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
+            e[0]: hashlib.sha1(json.dumps(e, sort_keys=True, ensure_ascii=False).encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
             for e in parts}
         blob = json.dumps(parts, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        return "sha256:" + hashlib.sha256(blob.encode("utf-8")).hexdigest()
+        return "sha256:" + hashlib.sha256(blob.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def _cand_payload(e: "dupes.Entry", m: Dict[str, Any], file_vals: Dict[str, Any]) -> Dict[str, Any]:

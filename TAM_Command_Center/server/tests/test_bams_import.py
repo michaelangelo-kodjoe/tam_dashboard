@@ -416,3 +416,9 @@ def test_prod_import_allowed_but_no_numbers(build):
     assert res["counts"]["metrics_created"] == 1
     s = api.get("/api/bams/state").json()
     assert s["rows"][0]["freshness"] == "No Data" and s["rows"][0]["current_value"] is None and s["banner"]
+
+
+def test_valid_name_unknown_bpid_is_invalid(ia):
+    """QA-E5-1: a BPID matching no account makes the row Invalid even when the name is valid."""
+    item = inspect_ok(ia, [R(account="Acme Capital", bpid="no-such-bpid", ticker="T1")])
+    assert [e["code"] for e in item["rows"][0]["errors"]] == ["account_not_found"]

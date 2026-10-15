@@ -236,3 +236,11 @@ td.bm-why { color: var(--danger); min-width: 260px; padding: 6px 10px; height: a
 .bm-tbl--wrap .table td { white-space: normal; max-width: 420px; height: auto; padding-top: 6px; padding-bottom: 6px; overflow: visible; }
 .bm-tbl--wrap .table td.is-right { white-space: nowrap; }
 .bm-poll .select { width: 220px; }
+
+@media (max-width: 480px) {
+  .bm-steps { flex-wrap: wrap; padding: 0 var(--sp-3); }
+  .bm-steps li { flex: none; white-space: nowrap; margin-right: var(--sp-3); padding-right: 0; }
+  .bm-box.table-scroll { max-width: 100%; }
+  .bm-box.table-scroll .table th, .bm-box.table-scroll .table td { white-space: normal; overflow-wrap: break-word; padding: 6px var(--sp-2); height: auto; vertical-align: top; }
+  .bm-box.table-scroll .table { min-width: 460px; }
+}
