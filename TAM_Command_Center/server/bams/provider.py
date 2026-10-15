@@ -46,6 +46,9 @@ class BlpapiProvider(Provider):
         raise ProviderUnavailable(self.MESSAGE)
 
 
+_OPS = {">": lambda a, b: a > b, ">=": lambda a, b: a >= b, "<": lambda a, b: a < b, "<=": lambda a, b: a <= b}
+
+
 def _h(*parts: object) -> int:
     return int(hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()[:12], 16)
 
@@ -64,6 +67,7 @@ class SimulatedProvider(Provider):
         self.forced: Dict[str, float] = {}
         self.stale_tickers: Set[str] = set()
         self.stale_all = False
+        self.scenario: Dict[str, float] = {}   # QA-E5-3: per-ticker values derived from non-closed alert state
         self._lock = threading.Lock()
 
     # -- deterministic generator (percentages, 0..100)
@@ -80,6 +84,29 @@ class SimulatedProvider(Provider):
             v += 25
         return round(min(100.0, max(0.0, v)), 1)
 
+    def plan_value(self, ticker: str, now: _dt.datetime,
+                   levels: Iterable[Tuple[Optional[float], str, bool, bool]]) -> Optional[float]:
+        """QA-E5-3: pick a deterministic value that keeps seeded open alerts breaching and seeded recovered ones
+        clear. `levels` = (compare level, operator, must_breach, has_event) per rule of the metric; rules that carry a
+        seeded event outweigh event-less ones (an event-less lower rule may breach beneath an open higher one). Returns None when the
+        natural simulated value already satisfies every rule (no override needed)."""
+        rules = [(lv, op, need, ev) for lv, op, need, ev in levels if lv is not None]
+        if not rules:
+            return None
+        minute = int(now.timestamp() // 60)
+        d = 1 + (_h(self.seed, ticker, "sc", minute) % 30) / 10.0           # 1.0 .. 3.9, varies per minute
+        natural = self.value_at(ticker, now)
+        cands = [natural]
+        for lv, _op, _need, _ev in rules:
+            for c in (lv + d, lv - d, lv + 0.1, lv - 0.1):
+                cands.append(round(min(100.0, max(0.0, c)), 1))
+
+        def score(v: float) -> int:
+            return sum((10 if ev else 1) for lv, op, need, ev in rules if bool(_OPS[op](v, lv)) == need)
+
+        best = max(cands, key=score)               # max() keeps the first (natural first) among equals
+        return None if best == natural else best
+
     def availability(self) -> Tuple[bool, Optional[str]]:
         return (False, self.OUTAGE_TEXT) if self.outage else (True, None)
 
@@ -93,6 +120,8 @@ class SimulatedProvider(Provider):
                 if self.stale_all or tk in self.stale_tickers:
                     continue
                 v = self.forced.get(tk)
+                if v is None:
+                    v = self.scenario.get(tk)
                 out[tk] = Quote(v if v is not None else self.value_at(tk, now), now)
             return out
 

@@ -72,7 +72,7 @@ BAMS dashboard and appliance/metrics import verified live (pytest 606, vitest 40
 |---|---|---|---|---|
 | QA-E5-1 | Low | backend-dev / pm | Valid account name with unknown BPID is accepted silently (D-65 ambiguity) | FIXED |
 | QA-E5-2 | Low | data-architect | Seed highs above 100% for percent metrics; Mbps metric shown as % | next gate |
-| QA-E5-3 | Low | data-architect / backend-dev | First DEV poll recovers 7 of 8 seeded open alerts | next gate |
+| QA-E5-3 | Low | data-architect / backend-dev | First DEV poll recovers 7 of 8 seeded open alerts | FIXED (SimulatedProvider scenario steering; test_qa_e5_3_seeded_alert_mix_survives_polls) |
 | QA-E5-4 | Low | frontend-dev | Trend chart repeats x-axis date ticks | FIXED |
 | QA-E5-5 | Low | frontend-dev | Import step tabs/columns table clipped at 375 px | FIXED |
 | QA-E5-6 | Low | backend-dev | Audit reason "rows 2, 3" vs contract "row N" | FIXED |

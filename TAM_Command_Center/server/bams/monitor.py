@@ -129,6 +129,8 @@ class Monitor:
                 with transaction(conn):
                     backfill(conn, self.provider, now)
             metrics = repo.metric_rows(conn)
+            if self.provider.simulated:
+                self._plan_scenarios(conn, metrics, now)
             quotes = self.provider.fetch([m["ticker"] for m in metrics], now)
             with transaction(conn):
                 for m in metrics:
@@ -145,6 +147,35 @@ class Monitor:
         self.last_poll_ok, self.last_error = True, None
         log.debug("BAMS poll ok: metrics=%d updated=%d", len(metrics), updated)
         return {"polled": len(metrics), "updated": updated, "available": True}
+
+    def _plan_scenarios(self, conn: Any, metrics: List[Dict[str, Any]], now: _dt.datetime) -> None:
+        """QA-E5-3 (DEV simulator only): for metrics that carry a non-closed rule event, steer the simulated value so
+        open alerts keep breaching and recovered ones stay clear. The lifecycle engine is untouched."""
+        active: Dict[str, Dict[str, str]] = {}
+        for e in repo.active_events(conn):
+            if e["rule_id"]:
+                active.setdefault(e["metric_id"], {})[e["rule_id"]] = e["status"]
+        plan: Dict[str, float] = {}
+        for m in metrics:
+            st = active.get(m["metric_id"])
+            if not st:
+                continue
+            highs = {k: m[k] for k in ("high_30", "high_60", "high_90")}
+            levels, rules = [], repo.rules_for_metric(conn, m["metric_id"], enabled_only=True)
+            for r in rules:
+                levels.append((L.level(r, highs), r["operator"], st.get(r["id"]) == "open", r["id"] in st))
+            v = self.provider.plan_value(m["ticker"], now, levels)
+            if v is not None:
+                plan[m["ticker"]] = v
+            else:
+                v = self.provider.value_at(m["ticker"], now)
+            # A lower sibling rule with no event would open the moment a higher rule's seeded alert keeps breaching.
+            # Treat it as already acknowledged (suppress until clear) - ordinary lifecycle state, engine unchanged.
+            with transaction(conn):
+                for r in rules:
+                    if r["id"] not in st and not r["suppress_until_clear"] and L.breaches(r, v, highs):
+                        conn.execute("UPDATE bams_alert_rules SET suppress_until_clear = 1 WHERE id = :i", {"i": r["id"]})
+        self.provider.scenario = plan
 
     # ------------------------------------------------------------ ingest one new quote
     def _ingest(self, conn: Any, m: Dict[str, Any], q: Any, now: _dt.datetime, settings: Dict[str, Any],

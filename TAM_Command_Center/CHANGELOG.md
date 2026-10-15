@@ -2,6 +2,9 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased - QA-E5-3
+- Fixed: DEV simulator no longer recovers seeded open BAMS alerts on first poll. Monitor steers SimulatedProvider values per metric from non-closed alert state (open stays breaching, recovered stays clear); event-less lower sibling rules are set suppress-until-clear. Lifecycle engine unchanged; PROD never simulates. Test added.
+
 ## [Unreleased] - 0.1.0-rc1
 
 ### Fixed

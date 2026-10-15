@@ -549,3 +549,29 @@ def test_monitor_thread_polls_and_stops(build):
     calls = api.rt.bams.provider.calls
     time.sleep(0.2)
     assert api.rt.bams.provider.calls == calls
+
+
+def _status_counts(api):
+    return {r["status"]: r["n"] for r in api.sql("SELECT status, count(*) AS n FROM bams_alert_events GROUP BY status")}
+
+
+def test_qa_e5_3_seeded_alert_mix_survives_polls(build):
+    """QA-E5-3: first and later DEV polls keep seeded open alerts open and recovered ones recovered."""
+    api = build(seed=True, app_kw={"utc_base": lambda: T0, "notifier": FakeNotifier()})
+    before = _status_counts(api)
+    assert before.get("open", 0) >= 7 and before.get("recovered", 0) >= 2
+    for _ in range(4):
+        post(api, "/api/dev/bams/clock", {"advance_seconds": 60})
+        post(api, "/api/dev/bams/poll")
+        assert _status_counts(api) == before, api.sql("SELECT e.alert_type, r.operator||r.threshold||coalesce(r.reference_period,'') AS rl, e.current_value AS cv, m.high_30 AS h30, m.high_90 AS h90, m.ticker FROM bams_alert_events e LEFT JOIN bams_alert_rules r ON r.id=e.rule_id JOIN bams_metrics m ON m.id=e.metric_id WHERE e.status='recovered'")
+    # dev routes still force changes: force a seeded open rule alert to recover, then stale another
+    ev = api.sql("SELECT e.metric_id, e.id FROM bams_alert_events e WHERE e.status='open' AND e.rule_id IS NOT NULL LIMIT 1")[0]
+    post(api, "/api/dev/bams/clock", {"advance_seconds": 60})
+    post(api, "/api/dev/bams/force-value", {"metric_id": ev["metric_id"], "value": 1})
+    row = api.sql("SELECT status FROM bams_alert_events WHERE id = ?", (ev["id"],))[0]
+    assert row["status"] == "recovered"
+    mid = api.sql("SELECT metric_id FROM bams_alert_events WHERE status='open' AND rule_id IS NOT NULL LIMIT 1")[0]["metric_id"]
+    post(api, "/api/dev/bams/simulate-stale", {"metric_id": mid, "on": True})
+    post(api, "/api/dev/bams/clock", {"advance_seconds": 600})
+    post(api, "/api/dev/bams/poll")
+    assert api.sql("SELECT status FROM bams_alert_events WHERE metric_id = ? AND rule_id IS NOT NULL AND status<>'closed'", (mid,))[0]["status"] == "open"
