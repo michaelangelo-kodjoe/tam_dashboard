@@ -88,3 +88,12 @@ New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `t
 | QA-6-2 | Low | data-architect / orchestrator | Running dev DB stale (AMER/EMEA regions, 1 of 25 East/West); reseed | FIXED: stale dev_data/tam_dev.db* deleted, next DEV start reseeds |
 | QA-6-3 | Low | data-architect | Seeded records copy quarter version, hiding auto-apply | FIXED: seeded quarter records have no own target_version except 2 overrides (brs-sapi-ny-01, hfa-bpipe-ldn-01); mock_data.json and Today parity fixtures regenerated |
 | QA-6-4 | Low | backend-dev | bandit B608 false positives need nosec | FIXED: # nosec B608 with reason on all false positives; bandit shows no B608 |
+| D-112 | Low | backend-dev | Renaming an appliance in BAMS orphaned its Operations record | FIXED: rename carries records (audited); collision with an existing record of the new name in the same quarter refused 409; contract 13.8; tests in test_operations.py |
+
+## Run 5 frontend polish (2026-10-15, user-approved)
+| ID | Sev | Owner | Item | Check at |
+|---|---|---|---|---|
+| OPS-FE-1 | Low | frontend-dev | Operations status control was a plain Select | FIXED: colored status badge trigger and badge options (Select `renderValue`), same combobox keyboard/ARIA; Vitest in Operations.test.tsx |
+| OPS-FE-2 | Low | frontend-dev | Workspace "Open in Operations" link missing (D-117) | FIXED: Infrastructure tab, Server upgrades panel, link `/operations?q=<account name>` (default quarter, account auto-expanded); Vitest |
+| OPS-FE-3 | Low | frontend-dev | Enter did not submit Operations dialogs | FIXED: Enter in a single-line input submits quarter, appliance and Set version dialogs (textarea and Select menus unaffected); Vitest |
+

@@ -18,7 +18,8 @@ import { REFRESH_MS } from '../bams/common';
  * upgrades stay read-only here (Operations owns them). `?server=` highlights and scrolls to a matching appliance or upgrade.
  */
 export function InfrastructureTab({ q, clientId }: { q: QueryResult<Infrastructure>; clientId: string }) {
-  const { today } = useApp();
+  const { today, accountById } = useApp();
+  const accountName = accountById(clientId)?.name ?? '';
   const [params] = useSearchParams();
   const server = params.get('server')?.trim().toLowerCase() ?? null;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -108,7 +109,7 @@ export function InfrastructureTab({ q, clientId }: { q: QueryResult<Infrastructu
       {q.loading && <SkeletonRows rows={3} label="Loading upgrades" />}
       {q.error ? <ErrorBanner error={q.error} onRetry={q.reload} title="Could not load infrastructure" /> : null}
       {q.data && (
-        <Panel title="Server upgrades" count={q.data.upgrades.length}>
+        <Panel title="Server upgrades" count={q.data.upgrades.length} actions={<Link to={`/operations?q=${encodeURIComponent(accountName)}`} className="btn btn--ghost btn--sm"><span className="btn__label">Open in Operations</span><span className="btn__icon"><ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" /></span></Link>}>
           <DataTable caption="Server upgrades" columns={upCols} rows={q.data.upgrades} rowKey={(u) => u.id} highlight={(u) => match(u.server_name)} empty={<EmptyState>No server upgrade records for this account.</EmptyState>} defaultSort={{ key: 'date', dir: 'desc' }} />
         </Panel>
       )}

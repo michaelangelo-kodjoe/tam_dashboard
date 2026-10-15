@@ -95,4 +95,67 @@ describe('Operations page', () => {
     await boot(`/operations?appliance=${r.object_id}`, ds);
     expect(await screen.findByRole('dialog', { name: `Edit ${r.appliance}` })).toBeInTheDocument();
   });
+
+  it('status is a colored badge that opens the menu; choosing persists (keyboard and ARIA kept)', async () => {
+    const { user, ds } = await boot();
+    const d = await ds.getOperations({});
+    await user.click(screen.getByRole('button', { name: 'Expand all accounts' }));
+    const r = d.groups[0].rows.find((x) => x.status === 'Planned') ?? d.groups[0].rows[0];
+    const trig = screen.getByRole('combobox', { name: `Status for ${r.appliance}` });
+    expect(trig.querySelector('.badge')).toHaveTextContent(r.status);
+    trig.focus();
+    await user.keyboard('{Enter}');
+    const opts = await screen.findAllByRole('option');
+    expect(opts.map((o) => o.textContent)).toEqual(expect.arrayContaining(['Planned', 'Deferred']));
+    expect(opts[0].querySelector('.badge')).not.toBeNull();
+    await user.click(screen.getByRole('option', { name: 'Deferred' }));
+    await waitFor(async () => {
+      const row = (await ds.getOperations({})).groups.flatMap((g) => g.rows).find((x) => x.object_id === r.object_id)!;
+      expect(row.status).toBe('Deferred');
+    });
+  });
+
+  it('Enter in a text input submits the dialogs; Enter in the note textarea does not', async () => {
+    const ds = newMock();
+    const d = await ds.getOperations({});
+    const r = d.groups[0].rows[0];
+    const { user } = await boot(`/operations?appliance=${r.object_id}`, ds);
+    const dlg = await screen.findByRole('dialog', { name: `Edit ${r.appliance}` });
+    await user.type(within(dlg).getByLabelText('Note'), 'line one{Enter}line two');
+    expect(screen.getByRole('dialog', { name: `Edit ${r.appliance}` })).toBeInTheDocument();
+    expect(within(dlg).getByLabelText('Note')).toHaveValue('line one\nline two');
+    await user.type(within(dlg).getByLabelText('Target version'), '8.8.8{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const after = (await ds.getOperations({})).groups.flatMap((g) => g.rows).find((x) => x.object_id === r.object_id)!;
+    expect(after).toMatchObject({ notes: 'line one\nline two', version: { own: '8.8.8' } });
+
+    await user.click(screen.getByRole('button', { name: 'Edit quarter' }));
+    const q = await screen.findByRole('dialog', { name: /^Edit / });
+    await user.type(within(q).getByLabelText('Target version'), '1{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('Enter in the Set version field applies it', async () => {
+    const { user, ds } = await boot();
+    const d = await ds.getOperations({});
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getByRole('button', { name: 'Expand all accounts' }));
+    await user.click(screen.getByRole('checkbox', { name: `Select all ${d.groups[0].client_name}` }));
+    await user.click(screen.getByRole('button', { name: 'Set version' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Set version' });
+    await user.type(within(dlg).getByLabelText(/Target version/), '6.6.6{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const g = (await ds.getOperations({})).groups[0];
+    expect(g.rows.some((x) => x.version.own === '6.6.6')).toBe(true);
+  });
+
+  it('the Workspace Infrastructure tab links to Operations filtered by the account name', async () => {
+    const ds = newMock();
+    const d = await ds.getOperations({});
+    const g = d.groups[0];
+    window.history.pushState({}, '', `/accounts/${g.client_id}/infrastructure`);
+    render(<App ds={ds} />);
+    const link = await screen.findByRole('link', { name: /Open in Operations/ });
+    expect(link).toHaveAttribute('href', `/operations?q=${encodeURIComponent(g.client_name)}`);
+  });
 });

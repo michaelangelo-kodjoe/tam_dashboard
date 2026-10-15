@@ -5,12 +5,20 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 ## Unreleased - Run 5 Operations DEV seed (T-166)
 - Changed: DEV mock seed (`db/seed_mock.py`, `db/mock_data.json`): PROD appliances now carry Region East/West (3 left on EMEA = "Set East or West"); 2 DEV appliances (NWH, KMC) added on an isolated RNG/id stream so no other seeded value moved; next quarter (2027 Q1) has no PROD West date; server_upgrades gain one date override (kmc-bpipe-hk-01, 2026 Q4) and one version override (brs-sapi-ny-01, 7.2.0-rc2). Existing quarters/status mix/overdue (BRS DEV In Progress) already covered. No schema change. 636 tests pass.
 
+## Unreleased - Run 5 Operations frontend polish
+- Changed: Operations status is a colored badge button opening the status menu (Select gains optional `renderValue`; keyboard/ARIA unchanged). Header chevron toggles expand/collapse all; checkboxes and Select all appear only in selection mode ("Select" button).
+- Added: Workspace Infrastructure tab link "Open in Operations" (`/operations?q=<account name>`, D-117). Enter in a text input submits the Operations dialogs (`pages/operations/enterSubmit.ts`).
+- Items OPS-FE-1..3 in `docs/qa/OPEN_ITEMS.md`.
+
 ## Unreleased - Run 5 Operations frontend (T-171)
 - Added: `/operations` page (replaces the placeholder; rail "Later" tag removed): quarter select with Edit/Add quarter and DEV/East/West date chips, summary line, filters (search, status, environment, polarity, Reset) in the URL, table grouped by account (collapsed by default, auto-expand on filter, Expand/Collapse all, tri-state account checkbox, Select all (N), selection bar), inline status, Set version dialog (skips named in the toast), row-edit dialog (date override, own version, note, Environment and East/West fixes through the BAMS appliance save, Reset to quarter), quarter dialog with Target version and delete (blocked message), empty states, `?quarter=2026-Q4&q=&status=&env=&pol=&appliance=` deep links, account name links to the Workspace.
 - User changes applied: no right-aligned "Target version" in the page header (column and quarter-dialog field kept); the quarter version shows as the greyed "default X", an own version carries an accent marker.
 - Added: `DataSource` methods `getOperations`, `saveOperationsQuarter`, `deleteOperationsQuarter`, `saveOperationsAppliance`, `resetOperationsAppliance`, `setOperationsVersion` (Api + Mock; `data/mock/mockOperations.ts`), `src/opsTypes.ts`, `src/lib/operations.ts`.
 - Added: BAMS import preview and result show the `operations_note` line ("N appliances need East or West set for Operations"), informational only.
 - Tests: +30 Vitest (lib, mock adapter, API adapter, page). Verified live on tam-app-dev: grouped table, select + Set version, edit + East save, no console errors. Known: `today.test.ts` parity fails after the data architect's in-progress `db/mock_data.json` extension (passes on the committed data).
+
+## Unreleased - Rename carries Operations records
+- Fixed: renaming a BAMS appliance now renames its `server_upgrades` records in the same transaction (audited); a collision with an existing record of the new name in the same quarter is refused with 409 (no merge). Import apply cannot rename. Contract 13.8; 3 tests.
 
 ## Unreleased - QA gate 6 fixes (QA-6-1..4)
 - Fixed: QA-6-1 quarter `records` and the delete-block count ignore orphan records; confirmed delete removes orphans with audit. QA-6-3 seed records follow the quarter version (2 explicit overrides kept). QA-6-4 `# nosec B608` with reasons. QA-6-2 stale DEV DB deleted (reseeds on next start). Seed `mock_data.json` and Today parity fixtures regenerated.

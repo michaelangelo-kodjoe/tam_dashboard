@@ -229,6 +229,29 @@ def _patch_metric(conn: sqlite3.Connection, obj: Dict[str, Any], mrow: Dict[str,
     return True
 
 
+def _carry_upgrade_records(conn: sqlite3.Connection, obj: Dict[str, Any], new_name: str, now: str) -> None:
+    """Renaming an appliance moves its Operations records (server_upgrades.server_name) with it, same transaction.
+    A record already stored under the new name in the same quarter (an orphan) is never merged or overwritten:
+    the rename is refused with a 409 naming the quarter."""
+    from ..ops import repo as ops_repo
+    recs = ops_repo.records_named(conn, obj["client_id"], obj["name"])
+    for r in recs:
+        for o in ops_repo.records_named(conn, obj["client_id"], new_name):
+            if o["id"] != r["id"] and o["schedule_year"] == r["schedule_year"] and o["schedule_quarter"] == r["schedule_quarter"] \
+                    and (r["schedule_year"] is not None or (o["scheduled_date"] or "") == (r["scheduled_date"] or "")):
+                lab = f"{o['schedule_year']} {o['schedule_quarter']}" if o["schedule_year"] else "an ad-hoc upgrade"
+                raise Conflict(f"Cannot rename: an Operations record named {new_name} already exists for {lab}. "
+                               "Reset or delete that record first, then rename.",
+                               fields={"name": "an Operations record with this name already exists"},
+                               details={"reason": "upgrade_record_collision", "quarter": lab})
+    for r in recs:
+        ops_repo.rename_record(conn, r["id"], new_name, now)
+        label = f"{new_name} {r['schedule_year']} {r['schedule_quarter']}" if r["schedule_year"] else new_name
+        write_audit(conn, category="operations", client_id=obj["client_id"], object_type="server_upgrade", object_id=r["id"],
+                    label=label, action="updated", old={"server_name": obj["name"]}, new={"server_name": new_name},
+                    reason="appliance renamed in BAMS", source="GUI")
+
+
 def object_save(rt: Any, body: ObjectSave) -> Dict[str, Any]:
     prov = body.provided("id", "expected_row_version", "metrics", "client_id")
     items = body.metrics or []
@@ -283,6 +306,8 @@ def object_save(rt: Any, body: ObjectSave) -> Dict[str, Any]:
                         _name_conflict(conn, obj["client_id"], ch["name"], obj["id"])
                     _check_batch(items, {})
                     if ch:
+                        if "name" in ch:
+                            _carry_upgrade_records(conn, obj, ch["name"], now)     # D-112 rename limit (QA-6 follow-up)
                         _apply_update(conn, "bams_objects", obj, ch, ("name", "region", "location", "environment", "enabled"))
                         _audit(conn, "bams_object", "updated", obj["id"], obj["name"], client_id=obj["client_id"],
                                old={k: obj[k] for k in ch}, new=dict(ch))

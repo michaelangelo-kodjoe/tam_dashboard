@@ -6,6 +6,7 @@ import { Select } from '../../components/ui/Select';
 import { DateField, Field, TextInput } from '../../components/ui/Fields';
 import { useToast } from '../../components/ui/Toast';
 import { DataSourceError } from '../../data/DataSource';
+import { enterSubmit } from './enterSubmit';
 import { useData } from '../../store/DataContext';
 import type { OpsQuarter, OpsQuarterName } from '../../opsTypes';
 
@@ -87,6 +88,7 @@ export function QuarterDialog({ quarter, today, onClose, onSaved, onDeleted }: {
         </>
       }
     >
+      <div onKeyDown={enterSubmit(submit, busy)}>
       {formError && <p role="alert" className="field__error ops-formerr">{formError}</p>}
       <div className="ops-grid2">
         <Field label="Year" required error={errors.year}>{(p) => <TextInput id={p.id} inputMode="numeric" maxLength={4} value={year} disabled={edit} onChange={(e) => setYear(e.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} />}</Field>
@@ -98,6 +100,7 @@ export function QuarterDialog({ quarter, today, onClose, onSaved, onDeleted }: {
       <Field label="DEV date" error={errors.dev}>{(p) => <DateField id={p.id} value={dev} onChange={setDev} today={today} invalid={p.invalid} describedBy={p.describedBy} />}</Field>
       <Field label="PROD East date" error={errors.east}>{(p) => <DateField id={p.id} value={east} onChange={setEast} today={today} invalid={p.invalid} describedBy={p.describedBy} />}</Field>
       <Field label="PROD West date" error={errors.west}>{(p) => <DateField id={p.id} value={west} onChange={setWest} today={today} invalid={p.invalid} describedBy={p.describedBy} />}</Field>
+      </div>
     </Dialog>
   );
 }

@@ -102,3 +102,13 @@ def update_record(conn: sqlite3.Connection, rec_id: str, v: Dict[str, Any], now:
 
 def delete_record(conn: sqlite3.Connection, rec_id: str) -> int:
     return conn.execute("DELETE FROM server_upgrades WHERE id = :i", {"i": rec_id}).rowcount
+
+
+def records_named(conn: sqlite3.Connection, client_id: str, name: str) -> List[Dict[str, Any]]:
+    return [dict(r) for r in conn.execute("SELECT * FROM server_upgrades WHERE client_id = :c AND server_name = :n",
+                                          {"c": client_id, "n": name})]
+
+
+def rename_record(conn: sqlite3.Connection, rec_id: str, new_name: str, now: str) -> None:
+    conn.execute("UPDATE server_upgrades SET server_name = :n, updated_at = :now, row_version = row_version + 1 WHERE id = :i",
+                 {"n": new_name, "i": rec_id, "now": now})

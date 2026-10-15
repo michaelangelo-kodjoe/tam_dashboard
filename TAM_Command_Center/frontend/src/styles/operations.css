@@ -41,3 +41,6 @@
 .ops-delnote { align-self: center; }
 @media (max-width: 767px) { .ops-grid2 { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .ops-chev { transition: none; } }
+.select.ops-statussel { min-width: 0; width: auto; background: transparent; border-color: transparent; padding: 0 4px; }
+.select.ops-statussel:hover { border-color: var(--border-control); background: var(--surface-3); }
+.select.ops-statussel.is-open { border-color: var(--border-control); background: var(--surface-3); }

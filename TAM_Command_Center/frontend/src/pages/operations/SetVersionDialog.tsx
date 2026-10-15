@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Field, TextInput } from '../../components/ui/Fields';
 import { useToast } from '../../components/ui/Toast';
 import { DataSourceError } from '../../data/DataSource';
+import { enterSubmit } from './enterSubmit';
 import { useData } from '../../store/DataContext';
 import type { OpsQuarter, OpsSetVersionResult } from '../../opsTypes';
 
@@ -30,10 +31,12 @@ export function SetVersionDialog({ quarter, ids, onClose, onDone }: { quarter: O
       title="Set version" width={460} onClose={onClose} onSubmitShortcut={submit}
       footer={<><span className="ops-spacer" /><Button onClick={onClose}>Cancel</Button><Button variant="primary" busy={busy} onClick={submit}>{version.trim() ? 'Set version' : 'Clear version'}</Button></>}
     >
+      <div onKeyDown={enterSubmit(submit, busy)}>
       <p className="ops-lead">Apply to <b className="num">{n}</b> {n === 1 ? 'appliance' : 'appliances'} in {quarter.label}.</p>
       <Field label="Target version" error={err ?? undefined} hint={`Leave blank to clear and follow the quarter default${quarter.target_version ? ` (${quarter.target_version})` : ''}. Status, date and note are not changed.`}>
         {(p) => <TextInput id={p.id} autoFocus maxLength={50} value={version} onChange={(e) => { setVersion(e.target.value); setErr(null); }} placeholder="e.g. 5.0.1" invalid={p.invalid} aria-describedby={p.describedBy} />}
       </Field>
+      </div>
     </Dialog>
   );
 }

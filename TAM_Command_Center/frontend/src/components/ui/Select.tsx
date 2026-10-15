@@ -30,6 +30,8 @@ export interface SelectProps {
   'aria-invalid'?: boolean;
   'aria-required'?: boolean;
   className?: string;
+  /** Custom content for the closed trigger and the options (e.g. a status badge). Accessible name comes from the label props. */
+  renderValue?: (o: SelectOption) => ReactNode;
 }
 
 const CLEAR = '';
@@ -57,7 +59,7 @@ export function stepIndex(opts: { disabled?: boolean }[], from: number, dir: 1 |
  */
 export function Select({
   value, onChange, options, placeholder = 'Select…', clearable, clearLabel = 'None', size = 'md', name, id,
-  disabled, labelledBy, className, ...aria
+  disabled, labelledBy, className, renderValue, ...aria
 }: SelectProps) {
   const autoId = useId();
   const listId = `${autoId}-list`;
@@ -245,7 +247,7 @@ export function Select({
       >
         <span className="select__value truncate">
           {selected?.icon && <span className="select__icon" aria-hidden="true">{selected.icon}</span>}
-          {selected ? selected.label : placeholder}
+          {selected ? (renderValue ? renderValue(selected) : selected.label) : placeholder}
         </span>
         <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" className="select__chev" />
       </button>
@@ -278,7 +280,7 @@ export function Select({
                 >
                   <span className="option__check" aria-hidden="true">{isSel && <Check size={16} strokeWidth={1.5} />}</span>
                   {o.icon && <span className="option__icon" aria-hidden="true">{o.icon}</span>}
-                  <span className="truncate">{o.label}</span>
+                  <span className="truncate">{renderValue ? renderValue(o) : o.label}</span>
                 </li>
               );
             })}

@@ -316,3 +316,39 @@ def test_orphan_records_not_counted_and_cleared_on_quarter_delete(op):
     op.ok("/api/operations/quarter/delete", {"year": 2026, "quarter": "Q4", "confirm": True})
     assert op.sql("SELECT count(*) n FROM server_upgrades")[0]["n"] == 0
     assert [a["action"] for a in op.audit(object_type="server_upgrade")] == ["deleted"]
+
+
+def test_rename_carries_operations_record(op):
+    q4(op)
+    save(op, "A-WEST", status="Scheduled", target_version="6.6")
+    ov = op.sql("SELECT row_version v FROM bams_objects WHERE name='A-WEST'")[0]["v"]
+    op.ok("/api/bams/object/save", {"id": oid(op, "A-WEST"), "name": "A-WEST-2", "expected_row_version": ov})
+    assert op.sql("SELECT server_name FROM server_upgrades")[0]["server_name"] == "A-WEST-2"
+    r = rows(op)[1]["A-WEST-2"]
+    assert r["status"] == "Scheduled" and r["version"]["own"] == "6.6" and r["record_id"]
+    a = [x for x in op.audit(object_type="server_upgrade") if x["reason"] == "appliance renamed in BAMS"]
+    assert len(a) == 1 and a[0]["category"] == "operations"
+    # case-only rename keeps the record too
+    ov = op.sql("SELECT row_version v FROM bams_objects WHERE name='A-WEST-2'")[0]["v"]
+    op.ok("/api/bams/object/save", {"id": oid(op, "A-WEST-2"), "name": "a-west-2", "expected_row_version": ov})
+    assert rows(op)[1]["a-west-2"]["status"] == "Scheduled"
+
+
+def test_rename_collision_with_orphan_record_is_refused_atomically(op):
+    q4(op)
+    save(op, "A-WEST", status="Scheduled")
+    op.exec("INSERT INTO server_upgrades (id, client_id, server_name, environment, polarity, schedule_year, schedule_quarter)"
+            " VALUES ('orph2', ?, 'TAKEN', 'DEV', 'DEV', 2026, 'Q4')", (op.cid,))
+    ov = op.sql("SELECT row_version v FROM bams_objects WHERE name='A-WEST'")[0]["v"]
+    e = op.err("/api/bams/object/save", {"id": oid(op, "A-WEST"), "name": "TAKEN", "expected_row_version": ov}, 409, "conflict")
+    assert "2026 Q4" in e["message"]
+    assert op.sql("SELECT name FROM bams_objects WHERE id = ?", (oid(op, "A-WEST"),))[0]["name"] == "A-WEST"
+    assert op.sql("SELECT count(*) n FROM server_upgrades WHERE server_name='A-WEST'")[0]["n"] == 1
+
+
+def test_bams_import_apply_never_renames(op):
+    q4(op)
+    save(op, "A-WEST", status="Scheduled")
+    item = inspect_ok(op, [R(appliance="A-WEST", metric="CPU", ticker="O.W", location="NY")])
+    apply(op, item)
+    assert rows(op)[1]["A-WEST"]["status"] == "Scheduled"

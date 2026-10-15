@@ -6,6 +6,7 @@ import { Select } from '../../components/ui/Select';
 import { DateField, Field, TextArea, TextInput } from '../../components/ui/Fields';
 import { useToast } from '../../components/ui/Toast';
 import { DataSourceError } from '../../data/DataSource';
+import { enterSubmit } from './enterSubmit';
 import { useData } from '../../store/DataContext';
 import { OPS_STATUSES, type OpsApplianceInput, type OpsQuarter, type OpsRow } from '../../opsTypes';
 import type { BamsObjectInput } from '../../bamsTypes';
@@ -87,6 +88,7 @@ export function ApplianceEditDialog({ row, quarter, today, onClose }: { row: Ops
         </>
       }
     >
+      <div onKeyDown={enterSubmit(submit, busy)}>
       <p className="ops-lead muted">{row.client_name} &middot; {quarter.label}</p>
       {formError && <p role="alert" className="field__error ops-formerr">{formError}</p>}
       <div className="ops-grid2">
@@ -99,6 +101,7 @@ export function ApplianceEditDialog({ row, quarter, today, onClose }: { row: Ops
         {(p) => <TextInput id={p.id} maxLength={50} value={version} onChange={(e) => setVersion(e.target.value)} placeholder={quarter.target_version ?? ''} invalid={p.invalid} aria-describedby={p.describedBy} />}
       </Field>
       <Field label="Note" error={errors.notes}>{(p) => <TextArea id={p.id} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} invalid={p.invalid} />}</Field>
+      </div>
     </Dialog>
   );
 }

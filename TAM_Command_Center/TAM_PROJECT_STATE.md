@@ -160,3 +160,4 @@ Real Bloomberg provider is built and fake-session tested only. Left for later, t
 - T-169 (2026-10-14): Operations mockups v2 delivered in mockups/operations/ (replaced rejected v1): operations page + 1024 frame, quarter dialog, appliance edit, empty states, BAMS import additions. Awaiting user approval (gates T-171).
 
 - T-171 (2026-10-15): Operations UI built against contract section 13 (see CHANGELOG). Header Target version display removed per user; quarter version is the greyed default. Live-verified on tam-app-dev; 424 Vitest pass, 3 Today parity tests fail only on the data architect's uncommitted mock_data.json change.
+- Run 5 frontend polish (2026-10-15): status badge menu, Workspace Open in Operations link, Enter submits Operations dialogs, header expand toggle, selection mode (OPS-FE-1..3).

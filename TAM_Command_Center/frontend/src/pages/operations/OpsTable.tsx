@@ -3,10 +3,14 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
+import { StatusBadge, type Tone } from '../../components/ui/Badges';
 import { accountPath } from '../../lib/links';
 import { groupIds, summaryText, triState, type Tri } from '../../lib/operations';
 import type { OpsGroup, OpsRow } from '../../opsTypes';
 import { statusOptions } from './ApplianceEditDialog';
+
+const OPS_TONES: Record<string, Tone> = { Planned: 'neutral', 'Awaiting Client': 'warning', Scheduled: 'info', 'In Progress': 'info', Completed: 'success', Deferred: 'neutral', 'Validation Required': 'warning', Exception: 'danger' };
+export const opsTone = (s: string): Tone => OPS_TONES[s] ?? 'neutral';
 
 export function TriCheck({ state, label, onChange }: { state: Tri; label: string; onChange: () => void }) {
   const ref = useRef<HTMLInputElement>(null);
@@ -106,7 +110,7 @@ function GroupRows({ selecting, g, open, tri, selected, onToggleOpen, onToggleGr
           <td><VersionCell r={r} /></td>
           <td>
             <span className="ops-status">
-              <Select size="sm" value={r.status} onChange={(v) => v && v !== r.status && onStatus(r, v)} options={statusOptions(r.status)} aria-label={`Status for ${r.appliance}`} className="ops-statussel" />
+              <Select size="sm" value={r.status} onChange={(v) => v && v !== r.status && onStatus(r, v)} options={statusOptions(r.status)} aria-label={`Status for ${r.appliance}`} className="ops-statussel" renderValue={(o) => <StatusBadge value={o.value} tone={opsTone(o.value)} />} />
               {r.status_is_default && <span className="sr-only"> (default)</span>}
             </span>
           </td>
