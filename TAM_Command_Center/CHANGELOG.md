@@ -2,6 +2,9 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased - BlpapiProvider
+- Added: real read-only `BlpapiProvider` (lazy blpapi import, refdata PX_LAST snapshots in batches of 500, per-ticker invalid/no-value handling, ProviderUnavailable on start/terminate/Terminal-down, new session next poll). Response parsing isolated in `server/bams/blpapi_parse.py`. `tools/bloomberg_probe.py` for the workstation, `env_check.py` reports blpapi version and Terminal reachability. PROD unavailable message is now "BLPAPI is not installed ..." or "Bloomberg Terminal not reachable ..." (was a fixed stub text). Tested with a fake module only.
+
 ## Unreleased - QA-E5-3
 - Fixed: DEV simulator no longer recovers seeded open BAMS alerts on first poll. Monitor steers SimulatedProvider values per metric from non-closed alert state (open stays breaching, recovered stays clear); event-less lower sibling rules are set suppress-until-clear. Lifecycle engine unchanged; PROD never simulates. Test added.
 

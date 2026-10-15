@@ -1,5 +1,5 @@
 """BAMS data providers (D-49, D-50). The provider is chosen from the app MODE only:
-DEV -> SimulatedProvider, PROD -> BlpapiProvider (a stub that reports unavailable in this run).
+DEV -> SimulatedProvider, PROD -> BlpapiProvider (real read-only Desktop API poller; unavailable when blpapi/Terminal are absent).
 No setting, env var or route can switch this; PROD never constructs the simulator (fail closed).
 All BAMS metric values are percentages (user decision 2026-10-14); no unit is stored."""
 from __future__ import annotations
@@ -8,8 +8,9 @@ import datetime as _dt
 import hashlib
 import math
 import threading
+import time
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 @dataclass(frozen=True)
@@ -35,15 +36,186 @@ class Provider:
 
 
 class BlpapiProvider(Provider):
-    """Stub: the real Bloomberg session is not implemented in this run, so it is always unavailable."""
+    """Read-only Bloomberg Desktop API snapshot poller (ReferenceDataRequest). blpapi is imported lazily so the app
+    runs without it. Every failure becomes ProviderUnavailable (whole poll) or an absent ticker (per ticker);
+    nothing else escapes. Response parsing lives in blpapi_parse.py ([U] shapes, see docs/BLPAPI_NOTES.md)."""
     kind = "blpapi"
-    MESSAGE = "BLPAPI provider not implemented/connected"
+    HOST = "localhost"
+    PORT = 8194
+    SERVICE = "//blp/refdata"
+    FIELD = "PX_LAST"              # constant: no setting exists for it (settings routes are fixed by the contract)
+    BATCH_SIZE = 500               # [U] max securities per request; lower this if the Terminal rejects big requests
+    REQUEST_TIMEOUT_S = 30.0       # hard deadline for one request (all its events)
+    EVENT_WAIT_MS = 1000
+    PROBE_TIMEOUT_S = 1.0
+    NOT_INSTALLED = "BLPAPI is not installed (python -m pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi)"
+
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, field: Optional[str] = None,
+                 batch_size: Optional[int] = None, blpapi_module: Any = None, probe: Any = None) -> None:
+        self.host = host or self.HOST
+        self.port = int(port or self.PORT)
+        self.field = field or self.FIELD
+        self.batch_size = max(1, int(batch_size or self.BATCH_SIZE))
+        self._injected = blpapi_module           # tests inject a fake module; production leaves this None
+        self._probe = probe                      # tests may inject a reachability probe
+        self._session: Any = None
+        self._lock = threading.Lock()
+        self._last: Dict[str, float] = {}        # ticker -> last value seen
+        self._changed: Dict[str, _dt.datetime] = {}   # ticker -> when the value last changed (our source_update)
+        self.last_problems: Dict[str, str] = {}  # ticker -> reason, for the latest poll (no values logged)
+
+    # -- environment
+    def _module(self) -> Any:
+        if self._injected is not None:
+            return self._injected
+        try:
+            import blpapi  # type: ignore  # lazy: absent on dev machines
+            return blpapi
+        except Exception:  # noqa: BLE001 - ImportError or a broken native install
+            return None
+
+    def _reachable(self) -> bool:
+        if self._probe is not None:
+            return bool(self._probe(self.host, self.port))
+        import socket
+        try:
+            with socket.create_connection((self.host, self.port), timeout=self.PROBE_TIMEOUT_S):
+                return True
+        except OSError:
+            return False
+
+    def environment(self) -> Dict[str, Any]:
+        """Installed/version/reachability facts (never raises, opens no Bloomberg session)."""
+        m = self._module()
+        info: Dict[str, Any] = {"installed": m is not None, "version": None, "cpp_version": None,
+                                "host": self.host, "port": self.port, "terminal_reachable": None}
+        if m is not None:
+            for key, fn in (("version", "version"), ("cpp_version", "cpp_sdk_version")):
+                try:
+                    info[key] = str(getattr(m, fn)())
+                except Exception:  # noqa: BLE001
+                    pass
+            info["terminal_reachable"] = self._reachable()
+        return info
 
     def availability(self) -> Tuple[bool, Optional[str]]:
-        return False, self.MESSAGE
+        try:
+            if self._module() is None:
+                return False, self.NOT_INSTALLED
+            if not self._reachable():
+                return False, (f"Bloomberg Terminal not reachable on {self.host}:{self.port}. "
+                               "Start the Terminal, log in, and check the Desktop API is enabled.")
+            return True, None
+        except Exception:  # noqa: BLE001
+            return False, "BLPAPI availability check failed"
+
+    # -- session
+    def _drop_session(self) -> None:
+        s, self._session = self._session, None
+        if s is not None:
+            try:
+                s.stop()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _open(self, m: Any) -> Any:
+        if self._session is not None:
+            return self._session
+        try:
+            opts = m.SessionOptions()
+            opts.setServerHost(self.host)
+            opts.setServerPort(self.port)
+            sess = m.Session(opts)
+        except Exception as exc:  # noqa: BLE001
+            raise ProviderUnavailable("Could not create a Bloomberg session (%s)" % type(exc).__name__)
+        try:
+            started = sess.start()
+        except Exception:  # noqa: BLE001
+            started = False
+        if not started:
+            self._stop_quiet(sess)
+            raise ProviderUnavailable("Bloomberg session failed to start. Is the Terminal running and logged in?")
+        try:
+            opened = sess.openService(self.SERVICE)
+        except Exception:  # noqa: BLE001
+            opened = False
+        if not opened:
+            self._stop_quiet(sess)
+            raise ProviderUnavailable("Bloomberg refdata service could not be opened. Is the Terminal logged in?")
+        self._session = sess
+        return sess
+
+    @staticmethod
+    def _stop_quiet(sess: Any) -> None:
+        try:
+            sess.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _request(self, m: Any, sess: Any, batch: List[str]) -> Dict[str, Tuple[Optional[float], Optional[str]]]:
+        from . import blpapi_parse as bp
+        svc = sess.getService(self.SERVICE)
+        req = svc.createRequest("ReferenceDataRequest")
+        for t in batch:
+            req.getElement("securities").appendValue(t)
+        req.getElement("fields").appendValue(self.field)
+        sess.sendRequest(req)
+        results: Dict[str, Tuple[Optional[float], Optional[str]]] = {}
+        deadline = time.monotonic() + self.REQUEST_TIMEOUT_S
+        ET = m.Event
+        while True:
+            if time.monotonic() > deadline:
+                raise ProviderUnavailable("Bloomberg request timed out")
+            ev = sess.nextEvent(self.EVENT_WAIT_MS)
+            et = ev.eventType()
+            if et == ET.TIMEOUT:
+                continue
+            for msg in ev:
+                mt = bp.message_type(msg)
+                if et in (ET.SESSION_STATUS, ET.SERVICE_STATUS) and mt in bp.FATAL_SESSION_MESSAGES:
+                    raise ProviderUnavailable("Bloomberg session lost (%s). Will reconnect on the next poll." % mt)
+                if et in (ET.RESPONSE, ET.PARTIAL_RESPONSE):
+                    err = bp.response_error(msg)
+                    if err:
+                        raise ProviderUnavailable("Bloomberg rejected the request: " + err)
+                    results.update(bp.parse_refdata_message(msg, self.field))
+                elif et == ET.REQUEST_STATUS:
+                    raise ProviderUnavailable("Bloomberg request failed")
+            if et == ET.RESPONSE:
+                return results
 
     def fetch(self, tickers: Iterable[str], now: _dt.datetime) -> Dict[str, Quote]:
-        raise ProviderUnavailable(self.MESSAGE)
+        tickers = list(dict.fromkeys(t for t in tickers if t))
+        with self._lock:
+            m = self._module()
+            if m is None:
+                raise ProviderUnavailable(self.NOT_INSTALLED)
+            problems: Dict[str, str] = {}
+            out: Dict[str, Quote] = {}
+            try:
+                if not tickers:
+                    return out
+                sess = self._open(m)
+                for i in range(0, len(tickers), self.batch_size):
+                    batch = tickers[i:i + self.batch_size]
+                    got = self._request(m, sess, batch)
+                    for t in batch:
+                        v, why = got.get(t, (None, "missing from response"))
+                        if v is None:
+                            problems[t] = why or "no value"
+                            continue
+                        if self._last.get(t) != v or t not in self._changed:
+                            self._last[t], self._changed[t] = v, now
+                        out[t] = Quote(v, self._changed[t])
+            except ProviderUnavailable:
+                self._drop_session()
+                raise
+            except Exception as exc:  # noqa: BLE001 - never raise anything else into the monitor
+                self._drop_session()
+                raise ProviderUnavailable("Bloomberg poll failed (%s). Will reconnect on the next poll." % type(exc).__name__)
+            finally:
+                self.last_problems = problems
+            return out
 
 
 _OPS = {">": lambda a, b: a > b, ">=": lambda a, b: a >= b, "<": lambda a, b: a < b, "<=": lambda a, b: a <= b}

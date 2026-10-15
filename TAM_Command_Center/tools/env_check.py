@@ -157,8 +157,18 @@ def check_blpapi(mode: str, core_only: bool) -> None:
     try:
         import blpapi  # type: ignore
         ver = getattr(blpapi, "__version__", None) or getattr(blpapi, "version", lambda: "version n/a")()
-        report("PASS", "BLPAPI (blpapi module) importable", str(ver))
-        report("INFO", "BLPAPI session", "not opened; connectivity to the Bloomberg terminal is NOT tested by this check")
+        cpp = ""
+        try:
+            cpp = ", C++ SDK " + str(blpapi.cpp_sdk_version())
+        except Exception:
+            pass
+        report("PASS", "BLPAPI (blpapi module) importable", f"{ver}{cpp}")
+        try:
+            socket.create_connection(("localhost", 8194), timeout=2).close()
+            report("PASS", "Bloomberg Terminal reachable", "localhost:8194 accepts connections (login and entitlements NOT tested; run tools/bloomberg_probe.py)")
+        except OSError as exc:
+            lvl = "WARN" if mode == "dev" else "INFO"
+            report(lvl, "Bloomberg Terminal not reachable", f"localhost:8194 {exc.__class__.__name__}; start and log in to the Terminal (BAMS shows 'unavailable' until then)")
     except Exception as exc:
         detail = f"{exc.__class__.__name__}: {exc}"
         if mode == "dev":

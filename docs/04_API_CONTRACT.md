@@ -502,7 +502,7 @@ CSP, Origin and Host rules apply unchanged (the upload is a same-origin `fetch`)
 ```
 `desired_running` is the persisted Start/Stop choice (DEV default true; PROD default false until Start). `state` is the real state: `provider_unavailable` whenever the provider cannot deliver (PROD stub always; DEV during a simulated outage), regardless of `desired_running`. `last_error` is a short sanitized sentence or `null`. `next_poll_at` is `null` unless `state` is `running`.
 
-**Provider** (`provider`): `{"mode": "DEV|PROD", "kind": "simulated|blpapi", "available": true, "simulated": true, "message": null}`. `simulated` is true only in DEV with the simulator (UI shows the SIMULATED badge). PROD: `kind "blpapi"`, `available false`, `message "BLPAPI provider not implemented/connected"`, `simulated false`. No route can change `mode`, `kind` or `simulated`.
+**Provider** (`provider`): `{"mode": "DEV|PROD", "kind": "simulated|blpapi", "available": true, "simulated": true, "message": null}`. `simulated` is true only in DEV with the simulator (UI shows the SIMULATED badge). PROD: `kind "blpapi"`, `simulated false`; `available false` with `message` "BLPAPI is not installed ..." or "Bloomberg Terminal not reachable on localhost:8194 ..." until blpapi and the Terminal are present. No route can change `mode`, `kind` or `simulated`.
 
 **Row** (one metric; used by state, detail, and alerts context):
 ```json

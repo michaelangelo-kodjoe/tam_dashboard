@@ -331,8 +331,9 @@ def test_B_per_metric_stale_after_and_slow_poll(dev):
 def test_C_prod_fail_closed(prod):
     c, tree, dbs = prod
     s = c.get("/api/bams/state").json()
-    assert s["provider"] == {"mode": "PROD", "kind": "blpapi", "available": False, "simulated": False,
-                             "message": "BLPAPI provider not implemented/connected"}, s["provider"]
+    pv = s["provider"]
+    assert (pv["mode"], pv["kind"], pv["available"], pv["simulated"]) == ("PROD", "blpapi", False, False), pv
+    assert pv["message"] and ("not installed" in pv["message"] or "not reachable" in pv["message"]), pv
     assert s["monitor"]["state"] in ("provider_unavailable", "stopped")
     assert s["banner"]
     for r in s["rows"]:

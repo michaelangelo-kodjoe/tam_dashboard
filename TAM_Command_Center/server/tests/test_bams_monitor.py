@@ -74,8 +74,9 @@ def test_prod_never_constructs_simulator(build, monkeypatch):
     assert isinstance(api.rt.bams.provider, P.BlpapiProvider)
     s = api.get("/api/bams/state").json()
     assert s["banner"]["code"] == "provider_unavailable"
-    assert s["provider"] == {"mode": "PROD", "kind": "blpapi", "available": False, "simulated": False,
-                             "message": "BLPAPI provider not implemented/connected"}
+    pv = s["provider"]
+    assert (pv["mode"], pv["kind"], pv["available"], pv["simulated"]) == ("PROD", "blpapi", False, False), pv
+    assert pv["message"] and ("not installed" in pv["message"] or "not reachable" in pv["message"]), pv
     assert s["monitor"]["state"] == "provider_unavailable"
     assert api.post("/api/bams/monitor/start").json()["item"]["monitor"]["state"] == "provider_unavailable"
 
