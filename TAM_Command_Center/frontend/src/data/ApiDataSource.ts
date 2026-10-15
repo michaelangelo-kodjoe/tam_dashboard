@@ -18,6 +18,7 @@ import type {
   BamsImportPlan, BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRow, BamsRule,
   BamsRuleInput, BamsSettings, BamsState, BamsStateQuery, BamsTrend, TrendRange,
 } from '../bamsTypes';
+import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../opsTypes';
 import { FileRefusal, MAX_BYTES, readBytes, sniff } from './importFile';
 import { DataSourceError, type ActivityQuery, type DataSource, type ErrorCode } from './DataSource';
 
@@ -442,6 +443,29 @@ export class ApiDataSource implements DataSource {
   }
   async downloadBamsSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile> {
     return this.download(`/api/import/bams/${encodeURIComponent(importId)}/skipped.${format}`, `tam_bams_skipped.${format}`);
+  }
+
+  // ---- Operations (contract section 13) -----------------------------------------------------
+  async getOperations(q: OpsQuery): Promise<OpsData> {
+    const r = await this.request<OpsData & { ok: true }>('GET', `/api/operations${this.qs({ year: q.year, quarter: q.quarter, q: q.q?.trim(), status: q.status, environment: q.environment, polarity: q.polarity, client_id: q.client_id })}`);
+    const { ok: _ok, ...rest } = r;
+    void _ok;
+    return rest;
+  }
+  async saveOperationsQuarter(input: OpsQuarterInput): Promise<OpsQuarter> {
+    return (await this.request<{ item: OpsQuarter }>('POST', '/api/operations/quarter/save', input)).item;
+  }
+  async deleteOperationsQuarter(input: { year: number; quarter: OpsQuarterName; confirm: boolean; expected_row_version?: number }): Promise<void> {
+    await this.request('POST', '/api/operations/quarter/delete', input);
+  }
+  async saveOperationsAppliance(input: OpsApplianceInput): Promise<OpsRow> {
+    return (await this.request<{ item: OpsRow }>('POST', '/api/operations/appliance/save', input)).item;
+  }
+  async resetOperationsAppliance(input: { object_id: string; year: number; quarter: OpsQuarterName; confirm: boolean; expected_row_version?: number }): Promise<OpsRow> {
+    return (await this.request<{ item: OpsRow }>('POST', '/api/operations/appliance/reset', input)).item;
+  }
+  async setOperationsVersion(input: { year: number; quarter: OpsQuarterName; object_ids: string[]; target_version: string | null }): Promise<OpsSetVersionResult> {
+    return (await this.request<{ item: OpsSetVersionResult }>('POST', '/api/operations/appliance/set-version', input)).item;
   }
 }
 

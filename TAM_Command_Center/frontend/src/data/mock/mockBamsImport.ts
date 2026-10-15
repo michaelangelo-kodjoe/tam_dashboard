@@ -261,6 +261,7 @@ export class MockBamsImport {
       appliances: { new: appStates.filter((x) => x === 'new').length, updated: appStates.filter((x) => x === 'updated').length, unchanged: appStates.filter((x) => x === 'unchanged').length, needs_review: review.length },
       metrics: { new: count('new'), updated: count('update'), unchanged: count('unchanged') },
       warnings: s.parsed.warnings, review, rows,
+      operations_note: opsNote(rows),
     };
     plan.plan_hash = hashBams(plan);
     return plan;
@@ -347,6 +348,7 @@ export class MockBamsImport {
       decisions: labels, fields_filled: filled, audit_events: auditN, audit_breakdown: { appliance: aCreated + aUpdated, metric: mCreated },
       backup: backup ? { name: backup.name, reason: 'pre-import', size_bytes: backup.size_bytes } : null,
       touched_accounts: [...touched].map(([id, name]) => ({ id, name })), created, updated,
+      operations_note: plan.operations_note ?? null,
       skipped: [
         ...invalidRows.map((r) => ({ row: r.row, name: `${r.values.appliance ?? ''} / ${r.values.metric ?? ''}`, kind: 'invalid', reason: r.errors[0]?.text.replace(/^Row \d+: /, '').replace(/ This row will be skipped\.$/, '') ?? '' })),
         ...plan.rows.filter((r) => r.group && dec.get(r.group)?.choice === 'skip').map((r) => ({ row: r.row, name: `${r.values.appliance} / ${r.values.metric}`, kind: 'user', reason: 'Skipped by you' })),
@@ -380,4 +382,18 @@ export function hashBams(plan: BamsImportPlan): string {
 
 export function bamsTemplateRows(): string[][] {
   return [[...BAMS_HEADERS], ['Castellan Peak Global Markets', '100482', 'SAPI-01', 'CPU utilisation %', 'BAMS.CPFX.SAPI01.CPU', 'Americas', 'Chicago', 'PROD', 'Yes', '120']];
+}
+
+/** Contract 13.7 (mock approximation from the file values): appliances whose Region is not East/West or whose Environment is empty. */
+export function opsNote(rows: BamsImportRow[]): { count: number; text: string | null } {
+  const seen = new Map<string, boolean>();
+  for (const r of rows) {
+    if (r.state === 'invalid') continue;
+    const k = `${(r.values.account ?? '').toLowerCase()}|${(r.values.appliance ?? '').toLowerCase()}`;
+    const reg = (r.values.region ?? '').trim().toLowerCase();
+    const needs = (reg !== 'east' && reg !== 'west') || !(r.values.environment ?? '').trim();
+    seen.set(k, (seen.get(k) ?? false) || needs);
+  }
+  const count = [...seen.values()].filter(Boolean).length;
+  return { count, text: count ? `${count} ${count === 1 ? 'appliance needs' : 'appliances need'} East or West set for Operations` : null };
 }

@@ -817,3 +817,59 @@ As §10.5. One `Import` sheet (xlsx) or CSV, same format as the upload (other ex
 8. **Audit `source`**: `'Bulk Import'`, as accounts (the existing source value), so activity filters need no change.
 9. **Security** (§10.10 applies): rows only in memory, nothing from the file is logged beyond name, format, sizes, counts, outcome; formulas rejected at row level; CSV treated as text.
 10. **For QA/FE**: golden fixture for the appliance matcher will be published as `server/tests/fixtures/dupes_bams_golden.json` with T-124 (same shape as §10.8 with appliance names; the account-scoped pool is part of each case).
+
+## 13. Operations (FINAL, backend, tasks T-164/T-165/T-167/T-168, 2026-10-14)
+
+> **Status: FINAL.** Binds `docs/01_PM_SPEC.md` §13 (D-107..D-121). Replaces the `/api/operations` 501 stub for the routes below; any other `/api/operations/*` path (schedule sync, server-upgrade importer, D-118) still answers 501 `not_implemented`. **No schema change.** Envelopes, `row_version`/`stale_write`, `confirmation_required`, safety backups and error shapes as sections 0-1. Every write audits with `category = operations`, `object_type = server_upgrade` or `quarterly_upgrade_window`, `source = GUI`.
+
+**Model.** Appliances = every `bams_objects` row (D-107). Polarity = `region` equal (any case) to East/West, else `null`; environment = `PROD`/`DEV`/`null` (D-109). Quarter identity = `(year, quarter)`; no id. A per-appliance record (`server_upgrades`) exists only after the user changes something.
+**Derivation (on read, nothing stored):**
+- `date.effective` = per-appliance `date.override` (record `scheduled_date`) else the quarter date: DEV -> `dev_date`, PROD+East -> `east_prod_date`, PROD+West -> `west_prod_date`. If none, `date.reason` is one of `Set Environment (PROD or DEV)`, `Set East or West`, `No DEV date in 2026 Q4`, `No PROD East date in 2026 Q4`.
+- `version.effective` = appliance's own `target_version` else **the quarter's `target_version`, applied automatically to every appliance of the quarter as soon as the quarter is saved** (no separate step; user change vs D-119) else `null`. `version.source` = `appliance|quarter|none`. A per-appliance version (appliance/save or set-version) always wins; a blank one follows the quarter.
+- `status` = record status else `Planned` (`status_is_default: true`). `overdue` = `date.effective < today` and status not `Completed`/`Deferred` (today = local day; the day itself is not overdue).
+
+### 13.1 `GET /api/operations`
+Query (all optional): `year`+`quarter` (together; omitted = default quarter rule D-114: quarter with the earliest date on/after today, else the latest), `q` (account or appliance substring), `status`, `environment` (`PROD|DEV|unset`), `polarity` (`East|West|unset`), `client_id`. Bad enum -> 422. Never writes.
+```json
+{"ok": true, "today": "2026-10-14", "empty": null,
+ "quarters": [{"year":2026,"quarter":"Q4","label":"2026 Q4","target_version":"4.78.0","dev_date":"2026-10-10",
+               "east_prod_date":"2026-11-07","west_prod_date":"2026-11-14","row_version":1,"records":2}],
+ "selected": { ...same quarter shape... }, "default_selected": true, "appliance_total": 38,
+ "summary": {"total": 38, "by_status": {"Planned":20,"Awaiting Client":0,"Scheduled":6,"In Progress":0,"Completed":9,"Deferred":0}, "overdue": 3},
+ "groups": [{"client_id":"…","client_name":"Acme Capital","count":6,"summary":{ same shape as summary },
+   "rows": [{"object_id":"…","client_id":"…","client_name":"Acme Capital","appliance":"A-EAST","enabled":true,
+     "environment":"PROD","polarity":"East","region":"East","object_row_version":1,
+     "record_id":null,"record_row_version":null,"status":"Planned","status_is_default":true,"overdue":false,
+     "date":{"effective":"2026-11-07","source":"quarter|override|none","override":null,"derived":"2026-11-07","reason":null},
+     "version":{"effective":"4.78.0","source":"quarter|appliance|none","own":null,"quarter_default":"4.78.0"},
+     "notes":null,"can_record":true,"record_problem":null}]}]}
+```
+`empty`: `"no_quarters"` (then `selected` null) or `"no_appliances"`. `summary` and group `summary` count the **filtered** rows (`by_status` may also hold legacy `Validation Required`/`Exception` keys when present). `appliance_total` is unfiltered. Groups sorted by account name; rows by effective date ascending, empty dates last, then appliance name. `can_record: false` (PROD without East/West, or no Environment) means a record cannot be created; `record_problem` says why. `quarters[].records` = appliances with a record (delete is blocked while > 0).
+
+### 13.2 `POST /api/operations/quarter/save`
+Fields: **`year`** (2000-2100), **`quarter`** (`Q1..Q4`), `apics_version` (the quarter Target version, <= 50, blank -> null), `dev_upgrade_date`, `east_prod_date`, `west_prod_date` (`YYYY-MM-DD` or null), `expected_row_version`. **Create** when `expected_row_version` is absent (existing year+quarter -> 409 `conflict` "2026 Q4 already exists. Edit it instead."); **update** when present (404 if missing, 409 `stale_write` if stale; year/quarter cannot change; the full set of value fields is written, so resend the unchanged ones). `source_sync_method = 'manual'`. Response `item` = the quarter shape of 13.1. Saving a new `apics_version` immediately changes `version.effective` of every appliance without its own version (derived on read).
+
+### 13.3 `POST /api/operations/quarter/delete`
+`{year, quarter, confirm, expected_row_version?}`. 409 `conflict` with message `"N appliances have a status in this quarter"` (`details.records = N`) while records exist (checked first); then 409 `confirmation_required` unless `confirm: true`; makes a `pre-delete` backup (`side_effects[backup_created]`). `item` = `{year, quarter, label}`.
+
+### 13.4 `POST /api/operations/appliance/save`
+`{object_id, year, quarter, status?, date_override?, target_version?, notes?, expected_row_version?}`. Partial: only fields **present** in the body change (`null` clears `date_override`, `target_version`, `notes`; `status` cannot be null). `status` in `Planned, Awaiting Client, Scheduled, In Progress, Completed, Deferred` (a record already holding `Validation Required`/`Exception` may keep it). Creates the record on first save (no `expected_row_version`; then PROD needs East/West and every appliance needs an Environment, else 422 with `fields.polarity|environment` e.g. "Set East or West first. Fix it on the appliance, then save again."; fix via `POST /api/bams/object/save`). Updating requires nothing but honours `expected_row_version` (409 `stale_write`). Unknown quarter/appliance 404. Environment/polarity are copied onto the record at save. Response `item` = the row shape of 13.1. No-op saves write nothing.
+
+### 13.5 `POST /api/operations/appliance/reset`
+`{object_id, year, quarter, confirm, expected_row_version?}` ("Reset to quarter"): deletes the record (back to derived). Needs `confirm: true` (else 409 `confirmation_required`), `pre-delete` backup, audit `deleted`. No record -> 200 no-op. `item` = row shape.
+
+### 13.6 `POST /api/operations/appliance/set-version`
+`{year, quarter, object_ids: [1..500 ids], target_version: "5.0.1"|null}`. One transaction, one audit event per changed appliance (`reason: "set version"`), nothing else on the record (status, date, notes) changes. `null`/blank clears the appliance's own version (back to the quarter default); clearing never creates a record. Over 500 or empty list -> 422; unknown quarter -> 404. Skips are reported, not raised; any unexpected failure rolls back everything (500).
+```json
+{"ok": true, "item": {"target_version":"5.0.1","message":"Version set on 3; 2 skipped: set East or West first; set environment (prod or dev) first",
+  "updated":[{"object_id":"…","appliance":"A-DEV","client_name":"Acme Capital"}],
+  "unchanged":[{ same tag }],
+  "skipped":[{"object_id":"…","appliance":"A-NOPOL","client_name":"…","code":"needs_polarity|needs_environment|not_found","reason":"Set East or West first"}]},
+ "side_effects": []}
+```
+
+### 13.7 Section 12 additions (BAMS import, T-165)
+- Header `Polarity` is accepted as an alias of `Region` (both in one file -> `header_duplicate`). Stored in `bams_objects.region`.
+- `East`/`West` in any case, trimmed, are normalised to `East`/`West` at parse; any other text imports unchanged (no error). Blank-fill rule unchanged.
+- `inspect` `item` and `apply` `item` gain `operations_note`: `{"count": N, "text": "N appliances need East or West set for Operations"}` (`text` null when N = 0). N = appliances in the file (with a valid row) whose resulting Region is not East/West **or** whose Environment is empty (existing non-blank values win, as fills only fill blanks); in `apply` it is read from the saved data. Informational: no error, no tile, no effect on counts or `plan_hash`.
+- Template: Instructions line "Region / Polarity: East or West (used by Operations)…", Example rows use East/West, Region column has a warning-style East/West list.

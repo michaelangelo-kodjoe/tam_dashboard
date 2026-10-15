@@ -200,6 +200,7 @@ ACCOUNTS = [
     (11, "AVC", "Aurelian Vale Commodities", "Inactive", "B-PIPE", "sg", "hk", "APAC", -5, 2, 2),
     (12, "PSM", "Pinecrest Shoal Municipal Fund", "Inactive", "Terminal", "ny", "ny", "AMER", None, 2, 1),
 ]
+NO_POLARITY = {("HFA", 1), ("OLP", 1), ("SCS", 1)}   # PROD appliances with no East/West (Operations "Set East or West")
 NO_BAMS = {"LHF", "PSM"}          # LHF = active account with no BAMS objects
 NO_PRIMARY = {"SCS"}              # active account with zero primary contacts
 LOCATIONS = {"ny": "New York DC1", "nj": "Secaucus DC2", "ldn": "London DC1", "chi": "Chicago DC1",
@@ -268,6 +269,7 @@ class Gen:
         self.counters: Dict[str, int] = {}
 
     def nid(self, kind: str) -> str:
+        kind += getattr(self, "id_sfx", "")
         self.counters[kind] = self.counters.get(kind, 0) + 1
         return uid(kind, self.counters[kind])
 
@@ -405,13 +407,13 @@ class Gen:
             # Version strings are deliberately fictional (not the §21 fixture values).
             ("prev", 2026, "Q3", -114, -79, -72, "7.1.4", "mock-cd-26.3", "mock-mfa-1.1", "mock-rules-41"),
             ("cur", 2026, "Q4", -23, 12, 19, "7.2.0", "mock-cd-26.4", "mock-mfa-1.2", "mock-rules-42"),
-            ("next", 2027, "Q1", 68, 103, 110, "7.3.0", "mock-cd-27.1", "mock-mfa-1.3", "mock-rules-43"),
+            ("next", 2027, "Q1", 68, 103, None, "7.3.0", "mock-cd-27.1", "mock-mfa-1.3", "mock-rules-43"),
         ]
         mw = "Fri 19:00 NY - Sun 12:00 NY"
         self.rel: Dict[str, Dict[str, Any]] = {}
         for key, y, q, dev, east, west, apics, cdr, mfas, mfar in releases:
             row = dict(schedule_year=y, schedule_quarter=q, notification_date=d(dev - 21),
-                       dev_upgrade_date=d(dev), east_prod_date=d(east), west_prod_date=d(west),
+                       dev_upgrade_date=d(dev), east_prod_date=d(east), west_prod_date=None if west is None else d(west),
                        apics_version=apics, cd_rules_version=cdr, mfa_software_version=mfas,
                        mfa_rules_version=mfar, maintenance_window=mw,
                        source_url=None, source_sync_at=ts(-2, 11, 0), source_sync_method="mock",
@@ -476,7 +478,7 @@ class Gen:
                     row = dict(id=self.nid("server_upgrade"), client_id=cid, server_name=srv["name"],
                                environment=srv["env"], polarity=srv["pol"],
                                schedule_year=rel["row"]["schedule_year"], schedule_quarter=rel["row"]["schedule_quarter"],
-                               current_version=prev_version[rk], target_version=rel["apics"],
+                               current_version=prev_version[rk], target_version=None,   # QA-6-3: follows the quarter version
                                scheduled_date=d(off), maintenance_window=rel["row"]["maintenance_window"],
                                status=status, validation_status=val, waiting_on=waiting,
                                reference=(f"{{DRQS {r.randint(100000000, 999999999)} <GO>}}"
@@ -491,6 +493,18 @@ class Gen:
                         self.add_audit(updated, "operations", cid, "server_upgrade", row["id"], "updated", label=srv["name"],
                                        old={"status": "Planned"},
                                        new={"status": status, "validation_status": val})
+        # T-166 Operations overrides (per-appliance record differs from the quarter derivation).
+        for row in self.t["server_upgrades"]:
+            if row["schedule_quarter"] == self.rel["cur"]["row"]["schedule_quarter"] and row["schedule_year"] == self.rel["cur"]["row"]["schedule_year"]:
+                if row["server_name"] == "kmc-bpipe-hk-01":   # date override: 2 days earlier than East
+                    row["scheduled_date"] = d(self.rel["cur"]["East"] - 2)
+                    row["notes"] = "Date override (mock): client asked for an earlier slot."
+                elif row["server_name"] == "brs-sapi-ny-01":  # version override
+                    row["target_version"] = "7.2.0-rc2"
+                    row["notes"] = "Version override (mock): release candidate agreed with client."
+                elif row["server_name"] == "hfa-bpipe-ldn-01":  # second version override
+                    row["target_version"] = "7.2.0-hotfix2"
+                    row["notes"] = "Version override (mock): hotfix pinned for this appliance."
         # Ad-hoc upgrade outside any release (NULL release): Upcoming 15-30 band.
         acct = self.accounts["TBF"]
         created = self.rand_instant(-8, -3)
@@ -533,6 +547,7 @@ class Gen:
         metric_defs = [("CPU", "CPU Utilization (%)", 20, 60), ("MEM", "Memory Utilization (%)", 40, 75),
                        ("DISK", "Disk Usage (%)", 30, 70), ("NET", "Network Throughput (Mbps)", 80, 400)]
         self.metric_idx: Dict[Tuple[str, int, str], Dict[str, Any]] = {}
+        self.dev_keys: set = set()
         self.rule_idx: Dict[Tuple[str, int, str, str], Dict[str, Any]] = {}
         anchor_now = fmt_instant(ANCHOR_NOW)
 
@@ -553,13 +568,22 @@ class Gen:
             cid = acct["id"]
             prod = [s for s in acct["servers"] if s["env"] == "PROD"]
             objs = list(prod)
+            if abbr in ("NWH","KMC",):   # T-166: DEV appliances for Operations
+                objs += [dict(x, disabled=True) for x in acct["servers"] if x["env"] == "DEV"]
             if abbr == "CPG":
                 objs.append(dict(name="cpg-mfa-ldn-03", env="PROD", pol="West", location=LOCATIONS["ldn"],
                                  kind="mfa", disabled=True))
             for o_i, srv in enumerate(objs):
+                # T-166: DEV appliances draw from an isolated stream so no other seeded value moves.
+                if srv["env"] == "DEV":
+                    self.dev_keys.add((abbr, o_i))
+                    self.id_sfx = "_t166dev"
+                    main_r = self.r
+                    r = self.r = random.Random(SEED + 166 + o_i)
                 name = srv["name"].upper() if (abbr == "NWH" and o_i == 0) else srv["name"]  # case-variant on purpose
                 created = self.rand_instant(-300, -200)
-                obj = dict(id=self.nid("bams_object"), client_id=cid, name=name, region=acct["region"],
+                obj = dict(id=self.nid("bams_object"), client_id=cid, name=name,
+                           region=(srv["pol"] if srv["env"] == "PROD" and (abbr, o_i) not in NO_POLARITY else acct["region"]),
                            location=srv["location"], environment=srv["env"],
                            enabled=0 if srv.get("disabled") else 1, created_at=created, updated_at=created)
                 self.t["bams_objects"].append(obj)
@@ -605,6 +629,9 @@ class Gen:
                                     created_at=created, updated_at=created)
                         self.t["bams_alert_rules"].append(rule)
                         self.rule_idx[(abbr, o_i, code, sev if rt != "exceeds_high" else "exceeds")] = rule
+                if srv["env"] == "DEV":
+                    r = self.r = main_r
+                    self.id_sfx = ""
 
         def event(abbr: str, o_i: int, code: str, sev_key: str, status: str, opened: str,
                   value: float, recovered: Optional[str] = None, closed: Optional[str] = None,
@@ -662,7 +689,7 @@ class Gen:
         self.rule_idx[("SCS", 0, "DISK", "Warning")]["suppress_until_clear"] = 1
         self.metric_idx[("SCS", 0, "DISK")]["current_value"] = 87.0
         # historical closed events
-        keys = [k for k in self.rule_idx if k[0] not in ("AVC",)]
+        keys = [k for k in self.rule_idx if k[0] not in ("AVC",) and (k[0], k[1]) not in self.dev_keys]
         keys.sort()
         for i in range(16):
             abbr, o_i, code, sev_key = keys[r.randrange(len(keys))]
@@ -1300,7 +1327,8 @@ def verify(conn: sqlite3.Connection, today: dt.date) -> bool:
     check("upgrade scheduled_date matches its release + polarity",
           scalar("SELECT count(*) FROM server_upgrades u JOIN quarterly_upgrade_windows w USING (schedule_year, schedule_quarter) "
                  "WHERE u.scheduled_date IS NOT CASE u.polarity WHEN 'DEV' THEN w.dev_upgrade_date "
-                 "WHEN 'East' THEN w.east_prod_date ELSE w.west_prod_date END") == 0)
+                 "WHEN 'East' THEN w.east_prod_date ELSE w.west_prod_date END "
+                 "AND coalesce(u.notes, '') NOT LIKE 'Date override (mock)%'") == 0)
     # ---- T-61: 'done today' ring (D-29), activity trend, 7-day sparkline history
     prog = dict(zip(("day", "total", "done", "open", "done_other"),
                     q(PROGRESS_SQL.read_text(encoding="utf-8"), progress_params(today, dt.timezone.utc)).fetchone()))

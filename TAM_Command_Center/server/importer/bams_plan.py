@@ -155,8 +155,24 @@ class BPlan:
             else:
                 ap["unchanged"] += 1
         self.appliances = ap
+        self.ops_missing = self._ops_missing()
         self.metrics = {"new": c["new"], "updated": c["updates"], "unchanged": c["unchanged"]}
         self.plan_hash = self._hash()
+
+    def _ops_missing(self) -> int:
+        """D-108: appliances (with a valid row) that would still lack East/West or Environment for Operations."""
+        from .bams_reader import needs_ops_fix
+        n = 0
+        for g in self.groups:
+            if not g.valid_rows():
+                continue
+            fv = g.file_values()
+            o = g.obj or {}
+            reg = o.get("region") if not _blank(o.get("region")) else fv.get("region")
+            env = o.get("environment") if not _blank(o.get("environment")) else fv.get("environment")
+            if needs_ops_fix(reg, env):
+                n += 1
+        return n
 
     def review(self) -> List[Dict[str, Any]]:
         out = []

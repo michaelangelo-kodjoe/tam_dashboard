@@ -16,6 +16,19 @@ LABELS = {"account": "Account", "bpid": "BPID", "appliance": "Appliance", "metri
           "stale_after_seconds": "Stale after (s)"}
 HEADERS = [LABELS[f] for f in FIELDS]
 ALIASES = {v.casefold(): k for k, v in LABELS.items()}
+ALIASES["polarity"] = "region"   # D-108: Polarity is an alias of Region
+
+
+def norm_polarity(v):
+    """East/West in any case -> 'East'/'West'; anything else is returned unchanged (D-108/D-109)."""
+    if isinstance(v, str) and v.strip().casefold() in ("east", "west"):
+        return v.strip().capitalize()
+    return v
+
+
+def needs_ops_fix(region, environment) -> bool:
+    return norm_polarity(region) not in ("East", "West") or environment not in ("PROD", "DEV")
+
 LIMITS = {"account": 200, "bpid": 32, "appliance": 200, "metric": 200, "ticker": 200, "region": 100, "location": 200}
 DEFAULT_STALE = 120
 MAX_STALE = 31536000
@@ -67,6 +80,7 @@ def parse_row(rownum: int, cells: Dict[str, Any]) -> ParsedRow:
             errors.append(_e(rownum, fld, code, "is required"))
     if values["account"] is None and values["bpid"] is None and not any(e["field"] in ("account", "bpid") for e in errors):
         errors.append(_e(rownum, "account", "account_required", "needs an Account name or a BPID"))
+    values["region"] = norm_polarity(values["region"])
     env = values["environment"]
     if env is not None:
         if env.upper() in ("PROD", "DEV"):

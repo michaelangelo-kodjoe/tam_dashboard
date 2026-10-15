@@ -21,6 +21,7 @@ INSTRUCTIONS = [
     "Appliance (required, up to 200 characters), Metric (required, up to 200), Ticker (required, up to 200; "
     "a ticker belongs to exactly one metric and is never changed by import).",
     "Region (up to 100), Location (up to 200), Environment (PROD or DEV): only blanks on an existing appliance are filled.",
+    "Region / Polarity: East or West (used by Operations). The header Polarity is accepted instead of Region. Environment is also used by Operations.",
     "Enabled (Yes or No, blank means Yes) and Stale after (s) (whole number above 0, blank means 120) apply to new metrics only.",
     "",
     "Values are percentages as returned by Bloomberg; there is no unit column. Limits: up to " + str(C.IMPORT_MAX_ROWS) +
@@ -28,9 +29,9 @@ INSTRUCTIONS = [
     "You can also upload a CSV (.csv) file with the same column names.",
 ]
 EXAMPLE = [
-    ["Example Capital", "", "BPOD-NY-01", "CPU utilisation", "EXAMPLE.BPOD.NY01.CPU", "Americas", "New York", "PROD", "Yes", "120"],
+    ["Example Capital", "", "BPOD-NY-01", "CPU utilisation", "EXAMPLE.BPOD.NY01.CPU", "East", "New York", "PROD", "Yes", "120"],
     ["Example Capital", "", "BPOD-NY-01", "Memory used", "EXAMPLE.BPOD.NY01.MEM", "", "", "", "", ""],
-    ["Example Capital", "", "BPOD-LDN-01", "CPU utilisation", "EXAMPLE.BPOD.LDN01.CPU", "Europe", "London", "DEV", "No", "300"],
+    ["Example Capital", "", "BPOD-LDN-01", "CPU utilisation", "EXAMPLE.BPOD.LDN01.CPU", "West", "London", "DEV", "No", "300"],
 ]
 
 
@@ -54,6 +55,8 @@ def build_template_xlsx() -> bytes:
         lists.cell(row=i, column=1, value=v)
     for i, v in enumerate(("Yes", "No"), start=1):
         lists.cell(row=i, column=2, value=v)
+    for i, v in enumerate(("East", "West"), start=1):
+        lists.cell(row=i, column=3, value=v)
     lists.sheet_state = "hidden"
     head_fill = PatternFill("solid", fgColor="E8EEF7")
     req_fill = PatternFill("solid", fgColor="FDE9D9")
@@ -78,7 +81,10 @@ def build_template_xlsx() -> bytes:
                            errorTitle="Enabled", error="Choose Yes or No.")
     dv_stale = DataValidation(type="whole", operator="greaterThan", formula1="0", allow_blank=True,
                               showErrorMessage=True, errorTitle="Stale after (s)", error="Use a whole number above 0.")
-    for dv, col in ((dv_env, "H"), (dv_en, "I"), (dv_stale, "J")):
+    dv_reg = DataValidation(type="list", formula1="=Lists!$C$1:$C$2", allow_blank=True, showErrorMessage=True,
+                            errorStyle="warning", errorTitle="Region / Polarity",
+                            error="Operations uses East or West here. Other text is still imported.")
+    for dv, col in ((dv_env, "H"), (dv_en, "I"), (dv_stale, "J"), (dv_reg, "F")):
         ws.add_data_validation(dv)
         dv.add(rng(col))
     wb.properties.creator = "TAM Command Center"

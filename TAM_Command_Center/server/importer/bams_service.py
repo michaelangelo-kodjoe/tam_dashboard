@@ -60,8 +60,13 @@ def _item(s: Session, plan: P.BPlan) -> Dict[str, Any]:
             "file": {"name": s.file_name, "size_bytes": p.size_bytes, "format": p.format, "sheet": p.sheet,
                      "rows_found": p.rows_found, "encoding": p.encoding, "delimiter": p.delimiter, "notes": p.notes},
             "limits": {"max_rows": C.IMPORT_MAX_ROWS, "max_candidates": C.IMPORT_MAX_CANDIDATES, "max_bytes": C.MAX_IMPORT_BYTES},
-            "counts": plan.counts, "appliances": plan.appliances, "metrics": plan.metrics, "warnings": p.warnings,
+            "counts": plan.counts, "appliances": plan.appliances, "operations_note": ops_note(plan.ops_missing), "metrics": plan.metrics, "warnings": p.warnings,
             "review": plan.review(), "rows": [r.public() for r in plan.rows]}
+
+
+def ops_note(n: int) -> Dict[str, Any]:
+    """D-108: one informational line, never an error."""
+    return {"count": n, "text": (f"{n} appliances need East or West set for Operations" if n else None)}
 
 
 def inspect(rt: Any, data: bytes, raw_name: Optional[str]) -> Dict[str, Any]:
@@ -172,6 +177,7 @@ def apply(rt: Any, body: BamsImportApply) -> Dict[str, Any]:
                           "merged_exact": sum(1 for d in ex_changed if d.exact and not d.marked_same),
                           "merged_marked_same": sum(1 for d in dests if d.marked_same and (d.created or d.fills)),
                           "skipped_invalid": inv, "skipped_by_user": len(skipped) - inv},
+            "operations_note": ops_note(_ops_after(rt, dests)),
             "decisions": res["decisions"], "fields_filled": sum(len(u["filled"]) for u in updated),
             "audit_events": audit_n["appliance"] + audit_n["metric"], "audit_breakdown": audit_n,
             "backup": ({"name": backup["name"], "reason": "pre-import", "size_bytes": backup["size_bytes"]} if backup else None),
@@ -236,6 +242,24 @@ def _write_dest(conn: Any, s: Session, d: P.Dest, audit_n: Dict[str, int], creat
                          "stale_after_seconds": v["stale_after_seconds"]},
                     reason=f"Bulk import: {s.file_name}, row {r.row}", source="Bulk Import")
         audit_n["metric"] += 1
+
+
+def _ops_after(rt: Any, dests: List[P.Dest]) -> int:
+    """Count appliances touched by this import that still lack East/West or Environment (read after commit)."""
+    with rt.db() as conn:
+        return _ops_count(conn, dests)
+
+
+def _ops_count(conn: Any, dests: List[P.Dest]) -> int:
+    n = 0
+    for d in dests:
+        if not d.rows:
+            continue
+        row = conn.execute("SELECT region, environment FROM bams_objects WHERE (id = :i) OR (client_id = :c AND name = :n)",
+                           {"i": d.obj["id"] if d.obj else "", "c": d.client["id"], "n": d.name}).fetchone()
+        if row is not None and bams_reader.needs_ops_fix(row["region"], row["environment"]):
+            n += 1
+    return n
 
 
 # ------------------------------------------------------------------ skipped rows

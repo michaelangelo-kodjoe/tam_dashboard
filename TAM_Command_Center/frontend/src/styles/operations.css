@@ -1,0 +1,43 @@
+/* Operations page (Run 5). Tokens only. */
+.ops-qrow { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.ops-quarter { min-width: 150px; }
+.ops-chips { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.ops-chip { display: inline-flex; gap: 6px; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--border); background: var(--surface-1); border-radius: var(--r-sm); font-size: var(--fs-sm); color: var(--muted); }
+.ops-chip b { color: var(--text); font-weight: 500; }
+.ops-sum { margin: 0 0 var(--sp-3); font-size: var(--fs-md); color: var(--text); }
+.ops-tools { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 var(--sp-2); }
+.ops-spacer { flex: 1; }
+.ops-selbar { display: flex; align-items: center; gap: var(--sp-3); min-height: 40px; padding: 0 12px; margin: 0 0 var(--sp-2); background: var(--accent-tint); border: 1px solid var(--accent); border-radius: var(--r-md); }
+.ops-selbar b { font-weight: 600; }
+.ops-div { width: 1px; height: 16px; background: var(--border-strong); }
+.ops-tablewrap { overflow: auto; }
+.ops-table .ops-col-cb { width: 36px; }
+.ops-table th, .ops-table td { white-space: nowrap; }
+.ops-row td { padding-top: 6px; padding-bottom: 6px; }
+.ops-row.is-sel td { background: var(--accent-tint); }
+.ops-pl { padding-left: 16px; }
+.ops-acct td { background: var(--surface-2); padding-top: 8px; padding-bottom: 8px; cursor: pointer; }
+.ops-ah { display: flex; align-items: center; gap: 10px; }
+.ops-acctlink { color: var(--info); font-weight: 600; }
+.ops-chev { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; background: transparent; color: var(--muted); border-radius: var(--r-sm); cursor: pointer; }
+.ops-chev:hover { color: var(--text); background: var(--surface-3); }
+.ops-chev:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ops-cb__dash { width: 8px; height: 2px; background: currentColor; display: block; }
+.ops-cb .check__box svg { display: none; }
+.ops-cb .check__input:checked + .check__box svg { display: block; }
+.ops-cb .check__input:indeterminate + .check__box { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ops-datecell { display: inline-flex; align-items: center; gap: 8px; }
+.ops-ovr { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; }
+.ops-datecell .ops-ovr { margin-left: 0; }
+.ops-dflt { color: var(--subtle); }
+.ops-notset { color: var(--warning); }
+.ops-reason { display: block; }
+.ops-note { max-width: 260px; }
+.ops-note .truncate { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.ops-statussel { min-width: 150px; }
+.ops-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.ops-lead { margin: 0 0 var(--sp-3); }
+.ops-formerr { margin: 0 0 var(--sp-3); }
+.ops-delnote { align-self: center; }
+@media (max-width: 767px) { .ops-grid2 { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .ops-chev { transition: none; } }

@@ -49,7 +49,7 @@ def _apply_update(conn: sqlite3.Connection, table: str, row: Dict[str, Any], cha
     sets = ", ".join(f"{c} = :{c}" for c in changes)
     params = dict(changes)
     params.update(_id=row["id"], _v=row["row_version"], _now=migrate.utc_now())
-    cur = conn.execute(f"UPDATE {table} SET {sets}, updated_at = :_now, row_version = row_version + 1"
+    cur = conn.execute(f"UPDATE {table} SET {sets}, updated_at = :_now, row_version = row_version + 1"  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
                        f" WHERE id = :_id AND row_version = :_v", params)
     if cur.rowcount != 1:  # cannot happen inside BEGIN IMMEDIATE; defensive
         raise StaleWrite("This record was changed since you loaded it. Reload and try again.")
@@ -220,7 +220,7 @@ def delete_client(rt: Runtime, body: ClientDelete) -> Result:
                                        fields={"confirm_name": "does not match the account name"})
         backup = rt.backups.create(conn, "pre-delete")
         with transaction(conn):
-            counts = {t: conn.execute(f"SELECT count(*) FROM {t} WHERE client_id = :c", {"c": row["id"]}).fetchone()[0]
+            counts = {t: conn.execute(f"SELECT count(*) FROM {t} WHERE client_id = :c", {"c": row["id"]}).fetchone()[0]  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
                       for t in ("contacts", "tasks", "notes", "server_upgrades", "bams_objects")}
             cur = conn.execute("DELETE FROM clients WHERE id = :id", {"id": row["id"]})
             if cur.rowcount != 1:

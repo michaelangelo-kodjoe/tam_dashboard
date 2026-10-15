@@ -227,14 +227,14 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     expect(document.querySelector('[role="dialog"]')).toBeNull(); // no drawer
   });
 
-  it('nav rail: Today/Accounts/Tasks/Settings/BAMS work; Operations/Bridge show "Later" and a not-built page; no Journal', async () => {
+  it('nav rail: Today/Accounts/Tasks/Settings/BAMS work; Operations is built (no Later tag); Bridge shows "Later"; no Journal', async () => {
     const { user } = await boot('/today');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(nav).queryByText(/journal/i)).toBeNull();
-    expect(within(nav).getAllByText('Later')).toHaveLength(2);
+    expect(within(nav).getAllByText('Later')).toHaveLength(1);
     expect(within(nav).getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
     await user.click(within(nav).getByRole('link', { name: /Operations/ }));
-    expect(await screen.findByText('Planned for a later release', { exact: false })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Operations' })).toBeInTheDocument();
     await user.click(within(nav).getByRole('link', { name: 'BAMS' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'BAMS' })).toBeInTheDocument();
     await user.click(within(nav).getByRole('link', { name: 'Accounts' }));

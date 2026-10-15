@@ -466,7 +466,7 @@ def rule_save(rt: Any, body: RuleSave) -> Dict[str, Any]:
                         if cfg:
                             sets["breach_count"] = 0
                         sets_sql = ", ".join(f"{k} = :{k}" for k in sets)
-                        conn.execute(f"UPDATE bams_alert_rules SET {sets_sql}, updated_at = :_now, row_version = row_version + 1"
+                        conn.execute(f"UPDATE bams_alert_rules SET {sets_sql}, updated_at = :_now, row_version = row_version + 1"  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
                                      " WHERE id = :_id AND row_version = :_v",
                                      {**sets, "_now": migrate.utc_now(), "_id": rid, "_v": rule["row_version"]})
                         mrow = conn.execute("SELECT m.metric_name, o.name AS oname, o.client_id FROM bams_metrics m JOIN"

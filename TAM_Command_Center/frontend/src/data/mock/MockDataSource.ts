@@ -51,6 +51,8 @@ import { FileRefusal, MAX_BYTES, parseCsv, parseXlsx, readBytes, sniff, toCsv, x
 import { rebaseTables, type MockFile, type Row, type Tables } from './rebase';
 import { rankToday } from './today';
 import { MockBams } from './mockBams';
+import { MockOperations } from './mockOperations';
+import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../../opsTypes';
 import { MockBamsImport, bamsTemplateRows, parseBamsGrid } from './mockBamsImport';
 import type {
   AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult, BamsImportPlan,
@@ -118,6 +120,7 @@ export class MockDataSource implements DataSource {
   private logs: string[] = [];
   private bamsEngine!: MockBams;
   private bamsImp!: MockBamsImport;
+  private ops!: MockOperations;
   /** Test/dev hook: make the next N calls fail with a network error. */
   failNext = 0;
   private imports = new Map<string, { parsed: Parsed; fileName: string; size: number; format: ImportFormat; sheet: string | null; encoding: string | null; delimiter: string | null; notes: { code: string; text: string }[]; applied: ImportResult | null; skippedRaw: Map<number, Record<string, string>> }>();
@@ -151,6 +154,7 @@ export class MockDataSource implements DataSource {
           audit: (a) => this.audit({ ...a, category: 'bams' }),
         });
         this.bamsImp = new MockBamsImport(this.bamsEngine, { t: this.t, now: () => this.now(), uuid, backup: () => { this.safetyBackup('pre-import'); return this.backups[0]; } });
+        this.ops = new MockOperations({ t: this.t, today: () => this.today, now: () => this.now(), uuid, audit: (a) => this.audit({ ...a, category: 'operations' }), backup: () => this.safetyBackup('pre-delete') });
         this.log('INFO', `Mock data loaded; rebased to ${this.today}; BAMS mock clock ${this.clock.toISOString()}`);
       })();
     }
@@ -932,4 +936,13 @@ export class MockDataSource implements DataSource {
     const rows = this.bamsImp.skippedRows(importId, format);
     return format === 'csv' ? { blob: toCsv(rows), filename: 'tam_bams_skipped.csv' } : { blob: xlsxBlob(rows), filename: 'tam_bams_skipped.xlsx' };
   }
+
+  // ------------------------------------------------------------------ Operations (contract section 13)
+
+  async getOperations(q: OpsQuery): Promise<OpsData> { await this.enter(); return this.ops.get(q); }
+  async saveOperationsQuarter(input: OpsQuarterInput): Promise<OpsQuarter> { await this.enter(); return this.ops.saveQuarter(input); }
+  async deleteOperationsQuarter(input: { year: number; quarter: OpsQuarterName; confirm: boolean }): Promise<void> { await this.enter(); this.ops.deleteQuarter(input); }
+  async saveOperationsAppliance(input: OpsApplianceInput): Promise<OpsRow> { await this.enter(); return this.ops.saveAppliance(input); }
+  async resetOperationsAppliance(input: { object_id: string; year: number; quarter: OpsQuarterName; confirm: boolean; expected_row_version?: number }): Promise<OpsRow> { await this.enter(); return this.ops.resetAppliance(input); }
+  async setOperationsVersion(input: { year: number; quarter: OpsQuarterName; object_ids: string[]; target_version: string | null }): Promise<OpsSetVersionResult> { await this.enter(); return this.ops.setVersion(input); }
 }

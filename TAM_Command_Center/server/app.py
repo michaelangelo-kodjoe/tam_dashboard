@@ -26,6 +26,7 @@ from .runtime import Runtime
 from .schemas import (CheckSimilar, ImportApply, ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
                       SettingsSave, TaskArchive, TaskSave)
 from .bams import routes as bams_routes
+from .ops import routes as ops_routes
 from .bams.clock import Clock as BamsClock
 from .bams.monitor import Monitor
 from .bams.notify import select_notifier
@@ -36,7 +37,7 @@ from .trends import TREND_DAYS, activity_trend
 log = logging.getLogger("tam.api")
 
 _STUB_PHASES = {
-    "operations": "Phase 3: Operations",
+    "operations": "Phase 3: Operations (schedule sync and server-upgrade importers are out of scope, D-118)",
     "export": "Phase 5: data portability",
     "import": "Phase 5: data portability",
     "data/reset": "Phase 5: data portability",
@@ -428,6 +429,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
     # ------------------------------------------------------------ BAMS monitoring (Run 4) and BAMS import
     bams_routes.register(api, rt)
     bams_routes.register_import(api, rt)
+    ops_routes.register(api, rt)          # Run 5 Operations (replaces the 501 stub)
 
     # ------------------------------------------------------------ DEV-only routes: not registered in PROD
     if config.mode == "DEV":

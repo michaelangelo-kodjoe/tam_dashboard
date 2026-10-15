@@ -211,7 +211,10 @@ export interface BamsImportPlan {
   warnings: { code: string; text: string }[];
   review: BamsReviewGroup[];
   rows: BamsImportRow[];
+  /** Contract 13.7: appliances needing East/West or Environment for Operations. Informational only. */
+  operations_note?: OperationsNote | null;
 }
+export interface OperationsNote { count: number; text: string | null }
 export type BamsChoice = 'same' | 'different' | 'skip';
 export interface BamsDecision { key: string; choice: BamsChoice; target?: BamsCandidateRef }
 export interface BamsApplyInput { import_id: string; plan_hash: string; confirm: true; decisions: BamsDecision[] }
@@ -228,4 +231,5 @@ export interface BamsImportResult {
   updated: { id: string; name: string; client_id: string; client_name: string; rows: number[]; filled: string[]; metrics_added: string[] }[];
   skipped: { row: number; name: string; kind: string; reason: string }[];
   skipped_url: string | null;
+  operations_note?: OperationsNote | null;
 }

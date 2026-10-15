@@ -125,6 +125,7 @@ export function StepPreview({ plan, notice, onChooseAnother }: { plan: BamsImpor
         <Sum label="Needs review" n={flagged} tone={flagged ? 'warning' : undefined} sub={`appliances, ${reviewRows} rows`} />
         <Sum label="Invalid" n={plan.counts.invalid} tone={plan.counts.invalid ? 'danger' : undefined} sub="rows skipped" />
       </div>
+      {plan.operations_note?.text && <div role="status" className="banner banner--info" data-testid="ops-note"><div className="banner__body sm">{plan.operations_note.text}. You can set it later on the Operations page.</div></div>}
       {notice && <div role="status" className="banner banner--warning"><div className="banner__body sm">{notice}</div></div>}
       {plan.warnings.map((w) => <div key={w.text} role="status" className="banner banner--info"><div className="banner__body sm">{w.text}</div></div>)}
       {(flagged > 0 || plan.counts.invalid > 0) && (
@@ -324,6 +325,7 @@ export function StepResult({ r, failure, onDownload, downloadBusy, onBackToPrevi
         <dt>Skipped rows</dt>
         <dd>{c.skipped === 0 ? 'None' : <><b className="bm-danger">{c.skipped}</b> ({c.invalid} invalid{r.breakdown.skipped_by_user ? `, ${r.breakdown.skipped_by_user} skipped by you` : ''}; rows {r.skipped.map((s) => s.row).join(', ')})</>}</dd>
         {r.decisions.length > 0 && <><dt>Your decisions</dt><dd>{r.decisions.map((d) => d.label).join('; ')}</dd></>}
+        {r.operations_note?.text && <><dt>Operations</dt><dd data-testid="ops-note">{r.operations_note.text}</dd></>}
         <dt>Monitoring</dt><dd>New metrics show <FreshnessBadge freshness="No Data" /> until the next poll.</dd>
         {r.audit_events > 0 && <><dt>Audit</dt><dd>{r.audit_events} events recorded ({r.audit_breakdown.appliance ?? 0} appliance, {r.audit_breakdown.metric ?? 0} metric)</dd></>}
       </dl>

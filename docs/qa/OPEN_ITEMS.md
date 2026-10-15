@@ -80,3 +80,11 @@ BAMS dashboard and appliance/metrics import verified live (pytest 606, vitest 40
 | QA-E5-8 | Low | frontend-dev | npm audit react-router 6.x moderate advisories | dependency pass |
 
 New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `test_gate_run4_import_e2e.py` (19). Not verified: Windows toast, real-UI file upload, import_expired after restart.
+
+## Run 5 gate, ERROR_LOG_6 (2026-10-15): PASS (0 open Blocker/High)
+| ID | Sev | Owner | Item | Check at |
+|---|---|---|---|---|
+| QA-6-1 | Medium | backend-dev / data-architect | Quarter `records` count includes orphan server_upgrades rows (no matching appliance); delete permanently blocked with wrong count | FIXED: records count and delete block count only records with a matching appliance; orphans are removed (audited) with the quarter on confirmed delete; test added |
+| QA-6-2 | Low | data-architect / orchestrator | Running dev DB stale (AMER/EMEA regions, 1 of 25 East/West); reseed | FIXED: stale dev_data/tam_dev.db* deleted, next DEV start reseeds |
+| QA-6-3 | Low | data-architect | Seeded records copy quarter version, hiding auto-apply | FIXED: seeded quarter records have no own target_version except 2 overrides (brs-sapi-ny-01, hfa-bpipe-ldn-01); mock_data.json and Today parity fixtures regenerated |
+| QA-6-4 | Low | backend-dev | bandit B608 false positives need nosec | FIXED: # nosec B608 with reason on all false positives; bandit shows no B608 |

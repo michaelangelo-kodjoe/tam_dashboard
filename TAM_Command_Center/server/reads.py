@@ -109,7 +109,7 @@ def query_tasks(conn: sqlite3.Connection, *, client_id: Optional[str] = None, ar
     if q:
         where.append("(t.task LIKE :q ESCAPE '\\' OR t.notes LIKE :q ESCAPE '\\' OR t.waiting LIKE :q ESCAPE '\\')")
         params["q"] = like_pattern(q)
-    sql = ("SELECT t.*, c.name AS client_name FROM tasks t LEFT JOIN clients c ON c.id = t.client_id WHERE "
+    sql = ("SELECT t.*, c.name AS client_name FROM tasks t LEFT JOIN clients c ON c.id = t.client_id WHERE "  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
            + " AND ".join(where)
            + " ORDER BY (t.due IS NULL), t.due, t.updated_at DESC, t.id LIMIT :limit")
     return [task_row(r) for r in rows_to_dicts(conn.execute(sql, params))]
@@ -121,8 +121,8 @@ def get_task_raw(conn: sqlite3.Connection, task_id: str) -> Optional[Dict[str, A
 
 
 def list_contacts(conn: sqlite3.Connection, client_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    sql = "SELECT * FROM contacts" + (" WHERE client_id = :c" if client_id else "") \
-          + " ORDER BY client_id, is_primary DESC, name COLLATE NOCASE, id"
+    sql = ("SELECT * FROM contacts" + (" WHERE client_id = :c" if client_id else "")  # nosec B608 - fixed fragments, value bound
+           + " ORDER BY client_id, is_primary DESC, name COLLATE NOCASE, id")
     return [contact_row(r) for r in rows_to_dicts(conn.execute(sql, {"c": client_id} if client_id else {}))]
 
 
@@ -177,13 +177,13 @@ def activity_page(conn: sqlite3.Connection, client_id: str, *, filter_: str = "a
     if note_ids:
         marks = ",".join("?" for _ in note_ids)
         versions = {r[0]: (r[1], r[2]) for r in conn.execute(
-            f"SELECT id, row_version, created_at FROM notes WHERE id IN ({marks})", note_ids)}
+            f"SELECT id, row_version, created_at FROM notes WHERE id IN ({marks})", note_ids)}  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
     bams_ids = [r["object_id"] for r in rows if r["entry_kind"] != "note" and r["event_type"].startswith("bams_alert.")]
     bams_names: Dict[str, str] = {}
     if bams_ids:
         marks = ",".join("?" for _ in bams_ids)
         bams_names = {r[0]: r[1] for r in conn.execute(
-            "SELECT e.id, o.name FROM bams_alert_events e JOIN bams_metrics m ON m.id = e.metric_id"
+            "SELECT e.id, o.name FROM bams_alert_events e JOIN bams_metrics m ON m.id = e.metric_id"  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
             f" JOIN bams_objects o ON o.id = m.object_id WHERE e.id IN ({marks})", bams_ids)}
     items = []
     for r in rows:

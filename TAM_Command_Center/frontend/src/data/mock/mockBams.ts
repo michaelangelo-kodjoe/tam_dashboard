@@ -384,7 +384,7 @@ export class MockBams {
     let o: Row;
     if (existing) {
       const before = { name: existing.name, region: existing.region, location: existing.location, environment: existing.environment, enabled: existing.enabled };
-      Object.assign(existing, { name, region: input.region?.trim() || null, location: input.location?.trim() || null, environment: input.environment ?? null, enabled: input.enabled ? 1 : 0, updated_at: ts });
+      Object.assign(existing, { name, region: input.region === undefined ? existing.region : input.region?.trim() || null, location: input.location === undefined ? existing.location : input.location?.trim() || null, environment: input.environment === undefined ? existing.environment : input.environment ?? null, enabled: input.enabled === undefined ? existing.enabled : input.enabled ? 1 : 0, updated_at: ts });
       existing.row_version += 1; o = existing;
       this.c.audit({ client_id: existing.client_id, object_type: 'bams_object', object_id: existing.id, object_label: name, action: 'updated', old: before, new: { name, region: existing.region, location: existing.location, environment: existing.environment, enabled: existing.enabled } });
     } else {

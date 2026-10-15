@@ -148,9 +148,9 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
                          server_tiles: bool = False, provider_available: bool = True) -> Dict[str, Dict[str, Any]]:
     """Returns {client_id: payload} for one account or for all accounts."""
     cond, params = ("WHERE client_id = :c", {"c": client_id}) if client_id else ("", {})
-    objects = rows_to_dicts(conn.execute(f"SELECT * FROM bams_objects {cond} ORDER BY name COLLATE NOCASE, id", params))
+    objects = rows_to_dicts(conn.execute(f"SELECT * FROM bams_objects {cond} ORDER BY name COLLATE NOCASE, id", params))  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
     upgrades = rows_to_dicts(conn.execute(
-        f"SELECT * FROM server_upgrades {cond} ORDER BY (scheduled_date IS NULL), scheduled_date, server_name, id", params))
+        f"SELECT * FROM server_upgrades {cond} ORDER BY (scheduled_date IS NULL), scheduled_date, server_name, id", params))  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
     fresh = rows_to_dicts(conn.execute(load_query("metric_freshness.sql"), {
         "wall_now": migrate.utc_now(), "provider_running": 0, "channel": channel}))
     fresh_by_obj: Dict[str, List[Dict[str, Any]]] = defaultdict(list)

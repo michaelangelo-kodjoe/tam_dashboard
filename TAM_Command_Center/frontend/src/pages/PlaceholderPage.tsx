@@ -1,15 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Activity, MessagesSquare, ServerCog, type LucideIcon } from 'lucide-react';
+import { Activity, MessagesSquare, type LucideIcon } from 'lucide-react';
 import { PageHeader, Panel } from '../components/ui/Panel';
 import { useDocumentTitle } from '../lib/hooks';
 
-const CONTENT: Record<'operations' | 'bams' | 'bridge', { title: string; icon: LucideIcon; text: string; links: { to: string; label: string }[] }> = {
-  operations: {
-    title: 'Operations',
-    icon: ServerCog,
-    text: 'The quarterly server upgrade workbench: the maintenance calendar, the working queue of upgrades that need attention, schedule sync with diagnostics, and bulk upload. Upgrade records already show on each account\'s Infrastructure tab.',
-    links: [{ to: '/accounts', label: 'Open an account to see its upgrade records' }, { to: '/today', label: 'Near-term upgrades appear in the Today work queue' }],
-  },
+const CONTENT: Record<'bams' | 'bridge', { title: string; icon: LucideIcon; text: string; links: { to: string; label: string }[] }> = {
   bams: {
     title: 'BAMS',
     icon: Activity,

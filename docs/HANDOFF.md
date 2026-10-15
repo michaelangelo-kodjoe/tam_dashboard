@@ -3,18 +3,20 @@
 Last updated: 2026-10-14. Read this first, then `docs/TEAM_LOOP.md`. Start a session as the lead with `claude --agent team-lead-agent` (agents live in `.claude/agents/`).
 
 ## State
-Runs 1-3 are built, QA-passed, and committed (latest gate: `docs/qa/ERROR_LOG_4.md`, PASS, 0 open Blocker/High). Tests at the last gate: 473 backend/db/e2e, 326 frontend.
+Runs 1-4 are built, QA-passed, and committed (latest gate: `docs/qa/ERROR_LOG_5.md`, PASS). Run 5 (Operations) is in PLANNING: spec is `docs/01_PM_SPEC.md` section 13 (D-107..D-125, T-164..T-173), mockup brief `docs/qa/OPERATIONS_MOCKUP_BRIEF.md`; scope reset 2026-10-14 after the user rejected dense mockups: Operations is one simple page over BAMS appliances with manual quarters (PM spec section 13, D-107..D-118, T-164..T-173); next: new minimal mockups, then mockups, user approval, build. BlpapiProvider exists (fake-session tested); workstation verification is deferred.
 
 | Run | Scope | Status |
 |---|---|---|
 | 1 | Foundation, Today, Accounts, Account Workspace, Tasks, Quick Capture, Settings | Done, user-reviewed |
 | 2 | Visual refresh: Today as Triage Split (top 10 + chips + detail pane, done-today ring, tabs under list), workspace and Accounts instruments | Done, user said "this looks fine / good" |
 | 3 | Account bulk import (.xlsx + .csv), duplicate detection (similar names need Same/Different/Skip confirmation), single-add similar check | Done, user said "this is good" |
+| 4 | BAMS monitoring dashboard (simulated DEV provider, lifecycle, notifications), appliance/metric bulk import, BlpapiProvider | Done, gate PASS |
+| 5 | Operations: quarterly upgrade workbench, schedule sync and diagnostics, server-upgrade bulk upload | Planning (section 13 of the PM spec) |
 
 ## Not built (spec phases still ahead)
-Operations (quarterly upgrade workbench, schedule sync/diagnostics, server-upgrade bulk upload), BAMS monitoring and alerts, portability (Excel export/restore, DB export), ChatGPT Bridge. Schema for these tables already exists in `db/schema.sql`. Each needs PM spec, then **mockups the user approves**, then build.
+Operations (Run 5, planned), portability (Excel export/restore, DB export), ChatGPT Bridge. Schema for these tables already exists in `db/schema.sql`. Each needs PM spec, then **mockups the user approves**, then build.
 
-The user was asked what to do next and gave no preference. Recommended: Operations.
+Next step: new minimal Operations mockups (T-169), user approval, then build. Open questions: PM spec 13.6.
 
 ## Do not do without the user
 - Build any UI before mockups are approved.

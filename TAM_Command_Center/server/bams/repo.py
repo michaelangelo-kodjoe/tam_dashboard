@@ -91,7 +91,7 @@ def last_closed_at(conn: sqlite3.Connection, metric_id: str, rule_id: str) -> Op
 
 
 def rules_for_metric(conn: sqlite3.Connection, metric_id: str, enabled_only: bool = False) -> List[Dict[str, Any]]:
-    sql = "SELECT * FROM bams_alert_rules WHERE metric_id = :m" + (" AND enabled = 1" if enabled_only else "")
+    sql = "SELECT * FROM bams_alert_rules WHERE metric_id = :m" + (" AND enabled = 1" if enabled_only else "")  # nosec B608 - fixed identifiers/placeholders only, values are bound parameters
     return _all(conn.execute(sql + " ORDER BY created_at, id", {"m": metric_id}))
 
 

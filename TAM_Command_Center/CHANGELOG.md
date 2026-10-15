@@ -2,6 +2,41 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased - Run 5 Operations DEV seed (T-166)
+- Changed: DEV mock seed (`db/seed_mock.py`, `db/mock_data.json`): PROD appliances now carry Region East/West (3 left on EMEA = "Set East or West"); 2 DEV appliances (NWH, KMC) added on an isolated RNG/id stream so no other seeded value moved; next quarter (2027 Q1) has no PROD West date; server_upgrades gain one date override (kmc-bpipe-hk-01, 2026 Q4) and one version override (brs-sapi-ny-01, 7.2.0-rc2). Existing quarters/status mix/overdue (BRS DEV In Progress) already covered. No schema change. 636 tests pass.
+
+## Unreleased - Run 5 Operations frontend (T-171)
+- Added: `/operations` page (replaces the placeholder; rail "Later" tag removed): quarter select with Edit/Add quarter and DEV/East/West date chips, summary line, filters (search, status, environment, polarity, Reset) in the URL, table grouped by account (collapsed by default, auto-expand on filter, Expand/Collapse all, tri-state account checkbox, Select all (N), selection bar), inline status, Set version dialog (skips named in the toast), row-edit dialog (date override, own version, note, Environment and East/West fixes through the BAMS appliance save, Reset to quarter), quarter dialog with Target version and delete (blocked message), empty states, `?quarter=2026-Q4&q=&status=&env=&pol=&appliance=` deep links, account name links to the Workspace.
+- User changes applied: no right-aligned "Target version" in the page header (column and quarter-dialog field kept); the quarter version shows as the greyed "default X", an own version carries an accent marker.
+- Added: `DataSource` methods `getOperations`, `saveOperationsQuarter`, `deleteOperationsQuarter`, `saveOperationsAppliance`, `resetOperationsAppliance`, `setOperationsVersion` (Api + Mock; `data/mock/mockOperations.ts`), `src/opsTypes.ts`, `src/lib/operations.ts`.
+- Added: BAMS import preview and result show the `operations_note` line ("N appliances need East or West set for Operations"), informational only.
+- Tests: +30 Vitest (lib, mock adapter, API adapter, page). Verified live on tam-app-dev: grouped table, select + Set version, edit + East save, no console errors. Known: `today.test.ts` parity fails after the data architect's in-progress `db/mock_data.json` extension (passes on the committed data).
+
+## Unreleased - QA gate 6 fixes (QA-6-1..4)
+- Fixed: QA-6-1 quarter `records` and the delete-block count ignore orphan records; confirmed delete removes orphans with audit. QA-6-3 seed records follow the quarter version (2 explicit overrides kept). QA-6-4 `# nosec B608` with reasons. QA-6-2 stale DEV DB deleted (reseeds on next start). Seed `mock_data.json` and Today parity fixtures regenerated.
+
+## Unreleased - Run 5 Operations backend (T-164, T-165, T-167, T-168)
+- Added: `server/ops/` (repo, derive, service, routes, schemas) and `GET /api/operations`, `POST /api/operations/quarter/save|delete`, `appliance/save|reset|set-version` (contract `docs/04_API_CONTRACT.md` section 13). Other `/api/operations/*` paths stay 501.
+- Changed (user decision): the quarter's Target version applies automatically to every appliance in the quarter (derived on read); a per-appliance version wins; blank follows the quarter.
+- Changed: BAMS import accepts `Polarity` as a Region alias, normalises East/West case, adds `operations_note` to inspect and apply results, template text and soft East/West list.
+- Schema: no change (audit vocabulary, FK and triggers verified by tests). DEV seed extension (T-166) not done.
+- Tests: `server/tests/test_operations.py` (17).
+
+## Unreleased - Operations mockups (T-146)
+- Added (mockups only, no app code): `mockups/operations/` index, 13 static pages, README with decisions to confirm, `operations.css`. Reflects user decisions: paste/upload only (Update schedule), user-typed source URL in Settings, Environment + Region (Region for Prod; Dev one date). Awaiting user approval.
+
+## Unreleased - Operations mockups v2.1 (T-169)
+- Changed (mockups only): `mockups/operations/01-operations.html` regrouped by collapsible account rows (tri-state checkbox, counts, status summary), per-appliance checkboxes, Select all, selection bar, greyed "default" version hint, search auto-expand frame; duplicate "Set East or West" removed; added `03b-set-version.html`; index/README updated. Quarter dialog already shows Target version.
+
+## Unreleased - Run 5 mockup v2 feedback (Operations)
+- Changed (docs only): software version is manual, Target version only, stored per appliance record (`server_upgrades.target_version`) with the quarter's version as default; checkbox multi-select with Set version bulk action; table grouped by account with Expand/Collapse all (default collapsed); Target version added to the quarter dialog. Spec section 13 and the mockup brief amended. No schema change.
+
+## Unreleased - Run 5 scope reset (Operations)
+- Changed (docs only): first Operations plan and mockups rejected by the user as too dense. `docs/01_PM_SPEC.md` section 13 replaced by a minimal plan: one Operations page over BAMS appliances, manual quarters (`quarterly_upgrade_windows`) and per-appliance overrides/status (`server_upgrades`), East/West stored in `bams_objects.region` via the existing BAMS import, no network/parse/sync/Diagnostics, no schema change. Old D-73..D-106 and T-133..T-163 void. New brief `docs/qa/OPERATIONS_MOCKUP_BRIEF.md`; old `mockups/operations/` files to be replaced.
+
+## Unreleased - Run 5 planning (Operations) [superseded]
+- Added (docs only): `docs/01_PM_SPEC.md` section 13 (decisions D-73..D-100, stories US-15.1..15.13, tasks T-133..T-162, user questions), `docs/qa/OPERATIONS_MOCKUP_BRIEF.md`. Amended with user answers: manual paste/upload only (no fetch, no `schedule/sync` route), user-entered source URL, Environment + Region columns and window inference (D-101..D-106, T-163), Q8 answered: single DEV date, no migration, Region PROD-only. No code or schema change yet. Mockup approval required before any UI build. `docs/HANDOFF.md` state refreshed (Run 4 done).
+
 ## Unreleased - BlpapiProvider
 - Added: real read-only `BlpapiProvider` (lazy blpapi import, refdata PX_LAST snapshots in batches of 500, per-ticker invalid/no-value handling, ProviderUnavailable on start/terminate/Terminal-down, new session next poll). Response parsing isolated in `server/bams/blpapi_parse.py`. `tools/bloomberg_probe.py` for the workstation, `env_check.py` reports blpapi version and Terminal reachability. PROD unavailable message is now "BLPAPI is not installed ..." or "Bloomberg Terminal not reachable ..." (was a fixed stub text). Tested with a fake module only.
 
@@ -234,3 +269,5 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
   - Verified against the live DEV backend on a scratch DB (Today, account workspace, note create/edit/delete, `?note=` deep link on a cold load, Quick Capture call note, primary contact switch): no console errors, no failed requests. Vitest 113 -> 118.
 - none
 - 2026-10-14, pm-agent (documents only, no code): user decision, BAMS appliance+metrics bulk import (xlsx/csv, duplicate detection) is IN Run 4. `docs/01_PM_SPEC.md` section 12.8 added (D-63 to D-72, US-14.11 to US-14.16, tasks T-120 to T-132, mockups 9-13); D-49, D-57, section 12.4 and open question 4 amended. Reuses the Run 3 import design. No schema change.
+
+- T-169 (2026-10-14): Operations mockups v2 delivered in mockups/operations/ (replaced rejected v1): operations page + 1024 frame, quarter dialog, appliance edit, empty states, BAMS import additions. Awaiting user approval (gates T-171).

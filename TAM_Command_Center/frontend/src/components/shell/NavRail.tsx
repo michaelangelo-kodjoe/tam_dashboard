@@ -10,7 +10,7 @@ const MAIN: Item[] = [
   { to: '/today', label: 'Today', icon: CalendarCheck },
   { to: '/accounts', label: 'Accounts', icon: Building2 },
   { to: '/tasks', label: 'Tasks', icon: ListChecks },
-  { to: '/operations', label: 'Operations', icon: ServerCog, later: true },
+  { to: '/operations', label: 'Operations', icon: ServerCog },
   { to: '/bams', label: 'BAMS', icon: Activity },
   { to: '/bridge', label: 'ChatGPT Bridge', icon: MessagesSquare, later: true },
 ];

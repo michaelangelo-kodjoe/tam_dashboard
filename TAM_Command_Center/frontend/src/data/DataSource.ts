@@ -1,3 +1,4 @@
+import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../opsTypes';
 import type {
   AccountInput,
   Account,
@@ -155,4 +156,13 @@ export interface DataSource {
   applyBamsImport(input: BamsApplyInput): Promise<BamsImportResult>;
   downloadBamsImportTemplate(format: ImportFormat): Promise<DownloadedFile>;
   downloadBamsSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile>;
+
+  // ---- Operations (contract section 13) -------------------------------------------------------
+  getOperations(query: OpsQuery): Promise<OpsData>;
+  saveOperationsQuarter(input: OpsQuarterInput): Promise<OpsQuarter>;
+  /** The backend answers 409 confirmation_required unless `confirm` is true. */
+  deleteOperationsQuarter(input: { year: number; quarter: OpsQuarterName; confirm: boolean; expected_row_version?: number }): Promise<void>;
+  saveOperationsAppliance(input: OpsApplianceInput): Promise<OpsRow>;
+  resetOperationsAppliance(input: { object_id: string; year: number; quarter: OpsQuarterName; confirm: boolean; expected_row_version?: number }): Promise<OpsRow>;
+  setOperationsVersion(input: { year: number; quarter: OpsQuarterName; object_ids: string[]; target_version: string | null }): Promise<OpsSetVersionResult>;
 }
