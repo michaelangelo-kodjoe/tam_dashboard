@@ -13,6 +13,11 @@ import type {
 import type {
   CandidateRef, DownloadedFile, ImportApplyInput, ImportFormat, ImportPlan, ImportResult, ImportRow, ImportValues, ReasonText, SimilarCandidate, SimilarCheck,
 } from '../types';
+import type {
+  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
+  BamsImportPlan, BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRow, BamsRule,
+  BamsRuleInput, BamsSettings, BamsState, BamsStateQuery, BamsTrend, TrendRange,
+} from '../bamsTypes';
 import { FileRefusal, MAX_BYTES, readBytes, sniff } from './importFile';
 import { DataSourceError, type ActivityQuery, type DataSource, type ErrorCode } from './DataSource';
 
@@ -337,6 +342,135 @@ export class ApiDataSource implements DataSource {
     const r = await this.request<{ item: { exact: SimilarCheck['exact']; candidates: WireCandidate[] } }>('POST', '/api/client/check-similar', input);
     return { exact: r.item.exact ?? null, candidates: (r.item.candidates ?? []).map(mapCandidate) };
   }
+  // ---- BAMS monitoring (contract §11) --------------------------------------------------------
+  async getBamsState(q: BamsStateQuery): Promise<BamsState> {
+    const r = await this.request<BamsState & { ok: true }>('GET', `/api/bams/state${this.qs({
+      view: q.view, account: q.account, object_id: q.object_id, location: q.location, metric: q.metric, status: q.status, q: q.q, sort: q.sort, dir: q.dir,
+      include_disabled: q.include_disabled ? 'true' : undefined, spark: q.spark === false ? '0' : undefined,
+    })}`);
+    return { ...r, rows: r.rows.map(mapBamsRow) };
+  }
+  async getBamsMetric(id: string): Promise<BamsMetricDetail> {
+    const r = (await this.request<{ item: BamsMetricDetail }>('GET', `/api/bams/metric/${encodeURIComponent(id)}`)).item;
+    return { ...r, row: mapBamsRow(r.row), rules: r.rules.map(mapBamsRule), alerts: r.alerts.map(mapBamsEvent) };
+  }
+  async getBamsTrend(id: string, range: TrendRange): Promise<BamsTrend> {
+    return (await this.request<{ item: BamsTrend }>('GET', `/api/bams/metric/${encodeURIComponent(id)}/trend${this.qs({ range })}`)).item;
+  }
+  async getBamsAlerts(q: { status?: AlertListStatus; account?: string; metric_id?: string; limit?: number }): Promise<BamsAlertList> {
+    const r = await this.request<BamsAlertList>('GET', `/api/bams/alerts${this.qs({ ...q })}`);
+    return { counts: r.counts, next_before: r.next_before ?? null, items: r.items.map((i) => ({ ...i, event: mapBamsEvent(i.event) })) };
+  }
+  async closeBamsAlert(input: { id: string; note: string | null }): Promise<{ event: BamsAlertEvent; suppressed_until_clear: boolean }> {
+    const r = (await this.request<{ item: { event: BamsAlertEvent; suppressed_until_clear: boolean } }>('POST', `/api/bams/alert/${encodeURIComponent(input.id)}/close`, { note: input.note })).item;
+    return { event: mapBamsEvent(r.event), suppressed_until_clear: !!r.suppressed_until_clear };
+  }
+  async setBamsMonitor(run: boolean): Promise<{ monitor: BamsMonitor }> {
+    return (await this.request<{ item: { monitor: BamsMonitor } }>('POST', `/api/bams/monitor/${run ? 'start' : 'stop'}`, {})).item;
+  }
+  async getBamsMonitor(): Promise<{ monitor: BamsMonitor; provider: BamsProvider }> {
+    const r = await this.request<{ monitor: BamsMonitor; provider: BamsProvider }>('GET', '/api/bams/monitor');
+    return { monitor: r.monitor, provider: r.provider };
+  }
+  async getBamsSettings(): Promise<BamsSettings> {
+    return (await this.request<{ item: BamsSettings }>('GET', '/api/bams/settings')).item;
+  }
+  async saveBamsSettings(patch: Partial<BamsSettings>): Promise<BamsSettings> {
+    return (await this.request<{ item: BamsSettings }>('POST', '/api/bams/settings', patch)).item;
+  }
+  async saveBamsObject(input: BamsObjectInput): Promise<MutationResult<BamsObjectSaved>> {
+    const r = await this.request<WireMutation<{ object: BamsObjectSaved }>>('POST', '/api/bams/object/save', input);
+    return { item: { ...r.item.object, enabled: !!r.item.object.enabled }, side_effects: effects(r.side_effects) };
+  }
+  async saveBamsMetric(input: BamsMetricInput & { object_id?: string }): Promise<void> {
+    await this.request('POST', '/api/bams/metric/save', input);
+  }
+  async getBamsDeletePreview(kind: 'object' | 'metric', id: string): Promise<BamsDeletePreview> {
+    const r = (await this.request<{ item: BamsDeletePreview }>('GET', `/api/bams/${kind}/${encodeURIComponent(id)}/delete-preview`)).item;
+    return { ...r, blocked: !!r.blocked, blocked_reason: r.blocked_reason ?? null };
+  }
+  async deleteBamsItem(kind: 'object' | 'metric', input: { id: string; expected_row_version?: number }): Promise<BamsDeleteResult> {
+    return (await this.request<{ item: { deleted: BamsDeleteResult } }>('POST', `/api/bams/${kind}/delete`, { ...input, confirm: true })).item.deleted;
+  }
+  async saveBamsRule(input: BamsRuleInput): Promise<BamsRule> {
+    return mapBamsRule((await this.request<{ item: { rule: BamsRule } }>('POST', '/api/bams/rule/save', input)).item.rule);
+  }
+  async deleteBamsRule(input: { id: string; expected_row_version?: number }): Promise<void> {
+    await this.request('POST', '/api/bams/rule/delete', { ...input, confirm: true });
+  }
+  async getBamsConfigs(): Promise<BamsConfig[]> {
+    return (await this.request<{ items: BamsConfig[] }>('GET', '/api/bams/configs')).items.map((c) => ({ ...c, enabled: !!c.enabled, starter: !!c.starter }));
+  }
+  async previewBamsConfig(input: { config_id: string; metric_ids?: string[] | null }): Promise<BamsConfigPreview> {
+    return (await this.request<{ item: BamsConfigPreview }>('POST', '/api/bams/configs/apply', { config_id: input.config_id, metric_ids: input.metric_ids ?? null, preview: true, confirm: false })).item;
+  }
+  async applyBamsConfig(input: { config_id: string; metric_ids?: string[] | null; plan_hash: string }): Promise<BamsConfigApplied> {
+    return (await this.request<{ item: BamsConfigApplied }>('POST', '/api/bams/configs/apply', { ...input, metric_ids: input.metric_ids ?? null, preview: false, confirm: true })).item;
+  }
+  async getBamsNotifications(limit = 30): Promise<BamsNotifications> {
+    const r = await this.request<{ unread_count: number; items: BamsNotifications['items'] }>('GET', `/api/bams/notifications${this.qs({ limit })}`);
+    return { unread_count: r.unread_count, items: r.items.map((n) => ({ ...n, unread: !!n.unread })) };
+  }
+  async markBamsNotificationsRead(input: { through_id: number } | { all: true }): Promise<number> {
+    return (await this.request<{ item: { unread_count: number } }>('POST', '/api/bams/notifications/read', input)).item.unread_count;
+  }
+
+  // ---- BAMS appliance import (contract §12) -------------------------------------------------
+  async inspectBamsImport(file: File): Promise<BamsImportPlan> {
+    try {
+      if (file.size > MAX_BYTES) throw new FileRefusal('too_large', 'This file is larger than 5 MiB. Split it and import it in parts.');
+      sniff(file.name, (await readBytes(file.slice(0, 8192))).subarray(0, 8192));
+    } catch (e) {
+      if (e instanceof FileRefusal) throw new DataSourceError('invalid_file', e.message, undefined, 422, { reason: e.reason });
+      throw e;
+    }
+    const bytes = await readBytes(file);
+    const res = await this.rawRequest('POST', '/api/import/bams/inspect', bytes, {
+      'Content-Type': 'application/octet-stream',
+      'X-File-Name': encodeURIComponent(file.name.replace(/^.*[\\/]/, '').slice(0, 200)),
+    });
+    return mapBamsPlan(((await res.json()) as { item: BamsImportPlan }).item);
+  }
+  async getBamsImport(importId: string): Promise<BamsImportPlan> {
+    return mapBamsPlan((await this.request<{ item: BamsImportPlan }>('GET', `/api/import/bams/${encodeURIComponent(importId)}`)).item);
+  }
+  async applyBamsImport(input: BamsApplyInput): Promise<BamsImportResult> {
+    return mapBamsResult((await this.request<{ item: BamsImportResult }>('POST', '/api/import/bams/apply', input)).item);
+  }
+  async downloadBamsImportTemplate(format: ImportFormat): Promise<DownloadedFile> {
+    return this.download(`/api/import/bams/template${this.qs({ format })}`, `tam_bams_import_template.${format}`);
+  }
+  async downloadBamsSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile> {
+    return this.download(`/api/import/bams/${encodeURIComponent(importId)}/skipped.${format}`, `tam_bams_skipped.${format}`);
+  }
+}
+
+// ---- BAMS mappers (exported for tests) ----------------------------------------------------------
+export function mapBamsRow(r: BamsRow): BamsRow {
+  return { ...r, enabled: !!r.enabled, simulated: !!r.simulated, object: { ...r.object, enabled: !!r.object.enabled }, spark: r.spark ?? [] };
+}
+export function mapBamsRule(r: BamsRule): BamsRule {
+  return { ...r, enabled: !!r.enabled, suppress_until_clear: !!r.suppress_until_clear };
+}
+export function mapBamsEvent(e: BamsAlertEvent): BamsAlertEvent {
+  return { ...e, still_breaching: !!e.still_breaching };
+}
+export function mapBamsPlan(w: BamsImportPlan): BamsImportPlan {
+  return {
+    ...w,
+    warnings: w.warnings ?? [],
+    review: (w.review ?? []).map((g) => ({
+      ...g,
+      candidates: (g.candidates ?? []).map((c) => ({
+        ...c, reasons: c.reasons ?? [], differences: c.differences ?? [], fills: c.fills ?? {}, kept: c.kept ?? {}, metrics: c.metrics ?? [],
+        metrics_added: c.metrics_added ?? [], metrics_existing: c.metrics_existing ?? [], metrics_conflicts: c.metrics_conflicts ?? [], notes: c.notes ?? [],
+      })),
+    })),
+    rows: w.rows.map((r) => ({ ...r, raw: r.raw ?? null, fills: r.fills ?? {}, kept: r.kept ?? {}, errors: r.errors ?? [], warnings: r.warnings ?? [], notes: r.notes ?? [] })),
+  };
+}
+export function mapBamsResult(r: BamsImportResult): BamsImportResult {
+  return { ...r, backup: r.backup ?? null, created: r.created ?? [], updated: r.updated ?? [], skipped: r.skipped ?? [], decisions: r.decisions ?? [], touched_accounts: r.touched_accounts ?? [], breakdown: r.breakdown ?? {}, audit_breakdown: r.audit_breakdown ?? {} };
 }
 
 // ---- import mappers (exported for tests). Whitelists fields: a stray numeric score is dropped (D-42). ----

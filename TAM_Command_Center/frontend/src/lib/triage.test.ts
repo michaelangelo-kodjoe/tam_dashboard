@@ -97,7 +97,7 @@ describe('key facts and labels', () => {
   it('open link text per kind', () => {
     expect(openLabel(mk({ id: '1', tier: 1 }))).toBe('Open task');
     expect(openLabel(mk({ id: '1', tier: 1, kind: 'client_follow_up' }))).toBe('Open account');
-    expect(openLabel(mk({ id: '1', tier: 1, kind: 'bams_alert' }))).toBe('Open infrastructure');
+    expect(openLabel(mk({ id: '1', tier: 1, kind: 'bams_alert' }))).toBe('Open alert');
     expect(openLabel(mk({ id: '1', tier: 1, kind: 'server_upgrade' }))).toBe('Open infrastructure');
   });
   it('row date labels', () => {

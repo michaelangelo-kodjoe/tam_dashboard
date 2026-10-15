@@ -16,6 +16,8 @@ export function queueTarget(i: QueueItem): string {
     case 'client_follow_up':
       return `${accountPath(i.client_id!, 'overview')}#next-touch`;
     case 'bams_alert':
+      // Today row -> the alert in the BAMS Alerts view (contract §11.12 item 7)
+      return `/bams/alerts?event=${encodeURIComponent(i.id)}`;
     case 'server_upgrade':
       return accountPath(i.client_id!, 'infrastructure', i.server_name ? { server: i.server_name } : undefined);
   }

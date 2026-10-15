@@ -565,7 +565,7 @@ def test_backup_under_concurrent_wal_writes_passes_integrity_check(api):
 
 # ------------------------------------------------------------------ stubs / routing
 STUBS = ["/api/operations/schedule/sync", "/api/operations/server-upgrade/save", "/api/operations/server-upgrade/template",
-         "/api/bams/state", "/api/bams/poll", "/api/export/database", "/api/export/excel", "/api/import/inspect",
+         "/api/export/database", "/api/export/excel", "/api/import/inspect",
          "/api/import/apply", "/api/data/reset", "/api/restore/excel", "/api/context", "/api/chat/apply"]
 
 

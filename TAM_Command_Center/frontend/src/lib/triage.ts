@@ -179,6 +179,7 @@ export function openLabel(item: QueueItem): string {
   switch (item.kind) {
     case 'task': return 'Open task';
     case 'client_follow_up': return 'Open account';
+    case 'bams_alert': return 'Open alert';
     default: return 'Open infrastructure';
   }
 }

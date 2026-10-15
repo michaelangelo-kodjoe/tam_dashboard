@@ -64,3 +64,19 @@ Account bulk import verified live (pytest 473 + 22 new e2e, vitest 326, tsc 0, s
 | QA-E4-2 | Low | pm | Abbreviation rule (D-41) flags short real words ('Lane'/'Lantern', 'cmd'/'Commodities'); consider min length 4 | next gate |
 
 New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run3_import_e2e.py` (22 cases).
+
+## Run 4 gate, ERROR_LOG_5 (2026-10-14): PASS (0 open Blocker/High)
+BAMS dashboard and appliance/metrics import verified live (pytest 606, vitest 401, tsc 0, scan 0). New items, all Low:
+
+| ID | Sev | Owner | Item | Check at |
+|---|---|---|---|---|
+| QA-E5-1 | Low | backend-dev / pm | Valid account name with unknown BPID is accepted silently (D-65 ambiguity) | next gate |
+| QA-E5-2 | Low | data-architect | Seed highs above 100% for percent metrics; Mbps metric shown as % | next gate |
+| QA-E5-3 | Low | data-architect / backend-dev | First DEV poll recovers 7 of 8 seeded open alerts | next gate |
+| QA-E5-4 | Low | frontend-dev | Trend chart repeats x-axis date ticks | next gate |
+| QA-E5-5 | Low | frontend-dev | Import step tabs/columns table clipped at 375 px | next gate |
+| QA-E5-6 | Low | backend-dev | Audit reason "rows 2, 3" vs contract "row N" | next gate |
+| QA-E5-7 | Low | backend-dev | bandit B324 sha1 (2 sites), B613 literal zero-width chars in regex (2 sites) | next gate |
+| QA-E5-8 | Low | frontend-dev | npm audit react-router 6.x moderate advisories | dependency pass |
+
+New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `test_gate_run4_import_e2e.py` (19). Not verified: Windows toast, real-UI file upload, import_expired after restart.

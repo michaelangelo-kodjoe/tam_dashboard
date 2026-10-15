@@ -32,6 +32,7 @@ class Runtime:
         self.lock = InstanceLock(config.lock_path)
         self.log_file: Optional[Path] = None
         self.startup_result: dict = {}
+        self.bams: Any = None                     # server.bams.monitor.Monitor, attached by create_app
         self.import_sessions: Any = None          # server.importer.sessions.SessionStore, created on first use
         self._closed = False
         # D-18: lock BEFORE the DB is opened.
@@ -75,6 +76,8 @@ class Runtime:
                     write_audit(conn, category="system", object_type="schema", action="migrated",
                                 object_id=str(result["to"]), label=f"schema {result['from']} -> {result['to']}",
                                 new=result, source="Migration")
+            from .bams.service import ensure_starters   # lazy: avoids an import cycle
+            ensure_starters(conn)
             level = read_settings(conn)["log_level"]
             self.startup_result = result
         finally:
@@ -99,5 +102,7 @@ class Runtime:
         if self._closed:
             return
         self._closed = True
+        if self.bams is not None:
+            self.bams.shutdown()
         self.lock.release()
         logsetup.teardown_logging()

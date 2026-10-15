@@ -95,3 +95,8 @@ class AlreadyApplied(AppError):
 
 class PossibleDuplicate(AppError):
     code, status = "possible_duplicate", 409
+
+
+# ---- Run 4: BAMS import (docs/04_API_CONTRACT.md section 12)
+class ImportFailed(AppError):
+    code, status = "import_failed", 500

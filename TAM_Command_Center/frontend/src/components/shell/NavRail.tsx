@@ -11,7 +11,7 @@ const MAIN: Item[] = [
   { to: '/accounts', label: 'Accounts', icon: Building2 },
   { to: '/tasks', label: 'Tasks', icon: ListChecks },
   { to: '/operations', label: 'Operations', icon: ServerCog, later: true },
-  { to: '/bams', label: 'BAMS', icon: Activity, later: true },
+  { to: '/bams', label: 'BAMS', icon: Activity },
   { to: '/bridge', label: 'ChatGPT Bridge', icon: MessagesSquare, later: true },
 ];
 const FOOT: Item[] = [{ to: '/settings', label: 'Settings', icon: Settings }];

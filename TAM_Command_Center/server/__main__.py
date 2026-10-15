@@ -11,7 +11,7 @@ def main() -> int:
     try:
         config = load_config()
         from .app import create_app
-        app = create_app(config)
+        app = create_app(config, monitor_thread=True)
     except StartupRefused as exc:
         print(f"TAM Command Center cannot start: {exc}", file=sys.stderr)
         return exc.exit_code

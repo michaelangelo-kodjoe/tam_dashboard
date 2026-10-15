@@ -72,7 +72,7 @@ export function WorkspacePage() {
           {current === 'overview' && <OverviewTab account={account} infra={infra} todayQ={todayQ} />}
           {current === 'tasks' && <TaskList clientId={account.id} caption={`${account.name} tasks`} />}
           {current === 'activity' && <ActivityTab account={account} />}
-          {current === 'infrastructure' && <InfrastructureTab q={infra} />}
+          {current === 'infrastructure' && <InfrastructureTab q={infra} clientId={account.id} />}
           {current === 'contacts' && <ContactsTab account={account} />}
         </div>
         {!narrow && <ContextRail account={account} />}

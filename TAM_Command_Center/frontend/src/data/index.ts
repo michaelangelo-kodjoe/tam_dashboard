@@ -29,5 +29,6 @@ export function createDataSource(search: string = typeof location !== 'undefined
   if (choice !== 'mock' || !MOCK_ALLOWED) return new ApiDataSource();
   const delay = Number(params.get('mockDelay')) || 0;
   const today = params.get('mockToday') ?? undefined;
-  return new MockDataSource({ delayMs: delay, today: today && /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : undefined });
+  const bamsProvider = params.get('mockProvider') === 'unavailable' ? 'unavailable' : 'dev';
+  return new MockDataSource({ delayMs: delay, bamsProvider, today: today && /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : undefined });
 }

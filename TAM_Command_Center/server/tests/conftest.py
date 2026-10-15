@@ -78,9 +78,9 @@ class Api:
         return self.ok("/api/task/save", {"task": task, "client_id": client_id, **kw})["item"]
 
 
-def _build(tmp_path, **kw):
+def _build(tmp_path, app_kw=None, **kw):
     cfg = make_config(tmp_path, **kw)
-    app = create_app(cfg)
+    app = create_app(cfg, **(app_kw or {}))
     client = TestClient(app, base_url="http://127.0.0.1:8791", raise_server_exceptions=False)
     return Api(client, app.state.runtime), app
 

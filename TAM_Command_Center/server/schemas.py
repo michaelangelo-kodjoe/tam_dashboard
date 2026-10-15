@@ -217,3 +217,22 @@ class ImportApply(Body):
     plan_hash: str = Field(min_length=1, max_length=100)
     confirm: bool = False
     decisions: list[ImportDecision] = Field(default_factory=list, max_length=500)
+
+
+class BamsImportTarget(Body):
+    type: str = Field(pattern="^(appliance|group)$")
+    id: Optional[str] = Field(default=None, max_length=64)
+    key: Optional[str] = Field(default=None, pattern=r"^g\d{1,6}$")
+
+
+class BamsImportDecision(Body):
+    key: str = Field(pattern=r"^g\d{1,6}$")
+    choice: str = Field(pattern="^(same|different|skip)$")
+    target: Optional[BamsImportTarget] = None
+
+
+class BamsImportApply(Body):
+    import_id: str = Field(min_length=1, max_length=64)
+    plan_hash: str = Field(min_length=1, max_length=100)
+    confirm: bool = False
+    decisions: list[BamsImportDecision] = Field(default_factory=list, max_length=500)

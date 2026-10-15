@@ -145,7 +145,7 @@ def _server_tiles(conn: sqlite3.Connection, objects: List[Dict[str, Any]], upgra
 
 def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: Optional[str] = None,
                          include_metrics: bool = True, today: Optional[str] = None,
-                         server_tiles: bool = False) -> Dict[str, Dict[str, Any]]:
+                         server_tiles: bool = False, provider_available: bool = True) -> Dict[str, Dict[str, Any]]:
     """Returns {client_id: payload} for one account or for all accounts."""
     cond, params = ("WHERE client_id = :c", {"c": client_id}) if client_id else ("", {})
     objects = rows_to_dicts(conn.execute(f"SELECT * FROM bams_objects {cond} ORDER BY name COLLATE NOCASE, id", params))
@@ -155,6 +155,8 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
         "wall_now": migrate.utc_now(), "provider_running": 0, "channel": channel}))
     fresh_by_obj: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for f in fresh:
+        if not provider_available and f["freshness"] != "Disabled":      # PROD fails closed: never a number without a provider
+            f["freshness"], f["current_value"] = "No Data", None
         fresh_by_obj[f["object_id"]].append(f)
     metrics = rows_to_dicts(conn.execute("SELECT id, object_id, metric_name, enabled FROM bams_metrics"
                                          " ORDER BY metric_name, id"))

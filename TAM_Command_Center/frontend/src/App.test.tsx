@@ -55,7 +55,7 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     expect(within(detail).getByRole('heading', { level: 2 })).toHaveTextContent(full.queue[0].title);
     expect(within(detail).getByText('Why it is here')).toBeInTheDocument();
     expect(within(detail).getByText('Key facts')).toBeInTheDocument();
-    expect(within(detail).getByRole('link', { name: /^Open (task|account|infrastructure)/ })).toBeInTheDocument();
+    expect(within(detail).getByRole('link', { name: /^Open (task|account|alert|infrastructure)/ })).toBeInTheDocument();
     // Later: tab bar visible, collapsed (D-30)
     const tabs = screen.getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual([`Upcoming (${full.upcoming.length})`, 'Recently changed (20)', 'Account load']);
@@ -162,8 +162,8 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     expect(options(screen.getByRole('listbox'))[0]).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{Enter}'); // focus is on the chip; Enter on a chip must not open anything
     expect(loc()).toBe('/today?show=t3');
-    await user.click(within(screen.getByRole('region', { name: 'Selected item' })).getByRole('link', { name: 'Open infrastructure' }));
-    await waitFor(() => expect(loc()).toMatch(/^\/accounts\/[^/]+\/infrastructure\?server=/));
+    await user.click(within(screen.getByRole('region', { name: 'Selected item' })).getByRole('link', { name: 'Open alert' }));
+    await waitFor(() => expect(loc()).toMatch(/^\/bams\/alerts\?event=/));
     cleanup();
     const t = await boot('/today?show=t1');
     await screen.findByRole('listbox');
@@ -227,14 +227,16 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     expect(document.querySelector('[role="dialog"]')).toBeNull(); // no drawer
   });
 
-  it('nav rail: Today/Accounts/Tasks/Settings work; Operations/BAMS/Bridge show "Later" and a not-built page; no Journal', async () => {
+  it('nav rail: Today/Accounts/Tasks/Settings/BAMS work; Operations/Bridge show "Later" and a not-built page; no Journal', async () => {
     const { user } = await boot('/today');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(nav).queryByText(/journal/i)).toBeNull();
-    expect(within(nav).getAllByText('Later')).toHaveLength(3);
+    expect(within(nav).getAllByText('Later')).toHaveLength(2);
     expect(within(nav).getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
     await user.click(within(nav).getByRole('link', { name: /Operations/ }));
     expect(await screen.findByText('Planned for a later release', { exact: false })).toBeInTheDocument();
+    await user.click(within(nav).getByRole('link', { name: 'BAMS' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'BAMS' })).toBeInTheDocument();
     await user.click(within(nav).getByRole('link', { name: 'Accounts' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Accounts' })).toBeInTheDocument();
   });
@@ -397,13 +399,13 @@ describe('Accounts and Workspace', () => {
     await waitFor(() => expect(screen.queryByRole('article', { name: /Call with desk head/ })).not.toBeInTheDocument());
   });
 
-  it('Infrastructure tab: read-only notice, BAMS and upgrade tables, ?server= highlights matching rows (US-9.1)', async () => {
+  it('Infrastructure tab: BAMS appliance panels with Open in BAMS, upgrade table, ?server= highlights matching rows (US-9.1)', async () => {
     const ds = newMock();
     const id = (await ds.getState()).accounts.find((a) => a.name.startsWith('Halvorsen'))!.id;
     await boot(`/accounts/${id}/infrastructure?server=hfa-bpipe-dev-01`, ds);
-    expect(await screen.findByText(/Upgrades are managed in Operations; monitoring in BAMS/)).toBeInTheDocument();
     const upgrades = await screen.findByRole('table', { name: 'Server upgrades' });
-    expect(screen.getByRole('table', { name: 'Monitored appliances' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('link', { name: /Open in BAMS/ })).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('table', { name: / metrics$/ }).length).toBeGreaterThan(0);
     const hi = upgrades.querySelectorAll('tr.is-highlight');
     expect(hi.length).toBeGreaterThan(0);
     expect([...hi].every((r) => /hfa-bpipe-dev-01/.test(r.textContent ?? ''))).toBe(true);

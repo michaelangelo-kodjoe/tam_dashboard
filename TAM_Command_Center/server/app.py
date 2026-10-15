@@ -25,6 +25,11 @@ from .logsetup import is_disconnect, log_connection_event, tail
 from .runtime import Runtime
 from .schemas import (CheckSimilar, ImportApply, ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
                       SettingsSave, TaskArchive, TaskSave)
+from .bams import routes as bams_routes
+from .bams.clock import Clock as BamsClock
+from .bams.monitor import Monitor
+from .bams.notify import select_notifier
+from .bams.provider import select_provider
 from .today import build_today
 from .trends import TREND_DAYS, activity_trend
 
@@ -32,7 +37,6 @@ log = logging.getLogger("tam.api")
 
 _STUB_PHASES = {
     "operations": "Phase 3: Operations",
-    "bams": "Phase 4: BAMS",
     "export": "Phase 5: data portability",
     "import": "Phase 5: data portability",
     "data/reset": "Phase 5: data portability",
@@ -164,10 +168,16 @@ def _validation_fields(exc: RequestValidationError) -> Dict[str, str]:
     return fields
 
 
-def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) -> FastAPI:
+def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, utc_base: Any = None,
+               monitor_thread: bool = False, provider: Any = None, notifier: Any = None) -> FastAPI:
     rt = Runtime(config, acquire_lock=acquire_lock, clock=clock)
+    # BAMS monitor (D-49..D-51): provider and notifier come from the MODE only; tests may inject fakes.
+    rt.bams = Monitor(rt, provider or select_provider(config.mode), notifier or select_notifier(config.mode),
+                      BamsClock(utc_base), threaded=monitor_thread)
     @asynccontextmanager
     async def lifespan(_: FastAPI):  # type: ignore[no-untyped-def]
+        if monitor_thread:
+            rt.bams.resume()
         yield
         rt.close()
 
@@ -262,7 +272,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
                     "tasks": reads.query_tasks(conn, archived="false", limit=C.TASKS_MAX_LIMIT),
                     "contacts": reads.list_contacts(conn),
                     "infrastructure": infra.build_infrastructure(conn, config.channel, include_metrics=False,
-                                                                today=today)}
+                                                                today=today, provider_available=rt.bams.provider.availability()[0])}
 
     @api.get("/today")
     def today() -> Dict[str, Any]:
@@ -330,7 +340,8 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
         with rt.db() as conn:
             reads.require_client(conn, client_id)
             return {"ok": True, **infra.build_infrastructure(conn, config.channel, client_id=client_id,
-                                                             today=rt.today(), server_tiles=True)[client_id]}
+                                                             today=rt.today(), server_tiles=True,
+                                                             provider_available=rt.bams.provider.availability()[0])[client_id]}
 
     # ------------------------------------------------------------ writes
     @api.post("/client/save")
@@ -414,8 +425,13 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None) 
     def data_backups(limit: int = Query(C.BACKUPS_DEFAULT_LIMIT, ge=1, le=200)) -> Dict[str, Any]:
         return {"ok": True, "items": rt.backups.list(limit), "backup_dir": str(config.backup_dir)}
 
+    # ------------------------------------------------------------ BAMS monitoring (Run 4) and BAMS import
+    bams_routes.register(api, rt)
+    bams_routes.register_import(api, rt)
+
     # ------------------------------------------------------------ DEV-only routes: not registered in PROD
     if config.mode == "DEV":
+        bams_routes.register_dev(api, rt)
         @api.post("/dev/reseed")
         def dev_reseed(body: DevReseed) -> Dict[str, Any]:
             return services.dev_reseed(rt, body.confirm)

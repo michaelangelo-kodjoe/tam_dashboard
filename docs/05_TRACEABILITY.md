@@ -261,3 +261,91 @@ Rows: 8 mandatory + 98 story/AC rows + 7 decision rows = 113 rows, plus the sect
 **PASS 111 · FAIL 0 · MISSING 0 · DEFERRED 2** (US-12.2 AC1 and AC2, both Phase 4.3). Out-of-scope section 52 groups (Operations, BAMS, Safety import): 3 DEFERRED.
 
 TRACEABILITY: COMPLETE (no FAIL/MISSING in scope)
+
+---
+
+# 7. Run 4 addendum: BAMS dashboard and appliance/metrics import (T-117, T-132)
+
+Author pm-agent, 2026-10-14. Scope: spec §26-§29, `docs/01_PM_SPEC.md` US-14.1..US-14.16, D-49..D-72.
+
+## 7.0 What I ran myself
+| Check | Result |
+|---|---|
+| `.venv/bin/python -m pytest server db tests/e2e -q` (from `TAM_Command_Center/`) | **606 passed** (matches ERROR_LOG_5) |
+| `npx vitest run` (frontend) | 26 files, **401 passed** |
+| Evidence files exist and carry the cited tests | Verified by listing test names in `tests/e2e/test_gate_run4_bams_e2e.py` (43), `tests/e2e/test_gate_run4_import_e2e.py` (19), `server/tests/test_bams_monitor.py`, `server/tests/test_bams_import.py`; FE `src/pages/bams/Bams.test.tsx`, `src/lib/bams.test.ts`, `src/components/bams/importState.test.ts`, `src/data/ApiBams.test.ts`, `src/data/mock/MockBams.test.ts` |
+| QA verdict | `docs/qa/ERROR_LOG_5.md`: PASS, 0 Blocker/High, 8 Low (QA-E5-1..8). Plan: `docs/qa/BAMS_TEST_PLAN.md` (A-H, I1-I16) |
+| Not re-run by me | live browser and scratch-server checks (relied on ERROR_LOG_5 for those; marked "QA" below) |
+
+Key: **E2E-B** `test_gate_run4_bams_e2e.py`, **E2E-I** `test_gate_run4_import_e2e.py`, **MON** `server/tests/test_bams_monitor.py`, **IMP** `server/tests/test_bams_import.py`, **FE** `Bams.test.tsx`/`bams.test.ts`/`importState.test.ts`.
+
+## 7.1 User stories
+| ID | Requirement | Status | Evidence |
+|---|---|---|---|
+| US-14.1 | Health at a glance, counts, quick views, URL state, empty states [§29] | PASS | MON `test_state_filters_sort_and_counts_match_infrastructure`; E2E-B `test_E_counts_agree`; FE Bams.test.tsx; QA browser 1024/375 |
+| US-14.2 | Trust the data: age, freshness word+icon, SIMULATED, PROD No data [§26, §4] | PASS | MON `test_freshness_bands_and_live_floor`, `test_prod_rows_have_no_numbers_even_with_stored_values`; E2E-B `test_B_freshness_boundaries`, `test_C_prod_fail_closed` |
+| US-14.3 | Monitor control, cadence independent of UI refresh [§26, §39] | PASS | MON `test_monitor_start_stop_idempotent_and_audited`, `test_provider_calls_independent_of_ui_refresh`; E2E-B `test_D_reads_do_not_poll_and_double_start`, `test_D_poll_interval_validation` |
+| US-14.4 | Lifecycle: open, update, recover, reopen, close, suppress, freeze, cooldown [§27] | PASS | MON `test_lifecycle_paths`, `test_full_lifecycle_notifications_and_suppression`, `test_stale_and_outage_freeze_evaluation`, `test_cooldown_after_close`; E2E-B L1-L14 |
+| US-14.5 | Rules: 3 types, 4 operators, validation, preview sentence, starter templates [§26, §35] | PASS | MON `test_preview_sentences`, `test_object_rules_and_conflicts`, `test_configs_starters_apply_preview_hash`; E2E-B `test_L12_operators`, `test_L12_pct_of_high_and_exceeds_high`, `test_E_configs_apply_preview_then_confirm` |
+| US-14.6a | In-app notifications once per event/kind, recovered optional, Privacy Mode, title/favicon unchanged, failures never break monitor [§28] | PASS | MON `test_notification_log_once_per_event_kind_channel`, `test_notifier_failure_never_breaks_poll`, `test_privacy_off_and_settings`, `test_notifications_read_watermark`; E2E-B `test_L14_no_renotify_after_restart`, `test_E_notifications_inbox` |
+| US-14.6b | Windows desktop toast actually delivered [§28] | DEFERRED | Logic, log row and privacy text tested (`test_toast_privacy_text`, E2E-B `test_F_desktop_notification_privacy_text`). Real toast **untested: no Windows** (ERROR_LOG_5 "Not verified") |
+| US-14.7 | Metric drawer: highs, trend 24h/7d/30d/90d, reference lines, rules, history [§29, §45] | PASS | MON `test_detail_trend_and_alert_lists`; E2E-B `test_H_trend_cap_and_state_perf`; QA browser. Low QA-E5-4 (repeated x-axis date ticks) |
+| US-14.8 | Add/edit/disable/delete appliance, duplicate name/ticker rejected [§26] | PASS | MON `test_delete_blocked_confirm_backup_cascade`, `test_metric_ticker_change_clears_reading_keeps_history`; E2E-B `test_E_validation_and_conflicts`, `test_F_delete_flow_backup_and_cascade` |
+| US-14.9 | Account view consistent, badge counts equal BAMS counts [§14] | PASS | E2E-B `test_E_counts_agree`; MON `test_state_filters_sort_and_counts_match_infrastructure` |
+| US-14.10 | PROD fails closed: banner, no simulation, no events [§4, §56] | PASS | MON `test_prod_never_constructs_simulator`, `test_prod_dev_routes_absent`; E2E-B `test_C_prod_fail_closed` |
+| US-14.11 | Template xlsx/csv, no data, no formulas, example re-imports | PASS | IMP `test_template_files`, `test_example_sheet_reads_back`; E2E-I `test_I1_templates` |
+| US-14.12 | Upload and preview with no write, per-row errors, hostile files refused | PASS | IMP `test_headers_formulas_unknown_columns_limits`, `test_row_validation_and_account_resolution`; E2E-I `test_I2_valid_inspect_no_write_and_apply_delta`, `test_I6_hostile_rows`, `test_I6_hostile_files`, `test_I7_row_caps` |
+| US-14.13 | Resolve similar appliances, none preselected, apply gated, other account not flagged | PASS | IMP `test_appliance_matcher_golden_and_engine_parity`, `test_decisions_gate_and_validation`, `test_same_name_other_account_is_independent`; E2E-I `test_I4_cross_account_same_name`, `test_I5_near_duplicates_and_decisions` |
+| US-14.14 | Apply safely: one backup, one transaction, rollback, fill-blanks-only, audit, no-op re-import | PASS | IMP `test_apply_new_and_merge_rules_audit_backup`, `test_atomic_failure_injection_rolls_back_everything`, `test_idempotent_reimport_writes_nothing`; E2E-I `test_I8_I10_backup_and_restore`, `test_I9_injected_failure_rolls_back`, `test_I11_reimport_noop`, `test_I12_fill_blanks_only` |
+| US-14.15 | Result counts = DB delta, skipped-rows download, new metrics No data then live | PASS | IMP `test_csv_skipped_file_is_formula_safe`, `test_imported_metric_polled_by_running_monitor_without_restart`; E2E-I `test_I13_concurrent_monitor_and_pickup`; FE importState.test.ts. Browser file-chooser upload not driven (vitest + API only) |
+| US-14.16 | Infrastructure tab and `/bams` counts include imported items [D-59] | PASS | MON `test_state_filters_sort_and_counts_match_infrastructure`; QA "infrastructure tab includes imported appliance" |
+
+## 7.2 Decisions D-49..D-72
+| ID | Decision | Status | Evidence |
+|---|---|---|---|
+| D-49 | First cut is a trustworthy DEV dashboard, not Bloomberg | PASS | Stub `BlpapiProvider` unavailable; MON `test_prod_never_constructs_simulator` |
+| D-50 | PROD never simulates | PASS | MON `test_simulator_refuses_non_dev_mode`, `test_prod_dev_routes_absent`; E2E-B `test_C_prod_fail_closed`, `test_C_prod_import_shows_no_data_and_never_values` |
+| D-51 | In-process monitor, poll interval bounds, persisted | PASS | MON `test_monitor_thread_polls_and_stops`; E2E-B `test_D_poll_interval_validation` |
+| D-52 | Freshness bands and per-metric stale_after | PASS | MON `test_freshness_bands_and_live_floor`; E2E-B `test_B_freshness_boundaries`, `test_B_per_metric_stale_after_and_slow_poll` |
+| D-53 | Pure lifecycle engine, freeze on stale/outage | PASS | MON `test_lifecycle_paths`, `test_stale_and_outage_freeze_evaluation` |
+| D-54 | Historical highs from samples | PASS | MON `test_exceeds_high_uses_prior_high_and_highs_track`, `test_pruning_and_daily_recompute`. Low QA-E5-2: seed/sim history exceeds 100% for percent metrics (data-architect) |
+| D-55 | Per-metric rules; configs are starter templates | PASS | MON `test_configs_starters_apply_preview_hash`, `test_rule_delete_blocked_while_alert_active_then_keeps_summary` |
+| D-56 | Notifications: in-app, desktop, log, privacy | PASS (in-app, log, privacy text); toast delivery see US-14.6b | MON `test_notification_log_once_per_event_kind_channel`, `test_toast_privacy_text` |
+| D-57 | Add/edit/disable/delete appliance; delete blocked by active alert | PASS | E2E-B `test_L11_delete_blocked_by_active_alert`, `test_F_delete_flow_backup_and_cascade` |
+| D-58 | Global page table, quick views, filters | PASS | MON `test_state_filters_sort_and_counts_match_infrastructure`; FE Bams.test.tsx |
+| D-59 | Account integration, "Open in BAMS" | PASS | E2E-B `test_E_counts_agree`; FE App.test.tsx |
+| D-60 | `/api/bams/*` replaces 501 stub, strict bodies, row_version, error shape | PASS | E2E-B `test_E_strict_bodies_and_injection`, `test_E_validation_and_conflicts` |
+| D-61 | Injectable clock, no sleeps | PASS | MON `test_dev_reset_and_clock`; E2E-B uses dev clock throughout |
+| D-62 | Recharts trend only, text equivalent | PASS | FE Bams.test.tsx; QA browser (text equivalent, 30/60/90 lines) |
+| D-63 | Import scope: appliances and metrics, existing accounts only | PASS | E2E-I `test_I2_valid_inspect_no_write_and_apply_delta` |
+| D-64 | Template columns | PASS | IMP `test_template_files`; E2E-I `test_I1_templates` |
+| D-65 | Account resolution BPID then name | PASS | IMP `test_row_validation_and_account_resolution`; E2E-I `test_I6_ambiguous_and_mismatch`. Low QA-E5-1: unknown BPID with valid name is accepted silently. **PM ruling:** a BPID that matches no account must make the row Invalid ("BPID not found"); owner backend-dev, Low, next pass |
+| D-66 | Exact duplicate and ticker rules | PASS | IMP `test_in_file_duplicates_and_ticker_rules`; E2E-I `test_I3_ticker_conflicts` |
+| D-67 | Similar-appliance detection within an account | PASS | IMP `test_appliance_matcher_golden_and_engine_parity`, `test_same_onto_group_target_and_cross_group_skip`; E2E-I `test_I5_skip_decision` |
+| D-68 | Merge: fill blanks only | PASS | IMP `test_apply_new_and_merge_rules_audit_backup`; E2E-I `test_I12_fill_blanks_only` |
+| D-69 | Safety: limits, no partial write, one backup, audit | PASS | IMP `test_atomic_failure_injection_rolls_back_everything`, `test_preview_stale_when_*`; E2E-I `test_I9_*`, `test_I14_concurrent_apply_and_stale_ticker`. Low QA-E5-6: audit reason text "rows 2, 3" vs contract "row N" |
+| D-70 | Allowed in DEV and PROD, never produces values | PASS | IMP `test_prod_import_allowed_but_no_numbers`; E2E-B `test_C_prod_import_shows_no_data_and_never_values` |
+| D-71 | Import routes | PASS | E2E-I `test_I1`, `test_I14_session_cap`; IMP `test_account_import_session_is_separate` |
+| D-72 | `/bams/import` four-step UI | PASS | FE importState.test.ts; QA browser step 1. Low QA-E5-5: clipped step tabs/legend at 375 px (frontend-dev) |
+
+## 7.3 Section 52 BAMS and import acceptance tests
+| §52 test | Status | Evidence |
+|---|---|---|
+| Provider fails closed | PASS | MON `test_prod_never_constructs_simulator`; E2E-B `test_C_prod_fail_closed` |
+| Test provider DEV only | PASS | MON `test_simulator_refuses_non_dev_mode`, `test_prod_dev_routes_absent` |
+| Cadence (poll independent of UI refresh) | PASS | MON `test_provider_calls_independent_of_ui_refresh` |
+| Repeated breach updates one event | PASS | E2E-B `test_L1_L5_open_update_recover_reopen` |
+| Recovery | PASS | same; MON `test_full_lifecycle_notifications_and_suppression` |
+| Manual close | PASS | E2E-B `test_L6_close_recovered_and_L13_double_close`, `test_L7_close_while_breaching_suppresses_until_clear` |
+| Stale/outage freezes | PASS | E2E-B `test_L8_stale_and_outage_freeze`; MON `test_stale_and_outage_freeze_evaluation` |
+| Notifications: in-app, logged, once, private | PASS | see US-14.6a |
+| Notifications: Windows toast delivery | DEFERRED | see US-14.6b (no Windows) |
+| **Imported malformed workbook does not partially write (BAMS)** | PASS | E2E-I `test_I6_hostile_files` (refused at Inspect, no row change), `test_I6_xlsx_formula_row_invalid`, `test_I9_injected_failure_rolls_back` (500 `import_failed`, zero partial rows); IMP `test_atomic_failure_injection_rolls_back_everything`. Run 3 accounts equivalent is covered by `test_gate_run3_import_e2e.py` |
+
+## 7.4 Findings
+FAIL 0, MISSING 0. Low, non-blocking: QA-E5-1..8 (owners per ERROR_LOG_5; E5-1 ruling above). Untested and flagged: Windows toast, Windows launchers, Bloomberg/BLPAPI, browser file-chooser upload, restart `import_expired`, full keyboard/screen-reader pass. Housekeeping for the user: delete stray `~/.local/share/TAM_Command_Center/` created by earlier QA runs.
+
+## 7.5 Run 4 totals
+48 rows (17 stories, 21 decisions, 10 §52): **PASS 46 · FAIL 0 · MISSING 0 · DEFERRED 2** (US-14.6b and the §52 Windows-toast row, same cause).
+
+TRACEABILITY RUN 4: COMPLETE (no FAIL/MISSING in scope)

@@ -10,6 +10,7 @@ import './styles/instruments.css';
 import './styles/today.css';
 import './styles/refresh.css';
 import './styles/import.css';
+import './styles/bams.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

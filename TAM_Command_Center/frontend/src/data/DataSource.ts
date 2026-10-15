@@ -25,6 +25,11 @@ import type {
   TaskQuery,
   TodayData,
 } from '../types';
+import type {
+  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
+  BamsImportPlan, BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRule,
+  BamsRuleInput, BamsSettings, BamsState, BamsStateQuery, BamsTrend, TrendRange,
+} from '../bamsTypes';
 
 export type ErrorCode =
   | 'validation_error'
@@ -41,6 +46,8 @@ export type ErrorCode =
   | 'preview_stale'
   | 'already_applied'
   | 'possible_duplicate'
+  | 'import_failed'
+  | 'monitor_unavailable'
   | 'network'
   | 'internal';
 
@@ -117,4 +124,35 @@ export interface DataSource {
   downloadSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile>;
   /** Same engine as the import (D-45). No write. */
   checkSimilarAccount(input: { name: string; bpid: string | null }): Promise<SimilarCheck>;
+
+  // ---- BAMS monitoring (docs/04_API_CONTRACT.md §11) ----------------------------------------
+  /** Cached state; never triggers a provider call. */
+  getBamsState(query: BamsStateQuery): Promise<BamsState>;
+  getBamsMetric(id: string): Promise<BamsMetricDetail>;
+  getBamsTrend(id: string, range: TrendRange): Promise<BamsTrend>;
+  getBamsAlerts(query: { status?: AlertListStatus; account?: string; metric_id?: string; limit?: number }): Promise<BamsAlertList>;
+  /** `expected_row_version` is deliberately not sent (contract §11.12 0c). */
+  closeBamsAlert(input: { id: string; note: string | null }): Promise<{ event: BamsAlertEvent; suppressed_until_clear: boolean }>;
+  setBamsMonitor(run: boolean): Promise<{ monitor: BamsMonitor }>;
+  getBamsMonitor(): Promise<{ monitor: BamsMonitor; provider: BamsProvider }>;
+  getBamsSettings(): Promise<BamsSettings>;
+  saveBamsSettings(patch: Partial<BamsSettings>): Promise<BamsSettings>;
+  saveBamsObject(input: BamsObjectInput): Promise<MutationResult<BamsObjectSaved>>;
+  saveBamsMetric(input: BamsMetricInput & { object_id?: string }): Promise<void>;
+  getBamsDeletePreview(kind: 'object' | 'metric', id: string): Promise<BamsDeletePreview>;
+  deleteBamsItem(kind: 'object' | 'metric', input: { id: string; expected_row_version?: number }): Promise<BamsDeleteResult>;
+  saveBamsRule(input: BamsRuleInput): Promise<BamsRule>;
+  deleteBamsRule(input: { id: string; expected_row_version?: number }): Promise<void>;
+  getBamsConfigs(): Promise<BamsConfig[]>;
+  previewBamsConfig(input: { config_id: string; metric_ids?: string[] | null }): Promise<BamsConfigPreview>;
+  applyBamsConfig(input: { config_id: string; metric_ids?: string[] | null; plan_hash: string }): Promise<BamsConfigApplied>;
+  getBamsNotifications(limit?: number): Promise<BamsNotifications>;
+  markBamsNotificationsRead(input: { through_id: number } | { all: true }): Promise<number>;
+
+  // ---- BAMS appliance import (contract §12); same session rules as the accounts import ------
+  inspectBamsImport(file: File): Promise<BamsImportPlan>;
+  getBamsImport(importId: string): Promise<BamsImportPlan>;
+  applyBamsImport(input: BamsApplyInput): Promise<BamsImportResult>;
+  downloadBamsImportTemplate(format: ImportFormat): Promise<DownloadedFile>;
+  downloadBamsSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile>;
 }

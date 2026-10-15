@@ -13,6 +13,7 @@ import { WorkspacePage } from '../../pages/WorkspacePage';
 import { TasksPage } from '../../pages/TasksPage';
 import { SettingsPage } from '../../pages/SettingsPage';
 import { PlaceholderPage } from '../../pages/PlaceholderPage';
+import { BamsRoutes } from '../../pages/bams/BamsRoutes';
 import { SandboxPage } from '../../pages/SandboxPage';
 import { NotFoundPage } from '../../pages/NotFoundPage';
 
@@ -62,7 +63,7 @@ function Shell() {
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/operations" element={<PlaceholderPage kind="operations" />} />
-            <Route path="/bams" element={<PlaceholderPage kind="bams" />} />
+            <Route path="/bams/*" element={<BamsRoutes />} />
             <Route path="/bridge" element={<PlaceholderPage kind="bridge" />} />
             <Route path="/sandbox" element={<SandboxPage />} />
             <Route path="*" element={<NotFoundPage />} />

@@ -107,15 +107,16 @@ def _as_text(v: Optional[str]) -> str:
     return "" if v is None else str(v)
 
 
-def build_skipped_xlsx(rows: Sequence[Sequence[str]]) -> bytes:
+def build_skipped_xlsx(rows: Sequence[Sequence[str]], headers: Optional[Sequence[str]] = None,
+                       sheet: str = "Accounts") -> bytes:
     """`rows`: lists of the 9 string columns (six import columns, Source row, Reason, Possible duplicate of).
     Every value is stored as a string (never a formula)."""
     openpyxl = _load_openpyxl()
     from openpyxl.styles import Font
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Accounts"
-    for col, h in enumerate(HEADERS + EXTRA_HEADERS, start=1):
+    ws.title = sheet
+    for col, h in enumerate(list(headers) if headers else HEADERS + EXTRA_HEADERS, start=1):
         ws.cell(row=1, column=col, value=h).font = Font(bold=True)
     for r, vals in enumerate(rows, start=2):
         for col, v in enumerate(vals, start=1):
@@ -132,10 +133,10 @@ def build_skipped_xlsx(rows: Sequence[Sequence[str]]) -> bytes:
     return buf.getvalue()
 
 
-def build_skipped_csv(rows: Sequence[Sequence[str]]) -> bytes:
+def build_skipped_csv(rows: Sequence[Sequence[str]], headers: Optional[Sequence[str]] = None) -> bytes:
     out = io.StringIO(newline="")
     w = csv.writer(out, lineterminator="\r\n")
-    w.writerow(HEADERS + EXTRA_HEADERS)
+    w.writerow(list(headers) if headers else HEADERS + EXTRA_HEADERS)
     for vals in rows:
         w.writerow([("'" + v if v.startswith(FORMULA_LEAD) else v) for v in (_as_text(x) for x in vals)])
     return b"\xef\xbb\xbf" + out.getvalue().encode("utf-8")

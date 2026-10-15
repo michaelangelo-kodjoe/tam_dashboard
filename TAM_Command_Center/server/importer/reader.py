@@ -78,6 +78,18 @@ class ParsedFile:
     notes: List[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class FileSpec:
+    """What differs between import files: the sheet, the columns and the row parser (accounts vs BAMS)."""
+    sheet: str
+    aliases: Dict[str, str]
+    labels: Dict[str, str]
+    parse_row: Any
+    check_headers: Any                 # (mapping, header_cells) -> None, raises InvalidFile
+    noun: str                          # "account" / "metric"
+    no_rows_hint: str
+
+
 # ======================================================================= helpers
 
 
@@ -225,30 +237,30 @@ def _raw_text(v: Any) -> str:
     return str(v)[:RAW_KEEP]
 
 
-def _err(row: int, fld: str, code: str, problem: str) -> Dict[str, str]:
+def _err(row: int, fld: str, code: str, problem: str, labels: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     return {"field": fld, "code": code,
-            "text": f"Row {row}: {LABELS[fld]}: {problem}. This row will be skipped; fix it in the file and "
+            "text": f"Row {row}: {(labels or LABELS)[fld]}: {problem}. This row will be skipped; fix it in the file and "
                     "re-upload, or leave it out."}
 
 
-def _text(v: Any, fld: str, row: int, errors: List[Dict[str, str]]) -> Optional[str]:
+def _text(v: Any, fld: str, row: int, errors: List[Dict[str, str]], labels: Optional[Dict[str, str]] = None) -> Optional[str]:
     if _is_blank(v):
         return None
     if isinstance(v, Formula):
-        errors.append(_err(row, fld, "formula_not_allowed", "formulas are not accepted; paste the value"))
+        errors.append(_err(row, fld, "formula_not_allowed", "formulas are not accepted; paste the value", labels))
         return None
     if isinstance(v, CellError):
-        errors.append(_err(row, fld, "cell_error", f"the cell holds an error value ({_clip(str(v), 20)}); fix or clear it"))
+        errors.append(_err(row, fld, "cell_error", f"the cell holds an error value ({_clip(str(v), 20)}); fix or clear it", labels))
         return None
     if isinstance(v, bool):
-        errors.append(_err(row, fld, "value_type", "TRUE/FALSE is not text; type the value as text"))
+        errors.append(_err(row, fld, "value_type", "TRUE/FALSE is not text; type the value as text", labels))
         return None
     if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
-        errors.append(_err(row, fld, "value_type", "a date or time is not accepted here; type the value as text"))
+        errors.append(_err(row, fld, "value_type", "a date or time is not accepted here; type the value as text", labels))
         return None
     if isinstance(v, float):
         if fld == "bpid" and not v.is_integer():
-            errors.append(_err(row, fld, "bpid_invalid", f"'{_raw_text(v)}' is not a whole number; type the BPID as text"))
+            errors.append(_err(row, fld, "bpid_invalid", f"'{_raw_text(v)}' is not a whole number; type the BPID as text", labels))
             return None
         v = str(int(v)) if v.is_integer() else repr(v)
     elif isinstance(v, int):
@@ -315,7 +327,7 @@ def parse_row(rownum: int, cells: Dict[str, Any]) -> ParsedRow:
     return ParsedRow(row=rownum, values=values, raw=raw, errors=errors)
 
 
-def map_headers(header_cells: List[Any]) -> Tuple[Dict[str, int], List[Dict[str, str]]]:
+def map_headers(header_cells: List[Any], spec: Optional["FileSpec"] = None) -> Tuple[Dict[str, int], List[Dict[str, str]]]:
     """-> ({field: column index (0-based)}, warnings). Raises InvalidFile for missing/duplicate headers."""
     mapping: Dict[str, int] = {}
     warnings: List[Dict[str, str]] = []
@@ -323,16 +335,18 @@ def map_headers(header_cells: List[Any]) -> Tuple[Dict[str, int], List[Dict[str,
         if _is_blank(v):
             continue
         key = _WS.sub(" ", _CTRL.sub("", str(v))).strip().rstrip("*").strip().casefold() if not isinstance(v, Formula) else ""
-        fld = HEADER_ALIASES.get(key)
+        fld = (spec.aliases if spec else HEADER_ALIASES).get(key)
         col = _col_letter(idx)
         if fld is None:
             warnings.append({"code": "unknown_column", "text": f'Column {col} "{_clip(str(v), 40)}" is ignored.'})
         elif fld in mapping:
-            raise _bad("header_duplicate", f'The column "{LABELS[fld]}" appears twice in row 1. Keep one.',
-                       column=LABELS[fld])
+            lab = (spec.labels if spec else LABELS)[fld]
+            raise _bad("header_duplicate", f'The column "{lab}" appears twice in row 1. Keep one.', column=lab)
         else:
             mapping[fld] = idx
-    if "name" not in mapping:
+    if spec is not None:
+        spec.check_headers(mapping, header_cells)
+    elif "name" not in mapping:
         raise _bad("header_missing", 'Row 1 must contain the column "Account name". Download the template to see the layout.')
     return mapping, warnings
 
@@ -345,12 +359,13 @@ def _col_letter(idx: int) -> str:
     return s
 
 
-def _finish(rows_cells: List[Tuple[int, Dict[str, Any]]], found: int) -> List[ParsedRow]:
-    return [parse_row(n, c) for n, c in rows_cells]
+def _finish(rows_cells: List[Tuple[int, Dict[str, Any]]], found: int, spec: Optional["FileSpec"] = None) -> List[ParsedRow]:
+    fn = spec.parse_row if spec else parse_row
+    return [fn(n, c) for n, c in rows_cells]
 
 
-def _too_many(found: int) -> InvalidFile:
-    return _bad("too_many_rows", f"This file has {found} account rows. The limit is {C.IMPORT_MAX_ROWS} per import. "
+def _too_many(found: int, noun: str = "account") -> InvalidFile:
+    return _bad("too_many_rows", f"This file has {found} {noun} rows. The limit is {C.IMPORT_MAX_ROWS} per import. "
                                  "Split the file and import it in parts.", found=found, limit=C.IMPORT_MAX_ROWS)
 
 
@@ -370,7 +385,7 @@ def _load_openpyxl() -> Any:
                        "See the log.") from exc
 
 
-def read_xlsx(data: bytes) -> ParsedFile:
+def read_xlsx(data: bytes, spec: Optional[FileSpec] = None) -> ParsedFile:
     zf = check_zip(data)
     zf.close()
     openpyxl = _load_openpyxl()
@@ -380,9 +395,11 @@ def read_xlsx(data: bytes) -> ParsedFile:
         raise _bad("corrupt", "The workbook is damaged and cannot be read.") from exc
     try:
         names = list(wb.sheetnames)
-        match = [n for n in names if n.strip().casefold() == "accounts"]
+        sheet_name = spec.sheet if spec else "Accounts"
+        noun = spec.noun if spec else "account"
+        match = [n for n in names if n.strip().casefold() == sheet_name.casefold()]
         if not match:
-            raise _bad("sheet_missing", 'The workbook has no sheet named "Accounts". '
+            raise _bad("sheet_missing", f'The workbook has no sheet named "{sheet_name}". '
                                         'Sheets found: ' + (", ".join(_clip(n, 30) for n in names[:10]) or "none") + ".",
                        sheets=[_clip(n, 30) for n in names[:10]])
         ws = wb[match[0]]
@@ -392,16 +409,16 @@ def read_xlsx(data: bytes) -> ParsedFile:
         except Exception:  # noqa: BLE001
             declared = None
         if declared and declared > C.IMPORT_SCAN_ROWS:
-            raise _bad("too_many_rows", f"The Accounts sheet is formatted down to row {declared}, beyond the "
+            raise _bad("too_many_rows", f"The {sheet_name} sheet is formatted down to row {declared}, beyond the "
                                         f"{C.IMPORT_SCAN_ROWS} rows that are read. Delete the empty formatted rows "
-                                        f"(or split the file; the limit is {C.IMPORT_MAX_ROWS} account rows).",
+                                        f"(or split the file; the limit is {C.IMPORT_MAX_ROWS} {noun} rows).",
                        found=declared, limit=C.IMPORT_MAX_ROWS, physical=True)
         try:
             header = next(ws.iter_rows(min_row=1, max_row=1, max_col=MAX_HEADER_COLS), ())
         except StopIteration:
             header = ()
         hvals = [_cell_value(c) for c in header]
-        mapping, warnings = map_headers(hvals)
+        mapping, warnings = map_headers(hvals, spec)
         maxcol = max(mapping.values()) + 1
         rows_cells: List[Tuple[int, Dict[str, Any]]] = []
         found = 0
@@ -414,12 +431,12 @@ def read_xlsx(data: bytes) -> ParsedFile:
                 rows_cells.append((rownum, cells))
         probe = next(ws.iter_rows(min_row=C.IMPORT_SCAN_ROWS + 1, max_row=C.IMPORT_SCAN_ROWS + 1, max_col=maxcol), ())
         if any(not _is_blank(_cell_value(c)) for c in probe):
-            raise _too_many(found + 1)
+            raise _too_many(found + 1, noun)
         if found > C.IMPORT_MAX_ROWS:
-            raise _too_many(found)
+            raise _too_many(found, noun)
         if found == 0:
-            raise _bad("no_rows", "The file has no account rows under the header. Add accounts and upload it again.")
-        return ParsedFile(format="xlsx", sheet=ws.title, rows=_finish(rows_cells, found), rows_found=found,
+            raise _bad("no_rows", f"The file has no {noun} rows under the header. " + (spec.no_rows_hint if spec else "Add accounts and upload it again."))
+        return ParsedFile(format="xlsx", sheet=ws.title, rows=_finish(rows_cells, found, spec), rows_found=found,
                           warnings=warnings, size_bytes=len(data))
     finally:
         wb.close()
@@ -476,7 +493,7 @@ def _csv_cell(s: str) -> Any:
     return s
 
 
-def read_csv(data: bytes) -> ParsedFile:
+def read_csv(data: bytes, spec: Optional[FileSpec] = None) -> ParsedFile:
     if b"\x00" in data and not data.startswith((b"\xff\xfe", b"\xfe\xff")):
         raise _bad("not_csv", "This does not look like a text CSV file.")
     try:
@@ -493,15 +510,18 @@ def read_csv(data: bytes) -> ParsedFile:
                 break
     except csv.Error as exc:
         raise _bad("corrupt", "The CSV file is malformed and cannot be read.") from exc
+    noun = spec.noun if spec else "account"
     if not rows:
+        if spec is not None:
+            spec.check_headers({}, [])
         raise _bad("header_missing", 'Row 1 must contain the column "Account name". Download the template to see the layout.')
-    mapping, warnings = map_headers([_csv_cell(c) for c in rows[0][:MAX_HEADER_COLS]])
+    mapping, warnings = map_headers([_csv_cell(c) for c in rows[0][:MAX_HEADER_COLS]], spec)
     rows_cells: List[Tuple[int, Dict[str, Any]]] = []
     found = 0
     if len(rows) > C.IMPORT_SCAN_ROWS:
         extra = rows[C.IMPORT_SCAN_ROWS:]
         if any(any(c.strip() for c in r) for r in extra):
-            raise _too_many(sum(1 for r in rows[1:] if any(c.strip() for c in r)))
+            raise _too_many(sum(1 for r in rows[1:] if any(c.strip() for c in r)), noun)
     for rownum, rec in enumerate(rows[1:C.IMPORT_SCAN_ROWS], start=2):
         cells = {f: (_csv_cell(rec[i]) if i < len(rec) else None) for f, i in mapping.items()}
         if all(_is_blank(v) for v in cells.values()):
@@ -510,11 +530,11 @@ def read_csv(data: bytes) -> ParsedFile:
         if found <= C.IMPORT_MAX_ROWS:
             rows_cells.append((rownum, cells))
     if found > C.IMPORT_MAX_ROWS:
-        raise _too_many(found)
+        raise _too_many(found, noun)
     if found == 0:
-        raise _bad("no_rows", "The file has no account rows under the header. Add accounts and upload it again.")
+        raise _bad("no_rows", f"The file has no {noun} rows under the header. " + (spec.no_rows_hint if spec else "Add accounts and upload it again."))
     names = {"," : "comma", ";": "semicolon", "\t": "tab", "|": "pipe"}
-    return ParsedFile(format="csv", sheet="CSV", rows=_finish(rows_cells, found), rows_found=found, warnings=warnings,
+    return ParsedFile(format="csv", sheet="CSV", rows=_finish(rows_cells, found, spec), rows_found=found, warnings=warnings,
                       size_bytes=len(data), encoding=enc, delimiter=names[delim],
                       notes=[f"Read as CSV: encoding {enc}, delimiter {names[delim]}."])
 
@@ -522,11 +542,11 @@ def read_csv(data: bytes) -> ParsedFile:
 # ======================================================================= entry point
 
 
-def read_upload(data: bytes, filename: str) -> ParsedFile:
+def read_upload(data: bytes, filename: str, spec: Optional[FileSpec] = None) -> ParsedFile:
     if len(data) > C.MAX_IMPORT_BYTES:
         raise PayloadTooLarge(f"The file is larger than {C.MAX_IMPORT_BYTES // (1024 * 1024)} MB.",
                               details={"max_bytes": C.MAX_IMPORT_BYTES, "reason": "too_large"})
     if not data:
         raise _bad("corrupt", "The file is empty.")
     fmt = detect_format(data, filename)
-    return read_xlsx(data) if fmt == "xlsx" else read_csv(data)
+    return read_xlsx(data, spec) if fmt == "xlsx" else read_csv(data, spec)

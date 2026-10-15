@@ -1,0 +1,221 @@
+{
+ "version": 1,
+ "about": "BAMS appliance matcher golden cases (account-scoped pool). Generated; reviewed by hand.",
+ "limits": {
+  "max_candidates": 5
+ },
+ "cases": [
+  {
+   "id": "exact-case",
+   "new": {
+    "name": "BPOD-NY-01"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-1"
+     },
+     "name": "bpod-ny-01"
+    }
+   ],
+   "expected": {
+    "exact": {
+     "type": "appliance",
+     "id": "app-1"
+    },
+    "candidates": []
+   }
+  },
+  {
+   "id": "zero-padding",
+   "new": {
+    "name": "bpod-ny-1"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-1"
+     },
+     "name": "BPOD-NY-01"
+    },
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-2"
+     },
+     "name": "BPOD-NY-02"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "appliance",
+       "id": "app-1"
+      },
+      "strength": "Low",
+      "reasons": [
+       "shared_key_words"
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "separators",
+   "new": {
+    "name": "BPOD NY 01"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-1"
+     },
+     "name": "BPOD-NY-01"
+    },
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-2"
+     },
+     "name": "BPOD-LDN-01"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "appliance",
+       "id": "app-1"
+      },
+      "strength": "High",
+      "reasons": [
+       "same_core_name"
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "different-unit-number",
+   "new": {
+    "name": "bpod-ldn-03"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-1"
+     },
+     "name": "bpod-ldn-01"
+    },
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-2"
+     },
+     "name": "bpod-ldn-02"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  },
+  {
+   "id": "different-prefix",
+   "new": {
+    "name": "cpg-bpipe-ny-01"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-1"
+     },
+     "name": "tbf-bpipe-ny-01"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  },
+  {
+   "id": "different-type-same-site",
+   "new": {
+    "name": "hfa-sapi-ldn-01"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-1"
+     },
+     "name": "hfa-bpipe-ldn-01"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  },
+  {
+   "id": "typo",
+   "new": {
+    "name": "bpod-nyy-01"
+   },
+   "pool": [
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-1"
+     },
+     "name": "bpod-ny-01"
+    },
+    {
+     "ref": {
+      "type": "appliance",
+      "id": "app-2"
+     },
+     "name": "bpod-ny-02"
+    }
+   ],
+   "expected": {
+    "exact": null,
+    "candidates": [
+     {
+      "ref": {
+       "type": "appliance",
+       "id": "app-1"
+      },
+      "strength": "Medium",
+      "reasons": [
+       "shared_key_words",
+       "similar_spelling"
+      ],
+      "differences": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "empty-pool",
+   "new": {
+    "name": "bpod-ny-01"
+   },
+   "pool": [],
+   "expected": {
+    "exact": null,
+    "candidates": []
+   }
+  }
+ ]
+}

@@ -1728,3 +1728,81 @@ class QA_4_ScannerAdversarialCorpus(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class T122_BamsImportFixtures(unittest.TestCase):
+    """Fixture rows for the Run 4 BAMS import (D-63..D-69). No schema change: the existing
+    UNIQUE (client_id, name NOCASE), UNIQUE (object_id, metric_name) and ticker UNIQUE carry the exact rules."""
+    FIX = Path(seed_mock.DB_DIR) / "fixtures" / "bams_import_rows.json"
+
+    def setUp(self):
+        self.rows = json.loads(self.FIX.read_text(encoding="utf-8"))["rows"]
+        self.c = seeded(dt.date(2026, 10, 12))
+
+    def by(self, prefix):
+        return [r for r in self.rows if r["_expect"].startswith(prefix)]
+
+    def acct(self, r):
+        got = self.c.execute("SELECT id, status FROM clients WHERE name = ?", (r["Account"],)).fetchone()
+        return got
+
+    def test_fixture_covers_every_case_and_resolves_against_seed(self):
+        tags = {r["_expect"] for r in self.rows}
+        for need in ("new_appliance", "exact_existing_noop", "new_metric_on_existing", "near_duplicate_of_existing",
+                     "near_duplicate_in_file", "same_name_other_account_not_flagged", "invalid_ticker_conflict",
+                     "invalid_unknown_account", "invalid_bpid_name_mismatch", "inactive_account_accepted"):
+            self.assertIn(need, tags)
+        for r in self.rows:
+            if r["_expect"] != "invalid_unknown_account":
+                self.assertIsNotNone(self.acct(r), r["Account"])
+        self.assertIsNone(self.acct(self.by("invalid_unknown_account")[0]))
+        self.assertEqual(self.c.execute("SELECT status FROM clients WHERE bpid='3862618'").fetchone()[0], "Inactive")
+        mismatch = self.by("invalid_bpid_name_mismatch")[0]
+        self.assertNotEqual(self.c.execute("SELECT id FROM clients WHERE bpid=?", (mismatch["BPID"],)).fetchone()[0],
+                            self.acct(mismatch)[0])
+
+    def test_db_enforces_exact_rules_the_fixtures_target(self):
+        c = self.c
+        def has_obj(r):
+            return c.execute("SELECT 1 FROM bams_objects WHERE client_id=? AND name=?", (self.acct(r)[0], r["Appliance"])).fetchone()
+        self.assertTrue(has_obj(self.by("exact_existing_noop")[0]))                      # NOCASE exact
+        for r in self.by("near_duplicate_of_existing"):
+            self.assertFalse(has_obj(r), r["Appliance"])                                 # similar, not exact
+        a, b = self.by("near_duplicate_in_file")
+        self.assertEqual(self.acct(a)[0], self.acct(b)[0])
+        self.assertNotEqual(a["Appliance"].lower(), b["Appliance"].lower())
+        other = self.by("same_name_other_account_not_flagged")[0]
+        self.assertFalse(has_obj(other))
+        self.assertEqual(c.execute("SELECT count(*) FROM bams_objects WHERE name=?", (other["Appliance"],)).fetchone()[0], 1)
+        tick = self.by("invalid_ticker_conflict")[0]["Ticker"]
+        self.assertEqual(c.execute("SELECT count(*) FROM bams_metrics WHERE ticker=?", (tick,)).fetchone()[0], 1)
+
+    def test_valid_rows_insert_and_invalid_rows_are_rejected_by_schema(self):
+        c = self.c
+        def put(r):
+            cid = self.acct(r)[0]
+            row = c.execute("SELECT id FROM bams_objects WHERE client_id=? AND name=?", (cid, r["Appliance"])).fetchone()
+            oid = row[0] if row else f"fx-o-{abs(hash((cid, r['Appliance']))) % 10**9}"
+            if not row:
+                c.execute("INSERT INTO bams_objects (id, client_id, name, region, location, environment) VALUES (?,?,?,?,?,?)",
+                          (oid, cid, r["Appliance"], r["Region"] or None, r["Location"] or None, (r["Environment"].upper() or None)))
+            c.execute("INSERT INTO bams_metrics (id, object_id, metric_name, ticker, stale_after_seconds) VALUES (?,?,?,?,?)",
+                      (f"fx-m-{r['Ticker']}", oid, r["Metric"], r["Ticker"], int(r["Stale after (s)"] or 120)))
+        before = c.execute("SELECT (SELECT count(*) FROM bams_objects), (SELECT count(*) FROM bams_metrics)").fetchone()
+        ok = [r for r in self.rows if r["_expect"] in ("new_appliance", "new_appliance_first_account", "new_metric_on_existing",
+              "near_duplicate_of_existing", "near_duplicate_in_file", "same_name_other_account_not_flagged", "inactive_account_accepted")]
+        for r in ok:
+            c.execute("SAVEPOINT s"); put(r); c.execute("RELEASE s")
+        after = c.execute("SELECT (SELECT count(*) FROM bams_objects), (SELECT count(*) FROM bams_metrics)").fetchone()
+        self.assertEqual((after[0] - before[0], after[1] - before[1]), (8, len(ok)))      # 8 new appliances (hfa-03 has 2 rows; kmc-01 already exists)
+        for tag in ("exact_existing_noop",):
+            with self.assertRaises(sqlite3.IntegrityError):
+                c.execute("SAVEPOINT s"); put(self.by(tag)[0])
+            c.execute("ROLLBACK TO s"); c.execute("RELEASE s")
+        for tag in ("invalid_ticker_conflict", "invalid_ticker_repeated_in_file", "invalid_environment",
+                    "invalid_stale_after", "invalid_over_limit"):
+            with self.subTest(tag):
+                with self.assertRaises(sqlite3.IntegrityError):
+                    c.execute("SAVEPOINT s"); put(self.by(tag)[0])
+                c.execute("ROLLBACK TO s"); c.execute("RELEASE s")
+        self.assertEqual(c.execute("PRAGMA foreign_key_check").fetchall(), [])

@@ -50,6 +50,13 @@ import { buildPlan, checkDecisions, computeEffects, parseGrid, type AcctRec, typ
 import { FileRefusal, MAX_BYTES, parseCsv, parseXlsx, readBytes, sniff, toCsv, xlsxBlob, COLUMNS } from '../importFile';
 import { rebaseTables, type MockFile, type Row, type Tables } from './rebase';
 import { rankToday } from './today';
+import { MockBams } from './mockBams';
+import { MockBamsImport, bamsTemplateRows, parseBamsGrid } from './mockBamsImport';
+import type {
+  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult, BamsImportPlan,
+  BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRule, BamsRuleInput, BamsSettings,
+  BamsState, BamsStateQuery, BamsTrend, TrendRange,
+} from '../../bamsTypes';
 import { browserLocalMidnight, bucketCounts, dayProgress, trendBounds, type LocalMidnight } from './progress';
 
 export interface MockOptions {
@@ -57,6 +64,8 @@ export interface MockOptions {
   today?: string;
   /** Instant used as the frozen BAMS clock. Default: real now (when today is real) else today 12:00Z. */
   loadNow?: Date;
+  /** `unavailable` simulates the PROD stub provider: every BAMS value is No Data (mockup 02). */
+  bamsProvider?: 'dev' | 'unavailable';
   /** Artificial latency per call, to see loading states. */
   delayMs?: number;
   /** Clock for audit timestamps written by mutations. Default: the real clock. Tests inject a fixed one. */
@@ -107,6 +116,8 @@ export class MockDataSource implements DataSource {
   private auditSeq = 0;
   private backups: BackupInfo[] = [];
   private logs: string[] = [];
+  private bamsEngine!: MockBams;
+  private bamsImp!: MockBamsImport;
   /** Test/dev hook: make the next N calls fail with a network error. */
   failNext = 0;
   private imports = new Map<string, { parsed: Parsed; fileName: string; size: number; format: ImportFormat; sheet: string | null; encoding: string | null; delimiter: string | null; notes: { code: string; text: string }[]; applied: ImportResult | null; skippedRaw: Map<number, Record<string, string>> }>();
@@ -135,6 +146,11 @@ export class MockDataSource implements DataSource {
         this.backups = [
           { name: 'tam_manual_backup.db', reason: 'manual', size_bytes: 1_048_576, created_at: addDays(this.today, -3) + 'T09:00:00.000Z' },
         ];
+        this.bamsEngine = new MockBams({
+          t: this.t, clock: this.clock, unavailable: this.opts.bamsProvider === 'unavailable', now: () => this.now(), uuid,
+          audit: (a) => this.audit({ ...a, category: 'bams' }),
+        });
+        this.bamsImp = new MockBamsImport(this.bamsEngine, { t: this.t, now: () => this.now(), uuid, backup: () => { this.safetyBackup('pre-import'); return this.backups[0]; } });
         this.log('INFO', `Mock data loaded; rebased to ${this.today}; BAMS mock clock ${this.clock.toISOString()}`);
       })();
     }
@@ -861,5 +877,59 @@ export class MockDataSource implements DataSource {
     const rows = [head, ...body];
     if (fmt === 'csv') return { blob: toCsv(rows), filename: 'tam_accounts_skipped.csv' };
     return { blob: xlsxBlob(rows), filename: 'tam_accounts_skipped.xlsx' };
+  }
+
+  // ------------------------------------------------------------------ BAMS (contract §11, §12)
+
+  async getBamsState(q: BamsStateQuery): Promise<BamsState> { await this.enter(); return this.bamsEngine.getState(q); }
+  async getBamsMetric(id: string): Promise<BamsMetricDetail> { await this.enter(); return this.bamsEngine.getMetric(id); }
+  async getBamsTrend(id: string, range: TrendRange): Promise<BamsTrend> { await this.enter(); return this.bamsEngine.getTrend(id, range); }
+  async getBamsAlerts(q: { status?: AlertListStatus; account?: string; metric_id?: string; limit?: number }): Promise<BamsAlertList> { await this.enter(); return this.bamsEngine.getAlerts(q); }
+  async closeBamsAlert(input: { id: string; note: string | null }): Promise<{ event: BamsAlertEvent; suppressed_until_clear: boolean }> { await this.enter(); return this.bamsEngine.closeAlert(input.id, input.note); }
+  async setBamsMonitor(run: boolean): Promise<{ monitor: BamsMonitor }> { await this.enter(); this.bamsEngine.desiredRunning = run; return { monitor: this.bamsEngine.monitor() }; }
+  async getBamsMonitor(): Promise<{ monitor: BamsMonitor; provider: BamsProvider }> { await this.enter(); return { monitor: this.bamsEngine.monitor(), provider: this.bamsEngine.provider() }; }
+  async getBamsSettings(): Promise<BamsSettings> { await this.enter(); return { ...this.bamsEngine.settings }; }
+  async saveBamsSettings(patch: Partial<BamsSettings>): Promise<BamsSettings> { await this.enter(); return this.bamsEngine.saveSettings(patch); }
+  async saveBamsObject(input: BamsObjectInput): Promise<MutationResult<BamsObjectSaved>> { await this.enter(); return { item: this.bamsEngine.saveObject(input), side_effects: [] }; }
+  async saveBamsMetric(input: BamsMetricInput & { object_id?: string }): Promise<void> { await this.enter(); this.bamsEngine.saveMetric(input); }
+  async getBamsDeletePreview(kind: 'object' | 'metric', id: string): Promise<BamsDeletePreview> { await this.enter(); return this.bamsEngine.deletePreview(kind, id); }
+  async deleteBamsItem(kind: 'object' | 'metric', input: { id: string }): Promise<BamsDeleteResult> { await this.enter(); this.safetyBackup('pre-delete'); return this.bamsEngine.deleteItem(kind, input.id); }
+  async saveBamsRule(input: BamsRuleInput): Promise<BamsRule> { await this.enter(); return this.bamsEngine.saveRule(input); }
+  async deleteBamsRule(input: { id: string }): Promise<void> { await this.enter(); this.bamsEngine.deleteRule(input.id); }
+  async getBamsConfigs(): Promise<BamsConfig[]> { await this.enter(); return this.bamsEngine.getConfigs(); }
+  async previewBamsConfig(input: { config_id: string; metric_ids?: string[] | null }): Promise<BamsConfigPreview> { await this.enter(); return this.bamsEngine.previewConfig(input.config_id, input.metric_ids); }
+  async applyBamsConfig(input: { config_id: string; metric_ids?: string[] | null; plan_hash: string }): Promise<BamsConfigApplied> { await this.enter(); return this.bamsEngine.applyConfig(input.config_id, input.plan_hash, input.metric_ids); }
+  async getBamsNotifications(limit = 30): Promise<BamsNotifications> { await this.enter(); return this.bamsEngine.getNotifications(limit); }
+  async markBamsNotificationsRead(input: { through_id: number } | { all: true }): Promise<number> { await this.enter(); return this.bamsEngine.markRead(input); }
+
+  async inspectBamsImport(file: File): Promise<BamsImportPlan> {
+    await this.enter();
+    const refuse = (e: FileRefusal) => new DataSourceError('invalid_file', e.message, undefined, 422, { reason: e.reason, ...e.extra });
+    if (file.size > MAX_BYTES) throw refuse(new FileRefusal('too_large', 'This file is larger than 5 MiB. Split it and import it in parts.'));
+    try {
+      const bytes = await readBytes(file);
+      const kind = sniff(file.name, bytes);
+      let grid;
+      let sheet: string | null = 'Import';
+      let encoding: string | null = null;
+      let delimiter: string | null = null;
+      if (kind.format === 'xlsx') { const x = await parseXlsx(bytes); grid = x.grid; sheet = x.sheet; } else { const c = parseCsv(bytes); grid = c.grid; sheet = null; encoding = c.encoding; delimiter = c.delimiter; }
+      return this.bamsImp.create(parseBamsGrid(grid), { name: file.name.replace(/^.*[\\/]/, '').slice(0, 200), size: file.size, format: kind.format, sheet, encoding, delimiter, notes: kind.notes });
+    } catch (e) {
+      if (e instanceof FileRefusal) throw refuse(e);
+      throw e;
+    }
+  }
+  async getBamsImport(importId: string): Promise<BamsImportPlan> { await this.enter(); return this.bamsImp.plan(importId); }
+  async applyBamsImport(input: BamsApplyInput): Promise<BamsImportResult> { await this.enter(); return this.bamsImp.apply(input); }
+  async downloadBamsImportTemplate(format: ImportFormat): Promise<DownloadedFile> {
+    await this.enter();
+    const rows = bamsTemplateRows();
+    return format === 'csv' ? { blob: toCsv([rows[0]]), filename: 'tam_bams_import_template.csv' } : { blob: xlsxBlob(rows), filename: 'tam_bams_import_template.xlsx' };
+  }
+  async downloadBamsSkippedRows(importId: string, format: ImportFormat): Promise<DownloadedFile> {
+    await this.enter();
+    const rows = this.bamsImp.skippedRows(importId, format);
+    return format === 'csv' ? { blob: toCsv(rows), filename: 'tam_bams_skipped.csv' } : { blob: xlsxBlob(rows), filename: 'tam_bams_skipped.xlsx' };
   }
 }

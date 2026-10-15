@@ -80,7 +80,7 @@ describe('links', () => {
     expect(queueTarget(base)).toBe('/accounts/c1/tasks?task=i');
     expect(queueTarget({ ...base, client_id: null })).toBe('/tasks?task=i');
     expect(queueTarget({ ...base, kind: 'client_follow_up' })).toBe('/accounts/c1/overview#next-touch');
-    expect(queueTarget({ ...base, kind: 'bams_alert', server_name: 'srv-1' })).toBe('/accounts/c1/infrastructure?server=srv-1');
+    expect(queueTarget({ ...base, kind: 'bams_alert', server_name: 'srv-1' })).toBe('/bams/alerts?event=i');
     expect(queueTarget({ ...base, kind: 'server_upgrade', server_name: 'a b' })).toBe('/accounts/c1/infrastructure?server=a+b');
   });
   it('helpers', () => {

@@ -369,7 +369,7 @@ class Entry:
 
     def __init__(self, idx: int, ref: Dict[str, Any], profile: Profile, data: Dict[str, Any]) -> None:
         self.idx, self.ref, self.profile, self.data = idx, ref, profile, data
-        self.sort_id = ref.get("id") or f"row:{ref.get('row'):08d}"
+        self.sort_id = ref.get("id") or (f"row:{ref['row']:08d}" if ref.get("row") is not None else f"key:{ref.get('key', ''):>10}")
 
 
 def _trigrams(s: str) -> Set[str]:

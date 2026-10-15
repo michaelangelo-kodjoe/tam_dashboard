@@ -268,7 +268,9 @@ Audit: `note.created` / `note.updated`.
 `{"confirm": true}` -> safety backup (`pre-delete`), then resets the DEV DB to the mock seed (settings kept). Returns `{"ok": true, "item": {"counts": {...}}, "side_effects": [backup_created]}`. **Not registered in PROD** (404 `not_found`).
 
 ## 5. Stubs (HTTP 501)
-Any method on `/api/operations/*`, `/api/bams/*`, `/api/export/*`, `/api/import/*`, `/api/data/reset`, `/api/restore/excel`, `/api/context`, `/api/chat/apply`:
+Any method on `/api/operations/*`, `/api/export/*`, `/api/import/*` (except the paths implemented in sections 10 and 12), `/api/data/reset`, `/api/restore/excel`, `/api/context`, `/api/chat/apply`:
+
+> Run 4 (T-100/T-120): `/api/bams/*` is **no longer a stub**; it is implemented per section 11 (an unknown `/api/bams/...` path answers 404 `not_found`). `/api/import/bams/*` is implemented per section 12.
 ```json
 {"ok": false, "error": {"code": "not_implemented", "message": "POST /api/operations/schedule/sync is planned for a later release (Phase 3: Operations).", "details": {"phase": "Phase 3: Operations"}}}
 ```
@@ -475,3 +477,343 @@ New optional boolean `duplicates_confirmed` (default `false`; ignored on update)
 
 ### 10.10 Security and operations notes
 CSP, Origin and Host rules apply unchanged (the upload is a same-origin `fetch`). The body is capped by the ASGI body-limit middleware before the route reads it. The reader never extracts to disk and never opens a file by an archive-supplied path. Only parsed rows are kept in memory (not the file) and nothing from the file is logged: logs record file name, format, sizes, counts and outcomes. Only one Apply runs at a time (process lock). `GET /openapi.json` (DEV) lists the routes.
+
+## 11. BAMS monitoring (FINAL, backend, task T-100, 2026-10-14)
+
+> **Status: FINAL.** Binds `docs/01_PM_SPEC.md` §12 (D-49 to D-62) with the user-approved mockups `TAM_Command_Center/mockups/bams/` 01-08 and the five open-question defaults of 2026-10-14. Conventions as §0 (envelopes, `row_version`/`expected_row_version`, strict bodies, error table). The 501 stub no longer covers `/api/bams/*`. Additive routes beyond PM §12.3 are marked **(+)**; each exists because a mockup needs it. Deviations and schema findings are in §11.12.
+
+### 11.0 Vocabulary
+
+- `freshness`: `"Live" | "Delayed" | "Stale" | "No Data"` (same spelling as `worst_status` in §3). Rule (D-52): age = server now minus `last_source_update`; Live when age <= `live_seconds`, Delayed when <= `stale_seconds`, else Stale; `No Data` when no value exists, **always** when the provider is unavailable (PROD fail-closed). `live_seconds = max(poll_interval_seconds + 15, 75)`; `stale_seconds` = the metric's `stale_after_seconds` (default 120). Both are echoed in `monitor.freshness` for tooltips.
+- `alert_status`: `"open" | "recovered" | "closed"`. "Active" = `open` or `recovered` (D-59).
+- `severity`: `"Info" | "Warning" | "Critical"`. `rule_type`: `"fixed_threshold" | "pct_of_high" | "exceeds_high"` (schema names, see §11.12 item 1). `operator`: `">" | ">=" | "<" | "<="`. `reference_period`: `"30d" | "60d" | "90d"`.
+- `display_status` (the worst of alert state and freshness, D-58; precedence): `"open" > "recovered" > "stale" > "no_data" > "delayed" > "live"`, or `"disabled"`.
+- Numbers are JSON numbers (never formatted strings). `null` means unknown. Highs carry a date only (`YYYY-MM-DD`), not a time (schema).
+- Every instant is UTC (§0). Ages are integer seconds computed by the server (`age_seconds`), so the client never needs a clock match.
+
+### 11.1 Shared objects
+
+**Monitor** (`monitor`):
+```json
+{"state": "running|stopped|provider_unavailable", "desired_running": true,
+ "poll_interval_seconds": 60, "started_at": "…Z", "last_poll_at": "…Z", "next_poll_at": "…Z",
+ "last_poll_ok": true, "last_error": null,
+ "freshness": {"live_seconds": 75, "stale_seconds_default": 120}}
+```
+`desired_running` is the persisted Start/Stop choice (DEV default true; PROD default false until Start). `state` is the real state: `provider_unavailable` whenever the provider cannot deliver (PROD stub always; DEV during a simulated outage), regardless of `desired_running`. `last_error` is a short sanitized sentence or `null`. `next_poll_at` is `null` unless `state` is `running`.
+
+**Provider** (`provider`): `{"mode": "DEV|PROD", "kind": "simulated|blpapi", "available": true, "simulated": true, "message": null}`. `simulated` is true only in DEV with the simulator (UI shows the SIMULATED badge). PROD: `kind "blpapi"`, `available false`, `message "BLPAPI provider not implemented/connected"`, `simulated false`. No route can change `mode`, `kind` or `simulated`.
+
+**Row** (one metric; used by state, detail, and alerts context):
+```json
+{"id": "<metric_id>", "metric_name": "CPU utilisation %", "ticker": "BPOD1 CPU", "enabled": true,
+ "stale_after_seconds": 120, "row_version": 3,
+ "object": {"id": "…", "name": "BPOD-NY-01", "client_id": "…", "client_name": "Castellan Peak Global Markets",
+            "region": "Americas", "location": "New York", "environment": "PROD", "enabled": true, "row_version": 2},
+ "current_value": 91.4, "last_source_update": "…Z", "last_received": "…Z", "age_seconds": 12,
+ "freshness": "Live", "simulated": true,
+ "highs": {"d30": {"value": 94.1, "date": "2026-10-03"}, "d60": {"value": 96.0, "date": "2026-08-29"}, "d90": {"value": 97.2, "date": "2026-07-21"}},
+ "alert": {"id": "<event_id>", "status": "open", "severity": "Warning", "opened_at": "…Z"},
+ "active_alerts": 1, "display_status": "open",
+ "spark": [88.1, 89.0, 91.4]}
+```
+`current_value` is `null` (and `freshness "No Data"`) when there is no value or the provider is unavailable; a number is **never** shown without a provider. `alert` is the most severe active event (ties: oldest open first) or `null`; `active_alerts` counts all active events on the metric. `spark` (<= 24 points, last 24 h, oldest first) appears on `state` rows only and is `[]` when empty; `?spark=0` omits it. `simulated` is true when the value comes from the simulator.
+
+**Rule**: `{"id","metric_id","rule_type","operator","threshold","reference_period","consecutive_updates","severity","cooldown_minutes","enabled","suppress_until_clear","breach_count","preview","row_version","created_at","updated_at"}`. `preview` is the backend sentence (display it): fixed `Alerts when CPU utilisation % > 85 for 3 updates (Warning)`; pct_of_high `Alerts when Active sessions > 90% of the 90-day high (1,755) for 2 updates (Critical)`; exceeds_high `Alerts when Active sessions exceeds the 90-day high (1,755) for 1 update (Critical)` (the number is omitted when the high is unknown). `suppress_until_clear` is the DA's runtime flag (docs/03_DATA_MODEL.md section 18): the lifecycle sets it when the user Closes a still-breaching alert and clears it when the metric clears; while true a breach does not open an event (D-53). It is also writable (mockup 05 toggle): `true` suppresses until the next clear, `false` lifts it.
+
+**Alert event**:
+```json
+{"id": "…", "metric_id": "…", "rule_id": "…|null", "alert_type": "fixed_threshold", "severity": "Warning",
+ "status": "open", "message": "CPU utilisation % > 85", "opened_at": "…Z", "last_triggered_at": "…Z",
+ "recovered_at": null, "closed_at": null, "trigger_value": 86.2, "current_value": 91.4, "peak_value": 91.4,
+ "closed_note": null, "still_breaching": true, "rule_summary": "> 85 for 3 updates", "row_version": 4}
+```
+`still_breaching` (active events only; `false` once closed) is true when the metric is fresh and the rule currently breaches: the Close dialog shows its warning from this. `rule_summary` is the short condition kept even if the rule was later deleted (`rule_id` null).
+
+### 11.2 `GET /api/bams/state`
+
+Cached state only: **never triggers a provider call** (D-51); safe to poll every 15 s. Query (all optional, combine with AND):
+
+| param | values |
+|---|---|
+| `view` | `all` (default), `active_alerts`, `delayed_stale`, `live`, `no_data` |
+| `account` | client id, or comma-separated ids (the import's "Open BAMS" passes several) |
+| `object_id`, `location` (exact, NOCASE), `metric` (metric name, exact NOCASE) | |
+| `status` | `open`, `recovered`, `live`, `delayed`, `stale`, `no_data` (matches `display_status` components: `open`/`recovered` match `alert.status`, the others `freshness`) |
+| `q` | substring, NOCASE, over appliance, account, metric name and ticker (<= 100 chars) |
+| `sort` / `dir` | `status` (default, worst first, then appliance, then metric), `appliance`, `location`, `metric`, `current`, `high30`, `high60`, `high90`, `last_update`; `asc` (default) / `desc`. `null` values sort last |
+| `include_disabled` | `false` (default). Disabled appliances and metrics are otherwise omitted and not counted |
+| `spark` | `1` (default) / `0` |
+
+Unknown param values -> 422 `validation_error`. Response:
+```json
+{"ok": true, "server_time": "…Z", "monitor": {…}, "provider": {…},
+ "banner": null,
+ "summary": {"active_alerts": 2, "open": 1, "recovered": 1, "delayed": 2, "stale": 1, "delayed_stale": 3, "live": 5, "no_data": 1, "total": 10},
+ "view_counts": {"all": 10, "active_alerts": 2, "delayed_stale": 3, "live": 5, "no_data": 1},
+ "filters": {"accounts": [{"id","name"}], "locations": ["London"], "objects": [{"id","name","client_id","client_name"}], "metrics": ["CPU utilisation %"]},
+ "counts": {"rows": 10, "unfiltered": 10},
+ "rows": [ <Row>, … ]}
+```
+- `summary` covers all enabled metrics (strip on the page; active_alerts = events, the others = metrics). `view_counts` are the tab counts and respect every filter **except** `view`. `filters` lists the choices from the whole enabled set (not narrowed). `counts.rows` = rows returned (after all filters); there is no pagination (hard cap 2000 rows; over it `counts.truncated: true`).
+- `banner` is `null` or `{"code": "provider_unavailable", "text": "BLPAPI provider is not connected. No live values are shown."}` (PROD stub, or a DEV simulated outage with the text `Simulated outage (DEV)`). With a banner every row has `freshness "No Data"`, `current_value null`.
+- Empty states for the frontend: `summary.total == 0` and no filters -> "no appliances" (offer Add/Import); `rows == []` otherwise -> "filter matches nothing"; `banner` -> provider text. The counts always equal `/api/client/{id}/infrastructure` `active_alerts` for the same account (D-59).
+
+### 11.3 Metric detail and trend
+
+`GET /api/bams/metric/{id}` -> `{"ok": true, "item": {"row": <Row>, "rules": [<Rule>], "alerts": [<Alert event>], "alerts_total": 14, "ranges": ["24h","7d","30d","90d"]}}`. `alerts` = this metric's history, newest first, <= 50 (`?alerts_limit=` 1..200). Works for disabled metrics. 404 `not_found` otherwise.
+
+`GET /api/bams/metric/{id}/trend?range=24h|7d|30d|90d` (default `7d`):
+```json
+{"ok": true, "item": {"metric_id": "…", "range": "7d", "from": "…Z", "to": "…Z",
+  "points": [{"t": "…Z", "v": 88.1}], "downsampled": true,
+  "text": {"min": 62.0, "max": 93.4, "last": 91.4, "count": 420, "from": "…Z", "to": "…Z"},
+  "reference_lines": [{"id": "high_30", "label": "30D high", "value": 94.1, "date": "2026-10-03"}, {"id": "high_60", …}, {"id": "high_90", …}],
+  "rule_lines": [{"rule_id": "…", "label": "Warning threshold 85", "value": 85, "severity": "Warning"}]}}
+```
+`points` <= 500 (time buckets, mean of the bucket, oldest first; `text.min/max/last/count` are computed from the **raw** samples so the text equivalent is exact). `rule_lines` gives one line per enabled rule whose level is a number (fixed: threshold; pct_of_high: threshold% of the period high; exceeds_high: the period high). Empty history or provider unavailable -> `points: []`, `text` values `null`, `count 0` (200, not an error). Bad `range` -> 422.
+
+### 11.4 Alerts
+
+`GET /api/bams/alerts?status=active|open|recovered|closed|all` (default `active`; `account`, `metric_id`, `limit` 1..500 default 100, `before` = an `opened_at` instant for paging):
+```json
+{"ok": true, "counts": {"active": 2, "open": 1, "recovered": 1, "closed": 14},
+ "items": [{"event": <Alert event>, "metric": {"id","metric_name","ticker"}, "object": {"id","name","client_id","client_name","location"}, "freshness": "Live"}],
+ "next_before": null}
+```
+Order: active first (open, then recovered; most severe, then oldest), then closed newest first. `status=closed` is the "Closed history" view. Counts ignore `limit`. Alerts on disabled objects/metrics are not listed in `active` (as §3); `closed` lists them.
+
+`POST /api/bams/alert/{id}/close` body `{"note": "…"|null, "expected_row_version": 4}` (`note` <= 2000; strict). Allowed from `open` or `recovered`. Success `{"ok": true, "item": {"event": <Alert event, status closed>, "suppressed_until_clear": true}, "side_effects": [...]}`; `suppressed_until_clear` is true when the metric was still breaching (D-53): the rule is suppressed until the value clears, then a fresh breach opens a new event. Writes an audit event (`source UI`, category `bams`, reason = note) and the activity sentence `BAMS alert closed: <subject> (<severity>)` (§7). Errors: 404; 409 `stale_write`; 409 `conflict` with `details.reason "already_closed"`. A frozen monitor (stale or outage) does not block Close.
+
+### 11.5 Monitor and settings
+
+`POST /api/bams/monitor/start` and `/stop`: body `{}` (strict). Return `{"ok": true, "item": {"monitor": <Monitor>}}` and persist `desired_running`. Idempotent (starting a running monitor is a 200 no-op, no audit). In PROD with the stub provider, start answers 200 and `monitor.state "provider_unavailable"` (it never simulates). Start/stop write an audit event (category `bams`, `source UI`). `GET /api/bams/monitor` **(+)** returns `{"ok": true, "monitor": …, "provider": …}` cheaply for the header strip.
+
+`GET /api/bams/settings` -> `{"ok": true, "item": <Settings>}`; `POST /api/bams/settings` takes a partial body (only present keys change) and returns the full `item`:
+```json
+{"poll_interval_seconds": 60, "in_app_notifications": true, "desktop_notifications": true,
+ "notify_recovered": false, "privacy_mode": true}
+```
+`poll_interval_seconds`: integer 30..86400 (presets 60/120/300/600 are a UI matter). `notify_recovered` applies to **desktop** only; the in-app inbox always records recovered. Defaults per the 2026-10-14 answers: desktop on, privacy on, monitor stopped in PROD. Persisted in `app_meta` as `setting.bams.*`; changes are audited (old/new value). Changing `poll_interval_seconds` takes effect at the next cycle. The UI refresh interval (15 s) is a frontend preference and is not stored by the server.
+
+### 11.6 Appliances (objects) and metrics
+
+`POST /api/bams/object/save` (upsert, §0.2):
+```json
+{"id": "…|omit", "client_id": "…", "name": "BPOD-NY-01", "region": "Americas", "location": "New York",
+ "environment": "PROD|DEV|null", "enabled": true, "expected_row_version": 2,
+ "metrics": [{"id": "…|omit", "metric_name": "CPU utilisation %", "ticker": "BPOD1 CPU", "enabled": true,
+              "stale_after_seconds": 120, "expected_row_version": 1}]}
+```
+- Create requires `client_id` (existing account, else 422), `name`, and `metrics` with **at least one** metric (`metric_name`, `ticker` required). `client_id` cannot change on update.
+- Update patches the object fields. `metrics`, if sent, is an **upsert-only** list (item with `id` patches, without `id` creates); it never removes a metric (use metric/delete). Object and metrics are written in one transaction; any failure writes nothing.
+- Limits are the schema limits: name 1..200 (trimmed, spaces collapsed, no control characters), region <= 100, location <= 200, ticker 1..200, `stale_after_seconds` integer >= 1.
+- Errors: 409 `conflict` `fields.name` "An appliance named X already exists for this account." (NOCASE, per account); 409 `conflict` `fields["metrics[1].ticker"]` "Ticker T is already used by <metric> on <appliance>." with `details.owner = {metric_id, metric_name, object_name, client_name}` (tickers are globally unique; also raised for a ticker repeated inside the same request, `fields` naming both indexes); 409 `conflict` for a repeated metric name inside one appliance; 422 field errors; 404/409 `stale_write` as usual.
+- Response `{"ok": true, "item": {"object": {…, "metrics": [{id, metric_name, ticker, enabled, stale_after_seconds, row_version}]}}, "side_effects": []}`; `no_change` when nothing changed. Disabling an appliance does not touch its alerts; disabled items drop out of counts and `state` (their active events stay stored, hidden from active lists until re-enabled, §3).
+- A new metric shows **No Data** until the next poll; the monitor reads the metric list at the start of every poll, so no restart is needed. In DEV the simulator invents values for any new ticker deterministically.
+
+`POST /api/bams/metric/save` (upsert): `{"id","object_id" (create),"metric_name","ticker","enabled","stale_after_seconds","expected_row_version"}`. Same limits and conflicts. `ticker` of an existing metric may be changed here (not by import); changing it clears `current_value`, `last_source_update`, highs and samples are kept (history belongs to the metric), and the next poll refills.
+
+`GET /api/bams/object/{id}/delete-preview` **(+)** and `GET /api/bams/metric/{id}/delete-preview` **(+)** -> `{"ok": true, "item": {"name": "BPOD-NY-01", "metrics": 2, "samples": 25120, "rules": 3, "alerts_total": 5, "alerts_active": 1, "blocked": true, "blocked_reason": "1 alert is still open or recovered. Close it first."}}` (mockup 06b states these counts).
+`POST /api/bams/object/delete` / `/metric/delete`: `{"id": "…", "confirm": true, "expected_row_version": n}`. Without `confirm: true` -> 409 `confirmation_required` with `details` = the preview item. **Blocked while any non-closed alert exists** on the object or metric: 409 `conflict`, `details.reason "active_alert"` (nothing written, no backup). Otherwise a `pre-delete` safety backup, then delete (metrics, rules, samples, closed events, notification rows go by cascade). Response `{"ok": true, "item": {"deleted": {"id", "name", "metrics", "samples", "rules", "alerts"}}, "side_effects": [backup_created]}`; `backup_failed` 500 aborts the delete. Audit event per delete (category `bams`).
+
+### 11.7 Rules
+
+`POST /api/bams/rule/save` (upsert): `{"id", "metric_id" (create), "rule_type", "operator", "threshold", "reference_period", "consecutive_updates", "severity", "cooldown_minutes", "enabled", "suppress_until_clear", "expected_row_version"}`. Defaults on create: `operator ">"`, `consecutive_updates 1`, `severity "Warning"`, `cooldown_minutes 0`, `enabled true`, `suppress_until_clear false`. Validation runs on the merged result and returns field messages matching the schema CHECKs:
+- `fixed_threshold`: `threshold` required (any number), `reference_period` must be null.
+- `pct_of_high`: `threshold` required and > 0 (a percent of the high, 90 = 90%), `reference_period` required.
+- `exceeds_high`: `reference_period` required, `threshold` must be null, `operator` must be `>` or `>=`.
+- `consecutive_updates` >= 1 (<= 1000), `cooldown_minutes` 0..10080. Changing `rule_type` on update re-validates everything; unrelated fields are cleared only if sent as `null`.
+Messages, e.g. `fields.threshold "Threshold is required for a threshold rule."`, `fields.consecutive_updates "Consecutive updates must be 1 or more."`. Response `{"ok": true, "item": {"rule": <Rule>}, "side_effects": []}`. Editing a rule resets its `breach_count`; `suppress_until_clear` changes only if sent. A rule change never opens or closes an event by itself; the next fresh poll evaluates it.
+
+`POST /api/bams/rule/delete`: `{"id", "confirm": true, "expected_row_version"}`; no confirm -> 409 `confirmation_required`. Allowed with an active event: the event stays (its `rule_id` becomes null, `rule_summary` is kept), is no longer evaluated, and ends only by a user Close. No backup (small row). Audit (category `bams`) for save and delete, `source UI`.
+
+### 11.8 Starter templates (alert configs)
+
+`GET /api/bams/configs` -> `{"ok": true, "items": [{"id","name","metric_match":"*CPU*","rule_type","operator","threshold","reference_period","consecutive_updates","severity","cooldown_minutes","enabled","starter","row_version","preview":"Alerts when a matching metric > 85 for 3 updates (Warning)","matches": 4}]}`. `metric_match` is a GLOB pattern tested case-insensitively on `metric_name`; `matches` counts enabled metrics on enabled appliances. Seeded starters per the default of question 3: one `exceeds_high` 90d Warning and one `pct_of_high` 90%/90d Critical (user editable).
+
+**(+)** `POST /api/bams/configs/save` (upsert, same validation and fields as a rule plus `name` 1..200 unique NOCASE and `metric_match` 1..200, no control characters) and `POST /api/bams/configs/delete` (`id`, `confirm: true`). Templates are not rules; no event depends on them. Audited.
+
+`POST /api/bams/configs/apply`: `{"config_id": "…", "metric_ids": ["…"]|null, "preview": true, "confirm": false}`.
+- `preview: true` (default) writes nothing: `{"ok": true, "item": {"config_id", "plan_hash": "sha256:…", "would_create": 3, "skipped_identical": 1, "metrics": [{"metric_id","metric_name","object_name","client_name","action": "create|skip_identical"}]}}`. `metric_ids` limits the candidates to a subset of the matches (an id that does not match -> 422).
+- `preview: false` requires `confirm: true` (else 409 `confirmation_required`) and the `plan_hash` from the preview (409 `preview_stale` if the matches or existing rules changed). One transaction creates one rule per `create` metric; "identical" means same type, operator, threshold, reference period, consecutive updates, severity, cooldown on the same metric; identical rules are skipped, never duplicated. One audit event per created rule (`source UI`, category `bams`). Response `{"ok": true, "item": {"created": 3, "skipped_identical": 1, "rule_ids": […]}, "side_effects": []}`. No silent bulk write is possible: nothing is applied without a preview hash.
+
+### 11.9 Notifications
+
+`GET /api/bams/notifications?limit=50&unread_only=false` -> `{"ok": true, "unread_count": 3, "items": [{"id": 412, "event_id": "…", "kind": "opened|recovered|closed", "attempted_at": "…Z", "title": "Warning opened: CPU utilisation %", "detail": "Castellan Peak / BPOD-NY-01 · value 91.4", "severity": "Warning", "unread": true, "status": "open"}]}`. Items are the `in_app` channel rows of `bams_notification_log`, newest first (limit 1..200). In-app text carries names and values; **Privacy Mode affects desktop toasts only** ("BAMS alert opened (Critical)", no account, appliance or value). `kind "reminder"` is not produced in this run.
+
+`POST /api/bams/notifications/read`: `{"through_id": 412}` or `{"all": true}` (exactly one; unknown id/extra -> 422). Marks everything up to that log id read (a watermark kept in `app_meta` `bams.notifications_read_through`; no schema change) and returns `{"ok": true, "item": {"unread_count": 0}}`. Notification rows are never deleted by this route. Recording is once per event/kind/channel (DB unique); a desktop failure is logged at warning and never fails a poll or a request.
+
+### 11.10 DEV-only routes (`/api/dev/bams/*`)
+
+Registered only when the runtime is DEV; in PROD every one answers 404 `not_found` as if absent, and they cannot change mode, provider kind or `simulated`. Bodies strict. All return `{"ok": true, "item": {…}, "side_effects": []}`.
+
+| route | body | effect |
+|---|---|---|
+| `POST /force-value` | `{"metric_id", "value": number, "poll": true}` | the simulator reports `value` (fresh timestamp) from the next poll on; `poll: true` (default) also runs one poll cycle now and returns `{"monitor", "row"}` |
+| `POST /simulate-stale` | `{"metric_id"\|null, "on": true}` | the metric (or all) stops receiving source updates (age grows with the clock) |
+| `POST /simulate-outage` | `{"on": true}` | provider unavailable (banner, No Data, lifecycle frozen) |
+| `POST /poll` **(+)** | `{}` | run exactly one poll cycle now (works while the monitor is stopped) |
+| `POST /clock` **(+)** | `{"advance_seconds": 90}` or `{"set": "…Z"}` or `{"reset": true}` | moves the injectable clock (D-61) used by the monitor, lifecycle and freshness; `server_time` follows it |
+| `POST /reset` | `{"confirm": true}` | `pre-delete` backup, then clears alert events, notification log, samples and overrides, re-backfills 90 days of simulated history; keeps appliances, metrics, rules, templates and settings |
+
+Without `confirm` `reset` answers 409 `confirmation_required`. A PROD runtime also refuses to start with any of these enabled (§1).
+
+### 11.11 Behaviour notes
+
+1. **Reads never poll.** Only the monitor loop (or `/api/dev/bams/poll`) calls the provider; provider calls per minute depend only on `poll_interval_seconds`.
+2. **Counts agree everywhere.** `summary.active_alerts`, the account Infrastructure `active_alerts`, `/api/state` `infrastructure` and the Today `bams_alert` rows all use "events with status open or recovered on enabled items".
+3. **Audit and activity.** Every write route here produces `audit_events` (category `bams`, `source UI`; import: §12). Alert opened/recovered/closed system entries and the `b:<event id>:<what>` keys are unchanged (§3, §7); opened/recovered are written by the monitor with `source Monitor`.
+4. **Frozen evaluation** (stale or outage) leaves events, counters and suppression untouched; only a human Close works.
+5. **Logging.** The monitor logs poll cycles at debug and failures at warning with no values, tickers lists or secrets; browser disconnects are debug (§0).
+6. **Rate/size.** No route returns more than the caps above; bodies are 2 MiB (§0.1a).
+
+### 11.12 Deviations, schema findings and decisions for PM/DA/FE
+
+0. **Implementation notes (2026-10-14, T-102..T-109; reality differs from the text above in these places).** (a) `POST /api/bams/rule/delete` is **blocked** while the rule has a non-closed alert: 409 `conflict`, `details.reason "active_alert"` (the schema trigger `trg_bams_alert_rules_no_delete_active` forbids it); close the alert first. After the close, delete is allowed and the closed event keeps `rule_summary` (derived from its message) with `rule_id` null. (b) Audit `source` values are the schema's: `GUI` for user writes and `System` for monitor-written events (the text "UI"/"Monitor" above means these). (c) `expected_row_version` on Close is optional; a monitor retrigger bumps the event version, so the UI should omit it. (d) Ticker comparisons (conflicts, repeats) are case-insensitive, stricter than the DB UNIQUE. (e) All metric values are percentages (user decision); there is no unit field. (f) The DEV 90-day history is generated by the simulator backfill on the first poll (4-hourly), not by the seed; it also bridges an old last sample up to now. (g) `GET /api/state` `infrastructure` and the account infrastructure route show No Data / null values when the provider is unavailable (PROD). (h) Default DEV monitor starts with the server; tests run without the loop thread.
+
+1. **Rule types follow the schema and PM §12.1 D-55** (`fixed_threshold`, `pct_of_high`, `exceeds_high`). Mockup 05's second type, "Percent change (vs N minutes earlier)", has no column (window) and no §26 basis; it is **not in the contract**. FE must show the type as "Percent of high". Adding a real percent-change rule needs a schema change request (PM decision).
+2. **Mockup 06 "Unit" field** has no column and no §26 field: not stored. Units are part of the metric name (e.g. "CPU utilisation %"). Drop the field or PM requests a column.
+3. **High timestamps**: schema stores dates only; mockup 03 shows time of day. Contract returns dates.
+4. **No schema change required** (agrees with DA T-101/T-122): `bams_alert_rules.suppress_until_clear` is the runtime suppression flag, set by Close-while-breaching and cleared on recovery; the notification read state is a watermark in `app_meta` `bams.notifications_read_through` (DA: no read flag column; the bell number in mockup 07 is "unread", so this watermark is required and is not a schema change).
+5. **Additive routes beyond PM §12.3 (+)**: `GET /api/bams/monitor`, object/metric `delete-preview`, `configs/save|delete`, dev `poll` and `clock`.
+6. **Tab count note**: `view_counts` follow the active filters; the header `summary` does not (mockup 01 shows both).
+7. `bams_alert` Today rows and workspace links: Today rows link to `/bams/alerts?event=<id>` (FE); no payload change in §2.
+
+## 12. BAMS appliance and metrics import (FINAL, backend, task T-120, 2026-10-14)
+
+> **Status: FINAL.** Binds `docs/01_PM_SPEC.md` §12.8 (D-63 to D-72) and mockups 09-13. It **reuses section 10 unchanged** except where stated: envelopes, `import_id`/`plan_hash`/session rules, the whole inspect/apply order of checks, upload sniffing and `invalid_file` reasons, limits (500 data rows, 5 MiB), `import_expired`, `unresolved_duplicates`, `preview_stale`, `already_applied`, `confirmation_required`, `conflict`, `backup_failed`, the `pre-import` backup, and `server/dupes.py` for similarity (no scores, High/Medium/Low words, fixed sentences). **No schema change** (PM §12.8.3). These routes replace the `/api/import/*` stub for the paths below only. Accounts import (§10) is untouched.
+
+### 12.0 Differences from section 10 (summary)
+
+| Topic | Rule |
+|---|---|
+| Session store | separate from accounts: at most 3 unapplied BAMS sessions; an `import_id` from the other import answers 410 `import_expired` |
+| Body cap | `POST /api/import/bams/inspect` has the 5 MiB cap; all other routes 2 MiB (extends §10.0) |
+| Row states | five, disjoint: `new`, `update` (fills something), `unchanged`, `needs_review`, `invalid` (matches mockup 10 chips; accounts import keeps `unchanged` as a flag of `update`) |
+| Decisions | per **flagged appliance** (keyed `g<first row>`), not per row; one decision covers all its rows |
+| New code | `import_failed` 500 (below) |
+
+### 12.1 Error codes
+
+All of section 10.0 apply. In addition `import_failed` (500): the write was attempted and rolled back wholly; `details = {"rolled_back": true, "row": 14, "reason": "<sentence>", "backup": "<file>"}`; mockup 12B. A ticker that became used between preview and Apply is not `import_failed`: it is 409 `preview_stale` with `details.why "ticker_conflict"` and `details.changed [{row, reason}]` ("Preview again"). `validation_error` also covers a bad `decisions` entry (`fields.decisions` names the key).
+
+### 12.2 `GET /api/import/bams/template?format=xlsx|csv` (default `xlsx`)
+
+As §10.1. xlsx sheets `Instructions`, `Import`, `Example`, hidden `Lists`; `Import` headers in this order (order is free on upload, names fixed, matched trimmed and NOCASE): `Account`, `BPID` (text), `Appliance`, `Metric`, `Ticker`, `Region`, `Location`, `Environment` (list `PROD`, `DEV`), `Enabled` (list `Yes`, `No`), `Stale after (s)` (whole number > 0); validation on rows 2-501; no data, formula, macro or link; `Example` holds illustrative rows and re-importing it validates. csv: UTF-8 with BOM, the ten headers only. Filenames `tam_bams_import_template.xlsx|csv`. Bad `format` -> 422.
+
+### 12.3 `POST /api/import/bams/inspect`
+
+Request as §10.2 (raw bytes, `X-File-Name`, `.xlsx` or `.csv`, content must match). **Writes nothing.** The sheet is `Import` (xlsx) or the CSV; one file row = one metric of one appliance. Unknown columns -> warning `unknown_column` (not an error). Missing required headers (`Appliance`, `Metric`, `Ticker`, and `Account` or `BPID`) -> 422 `invalid_file` `header_missing` with `details.missing` and `details.found` (mockup 09). A formula cell makes that **row** Invalid (`formula_not_allowed`); structural problems (macros, links, encrypted, corrupt, too many rows, ...) are refused as `invalid_file` exactly as §10.
+
+Response `200`:
+```json
+{"ok": true, "item": {
+  "import_id": "…32 hex", "plan_hash": "sha256:…", "expires_at": "…Z",
+  "file": {"name": "bams_appliances_q4.xlsx", "size_bytes": 188416, "format": "xlsx", "sheet": "Import",
+           "rows_found": 20, "encoding": null, "delimiter": null, "notes": []},
+  "limits": {"max_rows": 500, "max_candidates": 5, "max_bytes": 5242880},
+  "counts": {"rows": 20, "valid": 16, "new": 7, "updates": 1, "unchanged": 2, "needs_review": 6, "invalid": 4},
+  "appliances": {"new": 3, "updated": 1, "unchanged": 0, "needs_review": 2},
+  "metrics": {"new": 7, "updated": 1, "unchanged": 2},
+  "warnings": [{"code": "unknown_column", "text": "Column K \"Owner\" is ignored."}],
+  "review": [ <Review group>, … ],
+  "rows": [ <Row>, … ]
+}, "side_effects": []}
+```
+`counts` are rows: `rows = new + updates + unchanged + needs_review + invalid`, `valid = rows - invalid`. `appliances`/`metrics` count **objects** (an appliance with 3 rows counts once; `appliances.needs_review` = flagged groups; metrics of flagged groups are counted under `counts.needs_review` only until decided). `metrics.updated` = rows in state `update` (the metric exists with the same ticker and its appliance gets a blank filled; the metric row itself is never changed). `rows` ordered by file row number (row 1 is the header).
+
+**Row**:
+```json
+{"row": 3, "state": "new|update|unchanged|needs_review|invalid",
+ "values": {"account": "Castellan Peak Global Markets", "bpid": null, "appliance": "SAPI-01", "metric": "Memory used %",
+            "ticker": "BAMS.CPFX.SAPI01.MEM", "region": null, "location": "Chicago", "environment": "PROD",
+            "enabled": true, "stale_after_seconds": 120},
+ "raw": null,
+ "target": {"client_id": "…", "client_name": "Castellan Peak Global Markets",
+            "appliance": {"id": "…|null", "name": "SAPI-01", "is_new": false},
+            "metric": {"id": "…|null", "is_new": true}},
+ "group": "g2", "review_key": null,
+ "fills": {"location": "Chicago"}, "kept": {"region": {"existing": "Americas", "file": "Americas", "differs": false}},
+ "errors": [{"field": "ticker", "code": "ticker_conflict", "text": "Row 15: Ticker BAMS.HFAM.MDF.RATE is already used by Rate on MDF-01 (Halvorsen Fjord Asset Management). Tickers are never changed by import; this row will be skipped."}],
+ "warnings": [], "notes": ["Same ticker. Fills Location only."]}
+```
+`values` are normalised (trim, collapse spaces, control characters removed, `Environment` upper-cased, `Enabled` -> boolean default `true`, `Stale after (s)` -> integer default 120, empty -> `null`); `raw` holds cell texts (each <= 500 chars) on invalid rows, else `null`. `target` is `null` on invalid rows with no resolvable account. `group` = appliance group key `g<first row of that appliance in the file for that account>`, set on every non-invalid row so the page can group rows; `review_key` equals `group` when the row's appliance is flagged. `fills` and `kept` describe the **appliance** (blank Region/Location/Environment) and apply on the first row of a group only (other rows of the group show `{}`); `kept` lists only fields where both sides hold a value. `unchanged` rows: metric exists with the same ticker and nothing to fill.
+
+Outcomes (D-66): `new` = appliance and/or metric absent and the ticker unused; `update` = appliance exists with fills (new metric on it counts as `new` for that row; a row whose metric exists and whose group has a fill is `update`); `unchanged` = metric exists with the same ticker and nothing to fill; `invalid` per below. Row error codes: `account_required`, `account_not_found`, `account_ambiguous` (blocks that row only, open item a), `account_mismatch` (BPID and name resolve to different accounts), `appliance_required`, `appliance_too_long`, `metric_required`, `metric_too_long`, `ticker_required`, `ticker_too_long`, `region_too_long`, `location_too_long`, `environment_invalid`, `enabled_invalid`, `stale_after_invalid`, `ticker_conflict` (used by another metric anywhere; text names owner), `ticker_differs` (the metric exists with a different ticker; never replaced, open item b), `ticker_repeated_in_file` (same ticker on two different metrics: **both** rows), `repeats_row` (identical appliance+metric+ticker as an earlier row: the later row; text "repeats row N"), `formula_not_allowed`, `cell_error`, `value_type`. Warning codes: row `kept_differs` (file Region/Location/Environment differs from the existing appliance; existing kept), `enabled_ignored` (file Enabled/Stale-after differ from the existing metric; existing kept); file `unknown_column`. Inactive accounts are accepted; same appliance name under another account is independent.
+
+**Review group** (`review`, one per flagged appliance; none preselected):
+```json
+{"key": "g11", "client_id": "…", "client_name": "Halvorsen Fjord Asset Management", "rows": [11, 12, 13],
+ "file": {"appliance": "BPIPE-EU-01", "region": "Europe", "location": "London", "environment": "PROD",
+          "metrics": ["CPU utilisation %", "Subscriptions", "Throughput Mbps"]},
+ "strength": "High",
+ "candidates": [{"ref": {"type": "appliance", "id": "…"},
+   "name": "BPIPE-EU-1", "region": "Europe", "location": null, "environment": "PROD", "enabled": true, "row_version": 2,
+   "metric_count": 4, "metrics": ["CPU utilisation %", "Subscriptions", "Disk used %", "Uptime"],
+   "strength": "High",
+   "reasons": [{"code": "same_words_spelled_differently", "text": "…"}],
+   "differences": [], "fills": {"location": "London"},
+   "kept": {"region": {"existing": "Europe", "file": "Europe", "differs": false}},
+   "metrics_added": ["Throughput Mbps"], "metrics_existing": ["CPU utilisation %", "Subscriptions"],
+   "metrics_conflicts": [], "notes": []}]}
+```
+Candidates (<= 5) come from the same account only: its existing appliances and earlier appliance groups of the same account in the file (`ref` `{"type": "group", "key": "g8"}`, no `row_version`). Engine, order, reason/difference codes and sentences as §10.2 (golden-pinned; the pool is appliance names). `strength` of the group = the best candidate's. A candidate whose merge would hit a ticker conflict lists it in `metrics_conflicts` (`[{"metric", "ticker", "owner"}]`) and those rows are Invalid, not blocking. `fills`/`kept` assume "Same appliance". `GET /api/import/bams/{import_id}` re-runs everything against the current database (new `plan_hash`) as §10.3.
+
+### 12.4 `POST /api/import/bams/apply`
+
+```json
+{"import_id": "…", "plan_hash": "sha256:…", "confirm": true,
+ "decisions": [
+   {"key": "g11", "choice": "same",      "target": {"type": "appliance", "id": "…"}},
+   {"key": "g8",  "choice": "different"},
+   {"key": "g14", "choice": "same",      "target": {"type": "group", "key": "g8"}},
+   {"key": "g17", "choice": "skip"}]}
+```
+Strict body. Order of checks, atomicity, backup and re-hash inside the transaction are exactly §10.4: `confirm` -> session -> concurrent Apply -> re-plan and `plan_hash` (409 `preview_stale`) -> decisions validated (422: duplicate key, key not a `needs_review` group, `same` without `target`, `target` on `different`/`skip`, a target not among that group's candidates, `same` onto a skipped group) -> any undecided group -> 409 `unresolved_duplicates` (`details.keys`, `details.rows`, nothing written, no backup) -> `pre-import` backup only if something changes -> `BEGIN IMMEDIATE` -> creates and merges -> audit -> `COMMIT`; any exception -> rollback and `import_failed` (500).
+
+Merge rules (D-68): `Same` adds the group's metrics under the chosen appliance and fills **blank** Region/Location/Environment only; existing metrics keep ticker, `enabled`, `stale_after_seconds`; a disabled appliance stays disabled; nothing is deleted, nothing is overwritten (`overwritten` is always 0); a new appliance is created enabled; `Enabled` and `Stale after (s)` apply to **new metrics only**; `Different` creates the file's appliance; `Skip` skips all its rows. Rows `unchanged` write nothing. A re-import of the same file therefore writes nothing: no backup, no transaction, no audit, `backup: null`, all counts under unchanged. The running monitor needs no pause; new metrics are read at the next poll start (D-69).
+
+Response `200`:
+```json
+{"ok": true, "item": {
+  "import_id": "…", "applied_at": "…Z",
+  "file": {"name": "bams_appliances_q4.xlsx", "rows_found": 20, "format": "xlsx"},
+  "counts": {"appliances_created": 4, "appliances_updated": 2, "appliances_unchanged": 1,
+             "metrics_created": 11, "metrics_updated": 1, "metrics_unchanged": 4,
+             "skipped": 4, "invalid": 4, "overwritten": 0},
+  "breakdown": {"created_new": 3, "created_marked_different": 1, "merged_exact": 1, "merged_marked_same": 1,
+                "skipped_invalid": 4, "skipped_by_user": 0},
+  "decisions": [{"key": "g11", "choice": "same", "label": "BPIPE-EU-01 merged into BPIPE-EU-1"},
+                {"key": "g14", "choice": "different", "label": "FIX-GW-1 created as new"}],
+  "fields_filled": 3, "audit_events": 17, "audit_breakdown": {"appliance": 6, "metric": 11},
+  "backup": {"name": "tam_…_pre-import_v1.db", "reason": "pre-import", "size_bytes": 2516582},
+  "touched_accounts": [{"id": "…", "name": "Castellan Peak Global Markets"}],
+  "created": [{"id": "…", "name": "SAPI-02", "client_id": "…", "client_name": "…", "rows": [5, 6], "metrics": ["CPU utilisation %"]}],
+  "updated": [{"id": "…", "name": "SAPI-01", "client_id": "…", "client_name": "…", "rows": [2, 3], "filled": ["location"], "metrics_added": ["Memory used %"]}],
+  "skipped": [{"row": 15, "name": "MDF-01 / Rate", "kind": "invalid", "reason": "Ticker BAMS.HFAM.MDF.RATE is already used by …"}],
+  "skipped_url": "/api/import/bams/…/skipped.xlsx"
+}, "side_effects": [{"type": "backup_created", "file": "tam_….db", "reason": "pre-import"}]}
+```
+`counts.appliances_*` count appliances touched (once each); `metrics_*` count metrics; `skipped`/`invalid` count rows; `skipped = invalid + by_user rows`. `metrics_updated` equals the preview `metrics.updated`. `touched_accounts` drives "Open BAMS" = `/bams?account=<id1>,<id2>,…` (state accepts a comma-separated list, §11.2). `skipped_url` is `null` when nothing was skipped.
+
+Audit (D-69): one event per created or updated appliance (`category bams`, `object_type bams_object`, `action created|updated`, `old_value`/`new_value` = changed fields only; created: all fields plus the metric count) and one per created metric (`object_type bams_metric`, `object_id` = metric id, `object_label` = `<appliance> / <metric>`, new value includes ticker, enabled, stale_after_seconds), `reason` = `Bulk import: <file name>, row N`, `source 'Bulk Import'`. No event carries a list of tickers. Nothing is written to Activity (import is setup, not an alert).
+
+### 12.5 `GET /api/import/bams/{import_id}/skipped.xlsx` and `.csv`
+
+As §10.5. One `Import` sheet (xlsx) or CSV, same format as the upload (other extension 404 `not_found`; before Apply 409 `conflict`; unknown/expired 410). Filename `tam_bams_skipped_<YYYYMMDD_HHMM>.<ext>`. Columns: the ten import headers in template order, then `Source row`, `Reason`, `Possible duplicate of` (for `skip` decisions: the candidate appliance). Invalid rows hold the raw cell texts, user-skipped rows the normalised values. Cell safety identical to §10.5 (strings only, no formulas, CSV `'` prefix on `=`, `+`, `-`, `@`, tab, CR). The extra columns are ignored with an `unknown_column` warning on re-upload.
+
+### 12.6 Open items resolved (PM §12.8.5 and BE-owned questions)
+
+0. **Implementation notes (T-123..T-125).** (a) Similar-appliance rule: the Run 3 engine runs over the account's appliance names, then a candidate is kept only if it carries the **same numbers** (01 equals 1; `ldn-01` and `ldn-03` are different appliances) and, when the match rests only on `shared_key_words`, the **same name words** (`cpg-bpipe-ny-01` vs `tbf-bpipe-ny-01` is not a duplicate). Reasons, strength words and order are the engine's, unchanged; `server/tests/fixtures/dupes_bams_golden.json` pins the cases. (b) A new-appliance row whose ticker belongs to an existing metric stays valid only when that metric is on a flagged candidate and has the same name (`metrics_existing`), so re-importing a typo'd appliance can be merged with **Same**; otherwise it is `ticker_conflict`. (c) The fixture `db/fixtures/bams_import_rows.json` row 2 shares its ticker with row 14: both are Invalid (D-66). (d) `metrics_conflicts[].existing_ticker` is an additive key. (e) Added error code `bpid_too_long` is not used; BPID over 32 characters is reported as `bpid_too_long`.
+
+1. **(a) Ambiguous account name**: blocks only that row (`account_ambiguous`), never the file. Default accepted.
+2. **(b) Differing ticker for an existing metric**: an error (`ticker_differs`), never replaced by import. Changing a ticker is done in BAMS (`/api/bams/metric/save`). A future "replace ticker" decision is not in this run.
+3. **(c) Export in template format**: later; not in this contract.
+4. **`Enabled` meaning**: metric-level, applies to new metrics only. Appliances created by import are enabled.
+5. **PROD**: allowed (D-70); results show No Data under the provider banner. The `Environment` column is never checked against the app mode.
+6. **State filter**: `/api/bams/state?account=` accepts several ids for the post-import "Open BAMS" link.
+7. **Monitor interplay**: no lock or restart; the monitor's metric list is read at the start of each poll. Apply holds the normal write path (single writer) and a poll in flight finishes first or after, never half.
+8. **Audit `source`**: `'Bulk Import'`, as accounts (the existing source value), so activity filters need no change.
+9. **Security** (§10.10 applies): rows only in memory, nothing from the file is logged beyond name, format, sizes, counts, outcome; formulas rejected at row level; CSV treated as text.
+10. **For QA/FE**: golden fixture for the appliance matcher will be published as `server/tests/fixtures/dupes_bams_golden.json` with T-124 (same shape as §10.8 with appliance names; the account-scoped pool is part of each case).
