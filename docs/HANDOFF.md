@@ -1,9 +1,9 @@
 # TAM Command Center: Handoff
 
-Last updated: 2026-10-14. Read this first, then `docs/TEAM_LOOP.md`. Start a session as the lead with `claude --agent team-lead-agent` (agents live in `.claude/agents/`).
+Last updated: 2026-10-15. Read this first, then `docs/TEAM_LOOP.md`. Start a session as the lead with `claude --agent team-lead-agent` (agents live in `.claude/agents/`).
 
 ## State
-Runs 1-4 are built, QA-passed, and committed (latest gate: `docs/qa/ERROR_LOG_5.md`, PASS). Run 5 (Operations) is in PLANNING: spec is `docs/01_PM_SPEC.md` section 13 (D-107..D-125, T-164..T-173), mockup brief `docs/qa/OPERATIONS_MOCKUP_BRIEF.md`; scope reset 2026-10-14 after the user rejected dense mockups: Operations is one simple page over BAMS appliances with manual quarters (PM spec section 13, D-107..D-118, T-164..T-173); next: new minimal mockups, then mockups, user approval, build. BlpapiProvider exists (fake-session tested); workstation verification is deferred.
+Runs 1-6 are built, QA-passed, and committed (latest gates: `docs/qa/ERROR_LOG_6.md` Operations, `docs/qa/ERROR_LOG_7.md` portability, both PASS, 0 open Blocker/High). Tests at the last gate: 711 backend/db/e2e, 451 frontend. The ChatGPT Bridge was DROPPED by the user on 2026-10-15 (not planned, not built).
 
 | Run | Scope | Status |
 |---|---|---|
@@ -11,12 +11,12 @@ Runs 1-4 are built, QA-passed, and committed (latest gate: `docs/qa/ERROR_LOG_5.
 | 2 | Visual refresh: Today as Triage Split (top 10 + chips + detail pane, done-today ring, tabs under list), workspace and Accounts instruments | Done, user said "this looks fine / good" |
 | 3 | Account bulk import (.xlsx + .csv), duplicate detection (similar names need Same/Different/Skip confirmation), single-add similar check | Done, user said "this is good" |
 | 4 | BAMS monitoring dashboard (simulated DEV provider, lifecycle, notifications), appliance/metric bulk import, BlpapiProvider | Done, gate PASS |
-| 5 | Operations: quarterly upgrade workbench, schedule sync and diagnostics, server-upgrade bulk upload | Planning (section 13 of the PM spec) |
+| 5 | Operations: one simple page (quarters + target version entered manually, account-grouped collapsible appliances, status/overrides, Select mode), appliance import gains East/West Polarity; no schedule sync | Done, user said "this is good" |
+| 6 | Portability: Excel export (9 sheets), database export, restore from .xlsx/.csv (never overwrites), in-app whole-database restore (typed RESTORE, pre-restore backup, rollback); Settings Data and Logging collapsed by default | Done, gate PASS |
 
 ## Not built (spec phases still ahead)
-Operations (Run 5, planned), portability (Excel export/restore, DB export), ChatGPT Bridge. Schema for these tables already exists in `db/schema.sql`. Each needs PM spec, then **mockups the user approves**, then build.
+Nothing planned. The ChatGPT Bridge was dropped by the user (the nav rail still shows a "Later" placeholder for it; remove only if the user asks). Windows and Bloomberg verification remain.
 
-Run 6 (Portability) is in planning: PM spec section 14 (D-122..D-142, T-174..T-185), brief `docs/qa/PORTABILITY_MOCKUP_BRIEF.md`; open questions in 14.6; mockup gate applies unless the user waives it. Operations (Run 5) status: see the state file.
 
 ## Do not do without the user
 - Build any UI before mockups are approved.
