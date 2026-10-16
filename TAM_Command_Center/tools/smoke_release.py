@@ -149,7 +149,8 @@ def main() -> int:
         for req in ("db/schema.sql", "db/migrate.py", "db/migrations/0001_initial.sql", "db/queries/today_queue.sql",
                     "web/index.html", "requirements.txt", "VERSION.txt", "BUILD_MANIFEST.txt", "README.txt", "VALIDATION.txt",
                     "Launch_TAM_Command_Center.bat", "Launch_DEV_Preview.bat", "Install_Dependency.bat",
-                    "Check_PROD_Environment.bat", "Check_DEV_Environment.bat", "tools/env_check.py"):
+                    "Check_PROD_Environment.bat", "Check_DEV_Environment.bat", "tools/env_check.py",
+                    "Install_and_Launch.bat", "START_HERE.txt", "tools/install_stamp.py"):
             check(f"TAM_Command_Center/{req}" in names, f"present: {req}")
         queries = [n for n in names if "/db/queries/" in n and n.endswith(".sql")]
         migs = [n for n in names if "/db/migrations/" in n and n.endswith(".sql")]

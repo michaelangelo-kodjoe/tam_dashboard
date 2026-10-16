@@ -1,0 +1,6 @@
+TAM COMMAND CENTER - START HERE
+1. Unzip the whole archive to a normal folder (not from inside the zip). Any path works, spaces included.
+2. Double-click Install_and_Launch.bat. First run installs Python packages (needs pip access, a few minutes).
+3. Your browser opens http://127.0.0.1:8765 . Keep the black window open while you work; close it to stop.
+4. To update: unzip the newer version next to or over the old one. Your data is in %LOCALAPPDATA%\TAM_Command_Center and is never touched.
+5. NOT production-ready until validated on your Bloomberg workstation. Read README.txt and VALIDATION.txt.

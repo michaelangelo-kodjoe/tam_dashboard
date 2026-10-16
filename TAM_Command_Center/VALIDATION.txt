@@ -1,6 +1,6 @@
 TAM COMMAND CENTER - VALIDATION REPORT
 ======================================
-Build: 0.1.0-rc2   Report date: 2026-10-15   Author: deployment-agent (Phase 4.3)
+Build: 0.1.0-rc3   Report date: 2026-10-15   Author: deployment-agent (Phase 4.3)
 STATUS: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 
 *** THIS BUILD IS NOT PRODUCTION-READY. ***
@@ -36,6 +36,11 @@ flags ignored, DEV routes absent); it is not a statement that validation passed.
 
 2. WHAT IS UNTESTED
    WINDOWS (nothing below has been run on Windows at all):
+     - rc3 entry point Install_and_Launch.bat (zip-preview refusal via file checks, requirements
+       hash stamp via tools/install_stamp.py, Desktop shortcut via PowerShell/WScript.Shell,
+       choice timeout, BLPAPI-missing note, forced browser open via TAM_OPEN_BROWSER=1) was only
+       STATICALLY linted; it has never been executed. The stamp helper and the forced browser
+       open were run on macOS only as Python.
      - the five .bat launchers and tools\_resolve_python.bat were only STATICALLY linted
        (tools/lint_bat.py: quoting, %~dp0, pushd/popd, setlocal, errorlevel handling, labels,
        CRLF, ASCII). They have never been executed. Expect to find at least small defects.

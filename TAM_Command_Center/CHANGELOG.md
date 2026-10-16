@@ -2,6 +2,9 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased - Release 0.1.0-rc3 packaged (deployment-agent)
+- Added single entry point `Install_and_Launch.bat` + `START_HERE.txt` (5 lines) and `tools/install_stamp.py` (requirements hash stamp in .venv). Flow: refuse if not in an unzipped folder, find Python 3.10+ (reuses `_resolve_python.bat`), install via `Install_Dependency.bat` on first run or when requirements.txt changed, PROD env check (BLPAPI missing = clear note, app still starts, via the existing `--core-only` design), optional Desktop shortcut (once), launch via `Launch_TAM_Command_Center.bat` with the browser forced open (`TAM_OPEN_BROWSER=1`, small addition to `tools/open_when_ready.py`; the stored setting is still honoured otherwise). Old launchers kept. Update docs: data lives in %LOCALAPPDATA%, never in the app folder. build_release.py ships the new files; smoke test checks them. Bats only statically linted, never run on Windows. rc1/rc2 zips untouched; zip not committed.
+
 ## Unreleased - Release 0.1.0-rc2 packaged (deployment-agent, Phase 4.3)
 - Fixed `tools/build_release.py`: it shipped only top-level `server/*.py`, so the archive could not start (missing server.importer/ops/bams/portability); now recursive, tests dirs excluded. Found by the smoke test.
 - Built `dist/TAM_Command_Center_0.1.0-rc2_win.zip` (channel=prod, from HEAD ee5945d, fresh `build:api`): 711 pytest + 452 Vitest passed first; smoke test run. Added `docs/guides/USER_GUIDE.txt` (Operations, export, restore). README and VALIDATION updated; still UNVALIDATED (not tested on Windows or Bloomberg BLPAPI/TEAM/BSSO). The rc1 zip in dist/ was left untouched. Missing: CRM guide, screenshots. dist/ is gitignored; nothing committed.

@@ -1,7 +1,12 @@
-TAM COMMAND CENTER - SHORT USER GUIDE (0.1.0-rc2)
+TAM COMMAND CENTER - SHORT USER GUIDE (0.1.0-rc3)
 =================================================
 Status: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 This is a short guide, not the full CRM guide (see "Missing" at the end).
+
+STARTING THE APP
+  Double-click Install_and_Launch.bat in the unzipped folder (see START_HERE.txt). First run
+  installs packages; later runs just check and start. Updating: unzip the newer version next
+  to or over the old one; your data (%LOCALAPPDATA%\TAM_Command_Center) is never touched.
 
 OPERATIONS (left rail > Operations)
   One page that tracks BAMS appliances per quarter. Nothing is synced from a network:

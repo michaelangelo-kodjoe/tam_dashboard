@@ -46,6 +46,9 @@ def main() -> int:
             time.sleep(0.5)
     if not up:
         return 0
+    if os.environ.get("TAM_OPEN_BROWSER") == "1":  # set by Install_and_Launch.bat: always open
+        webbrowser.open(url)
+        return 0
     try:
         uri = cfg.db_path.resolve().as_uri() + "?mode=ro"
         conn = sqlite3.connect(uri, uri=True, timeout=2)

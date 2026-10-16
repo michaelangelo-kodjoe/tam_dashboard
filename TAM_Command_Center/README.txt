@@ -7,7 +7,7 @@ Single user. No login. Nothing is reachable from the network.
 STATUS: NOT PRODUCTION-READY. This build has not been validated on the target
 Bloomberg Windows workstation. Read VALIDATION.txt before relying on it.
 
-WHAT IS IN THIS BUILD (0.1.0-rc2, spec runs 1-6)
+WHAT IS IN THIS BUILD (0.1.0-rc3, spec runs 1-6)
   Today queue, Accounts (with bulk import), Account Workspace, Tasks, Quick Capture,
   BAMS monitor and appliance import, Operations (quarters, account-grouped appliances,
   target versions; entered manually), Settings, backups, and portability: Excel export,
@@ -23,7 +23,22 @@ REQUIREMENTS
   BLPAPI is NOT installed by this package: use the Bloomberg-provided package
   for your workstation.
 
-FIRST-TIME SETUP
+QUICK START (one file)
+  Unzip the whole archive anywhere (spaces in the path are fine; do NOT run from inside the
+  zip), then double-click Install_and_Launch.bat. It: finds Python 3.10+; on first run creates
+  .\.venv and pip-installs requirements.txt (skipped later while requirements.txt is
+  unchanged); runs the PROD environment check; offers a Desktop shortcut; starts the app and
+  opens http://127.0.0.1:8765 . If BLPAPI is missing it says so: BAMS live data will not work,
+  the rest does. Install the Bloomberg-provided blpapi package into the .venv to enable BAMS.
+
+UPDATING
+  Unzip a newer version next to the old one (or over it) and run its Install_and_Launch.bat.
+  Your database is NEVER inside this folder: it is in %LOCALAPPDATA%\TAM_Command_Center
+  (backups and logs too), so unzipping, replacing or deleting the app folder does not touch
+  your data. A newer app upgrades the database on start, after an automatic safety backup.
+  A new folder builds its own .venv on first run; unzipping over an old folder reuses it.
+
+FIRST-TIME SETUP (manual alternative to the above)
   1. Unzip the archive to a normal folder, e.g. C:\Tools\TAM_Command_Center
      (avoid synced/network folders).
   2. Double-click Install_Dependency.bat. It creates .\.venv and installs the
@@ -37,6 +52,8 @@ FIRST-TIME SETUP
      makes the launcher open the page for you (default: off).
 
 FILES
+  Install_and_Launch.bat         One-click: install on first run, check, shortcut, launch, open browser.
+  START_HERE.txt                 Five-line start instructions.
   Launch_TAM_Command_Center.bat  Production, port 8765. Clears TAM_DEV_MODE and TAM_BAMS_TEST_MODE.
   Launch_DEV_Preview.bat         DEV preview, port 8766, simulated data. Only works on a
                                  dev-channel package (this release is channel=prod, so it refuses).
