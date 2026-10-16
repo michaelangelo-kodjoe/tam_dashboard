@@ -1,6 +1,7 @@
 """FastAPI application factory. Routes are thin: validation -> service -> JSON. No SQL here."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -101,7 +102,32 @@ class BodyLimit:
         self.app, self.default_limit, self.route_limits = app, limit, dict(route_limits or {})
         self.limit = limit
 
-    async def _reject(self, send: Any, limit: int) -> None:
+    DRAIN_IDLE_SECONDS = 1.0           # stop waiting when the client stops sending
+    DRAIN_TOTAL_SECONDS = 60.0
+    DRAIN_MAX_BYTES = 1024 * 1024 * 1024
+
+    async def _drain(self, receive: Any) -> None:
+        """Read and DISCARD the rest of an oversize request body (bounded in time and size; nothing is stored, so the
+        cap is not weakened) BEFORE the 413 is sent. uvicorn closes the socket as soon as a `Connection: close`
+        response is complete; if the client is still sending, the OS resets the connection and can discard the unread
+        413, so the browser sees a network error instead of 'file too large'. A client that sends nothing (header-only
+        rejection) is answered after one idle second."""
+        loop = asyncio.get_running_loop()
+        end, seen = loop.time() + self.DRAIN_TOTAL_SECONDS, 0
+        try:
+            while loop.time() < end and seen <= self.DRAIN_MAX_BYTES:
+                msg = await asyncio.wait_for(receive(), timeout=self.DRAIN_IDLE_SECONDS)
+                if msg["type"] != "http.request":
+                    return                                   # http.disconnect
+                seen += len(msg.get("body", b""))
+                if not msg.get("more_body", False):
+                    return
+        except (asyncio.TimeoutError, Exception):            # noqa: BLE001 - best effort
+            return
+
+    async def _reject(self, send: Any, limit: int, receive: Any = None) -> None:
+        if receive is not None:
+            await self._drain(receive)
         body = json.dumps(PayloadTooLarge(
             f"Request body exceeds the {limit // (1024 * 1024)} MB limit.",
             details={"max_bytes": limit, "reason": "too_large"}).body()).encode()
@@ -123,7 +149,7 @@ class BodyLimit:
             except ValueError:
                 too_big = False
             if too_big:
-                await self._reject(send, limit)
+                await self._reject(send, limit, receive)
                 return
             await self.app(scope, receive, send)
             return
@@ -136,7 +162,7 @@ class BodyLimit:
                 break
             total += len(msg.get("body", b""))
             if total > limit:
-                await self._reject(send, limit)
+                await self._reject(send, limit, receive)
                 return
             if not msg.get("more_body", False):
                 break

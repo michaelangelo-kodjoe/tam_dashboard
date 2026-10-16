@@ -53,6 +53,9 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - Added: BAMS import preview and result show the `operations_note` line ("N appliances need East or West set for Operations"), informational only.
 - Tests: +30 Vitest (lib, mock adapter, API adapter, page). Verified live on tam-app-dev: grouped table, select + Set version, edit + East save, no console errors. Known: `today.test.ts` parity fails after the data architect's in-progress `db/mock_data.json` extension (passes on the committed data).
 
+## Unreleased - 413 delivery fix (REL-1)
+- Fixed: `BodyLimit` now discards the rest of an oversize body (bounded, never stored) before sending 413, so the response reliably reaches a client that is still uploading instead of a connection reset. Cap values unchanged. Test: `server/tests/test_bodylimit.py`.
+
 ## Unreleased - QA gate 7 fixes (QA-7-1..3)
 - Fixed: from-backup staging no longer writes `-wal`/`-shm` beside the backup (immutable read-only open). xlsx restore lists the workbook once (`files[].sheets`), result file names deduplicated. A leading tab, line break or leading/trailing space in name-like columns gets specific skip reasons (`tab_or_linebreak`, `leading_trailing_space`) instead of `database_rule`. Contract section 14 amended; 3 tests.
 
