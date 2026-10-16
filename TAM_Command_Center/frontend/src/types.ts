@@ -193,6 +193,8 @@ export interface Runtime {
   version: string;
   schema_version: number;
   db_path: string;
+  /** Active database name (contract section 16); absent on older servers. */
+  db_name?: string;
   backup_dir?: string;
   source: 'mock' | 'api';
 }

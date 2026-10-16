@@ -243,6 +243,12 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     expect(await screen.findByRole('heading', { level: 1, name: 'Accounts' })).toBeInTheDocument();
   });
 
+  it('Settings shows the database name and the top bar does not', async () => {
+    await boot('/settings');
+    expect(await screen.findByText('tam_dev', { selector: 'dd' })).toBeInTheDocument();
+    expect(screen.queryByTitle('Active database')).toBeNull();
+  });
+
   it('/bridge falls through to the normal not-found page', async () => {
     await boot('/bridge');
     expect(await screen.findByRole('heading', { level: 1, name: /not found/i })).toBeInTheDocument();

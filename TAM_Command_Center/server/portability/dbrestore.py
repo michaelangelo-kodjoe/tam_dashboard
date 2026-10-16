@@ -115,7 +115,7 @@ def holder(rt: Any) -> Holder:
 
 
 def tmp_dir(rt: Any) -> Path:
-    return rt.config.data_dir / "restore_tmp"
+    return rt.config.restore_tmp
 
 
 def _rm(p: Path) -> None:
@@ -568,6 +568,6 @@ def startup_recovery(cfg: Any) -> None:
         else:
             log.info("startup recovery: removing leftover %s", sib["old"].name)
             _rm(sib["old"])
-    d = cfg.data_dir / "restore_tmp"
+    d = cfg.restore_tmp
     if d.is_dir():
         shutil.rmtree(d, ignore_errors=True)

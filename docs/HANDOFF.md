@@ -3,7 +3,7 @@
 Last updated: 2026-10-15. Read this first, then `docs/TEAM_LOOP.md`. Start a session as the lead with `claude --agent team-lead-agent` (agents live in `.claude/agents/`).
 
 ## State
-Runs 1-6 are built, QA-passed, and committed (latest gates: `docs/qa/ERROR_LOG_6.md` Operations, `docs/qa/ERROR_LOG_7.md` portability, both PASS, 0 open Blocker/High). Tests at the last gate: 711 backend/db/e2e, 451 frontend. The ChatGPT Bridge was DROPPED by the user on 2026-10-15 (not planned, not built).
+Runs 1-6 are built, QA-passed, and committed (latest gates: `docs/qa/ERROR_LOG_6.md` Operations, `docs/qa/ERROR_LOG_7.md` portability, both PASS, 0 open Blocker/High). Run 7 (legacy database import, Settings > Data only) is in PLANNING: `docs/01_PM_SPEC.md` section 15 (D-143..D-153, T-186..T-192), mockups waived, build directly. Tests at the last gate: 711 backend/db/e2e, 451 frontend. The ChatGPT Bridge was DROPPED by the user on 2026-10-15 (not planned, not built).
 
 | Run | Scope | Status |
 |---|---|---|

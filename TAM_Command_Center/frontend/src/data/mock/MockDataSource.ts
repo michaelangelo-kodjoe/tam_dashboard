@@ -252,6 +252,7 @@ export class MockDataSource implements DataSource {
       version: VERSION,
       schema_version: 1,
       db_path: 'in-memory mock data',
+      db_name: 'tam_dev',
       backup_dir: '(mock; no files are written)',
       source: 'mock',
     };

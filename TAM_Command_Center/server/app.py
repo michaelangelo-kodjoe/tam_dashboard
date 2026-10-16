@@ -290,7 +290,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
     # ------------------------------------------------------------ runtime / state
     def runtime_info(conn) -> Dict[str, Any]:  # type: ignore[no-untyped-def]
         return {"mode": config.mode, "channel": config.channel, "version": config.version,
-                "schema_version": reads.schema_version(conn), "db_path": str(config.db_path),
+                "schema_version": reads.schema_version(conn), "db_path": str(config.db_path), "db_name": config.db_name,
                 "backup_dir": str(config.backup_dir), "log_dir": str(config.log_dir), "port": config.port}
 
     @api.get("/health")
@@ -300,7 +300,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
         with rt.db() as conn:
             r = runtime_info(conn)
         return {"ok": True, "mode": r["mode"], "channel": r["channel"], "version": r["version"],
-                "schema_version": r["schema_version"], "db_path": r["db_path"]}
+                "schema_version": r["schema_version"], "db_path": r["db_path"], "db_name": r["db_name"]}
 
     @api.get("/state")
     def state() -> Dict[str, Any]:

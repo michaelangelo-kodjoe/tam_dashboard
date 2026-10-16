@@ -59,7 +59,7 @@ class Runtime:
                  cfg.version, cfg.mode, cfg.channel, cfg.build_channel, cfg.port)
         for note in cfg.notes:
             log.warning("startup: %s", note)
-        log.info("database: %s", cfg.db_path)
+        log.info("database: %s (name: %s%s)", cfg.db_path, cfg.db_name, ", selected by TAM_DB_NAME" if cfg.named_db else ", default")
         from .portability.dbrestore import startup_recovery
         startup_recovery(cfg)                      # D-140: finish or undo a swap interrupted by a crash
         existed = cfg.db_path.exists() and cfg.db_path.stat().st_size > 0
@@ -109,7 +109,7 @@ class Runtime:
         if self._closed:
             return
         self._closed = True
-        shutil.rmtree(self.config.data_dir / "restore_tmp", ignore_errors=True)
+        shutil.rmtree(self.config.restore_tmp, ignore_errors=True)
         if self.bams is not None:
             self.bams.shutdown()
         self.lock.release()

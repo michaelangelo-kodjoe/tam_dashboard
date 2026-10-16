@@ -40,7 +40,7 @@ ROOT_FILES = [
     "Check_PROD_Environment.bat", "Check_DEV_Environment.bat",
     "README.txt", "VALIDATION.txt", "CHANGELOG.md", "TAM_PROJECT_STATE.md",
 ]
-TOOLS_SHIPPED = ["tools/_resolve_python.bat", "tools/env_check.py", "tools/open_when_ready.py", "tools/install_stamp.py"]
+TOOLS_SHIPPED = ["tools/_resolve_python.bat", "tools/env_check.py", "tools/open_when_ready.py", "tools/install_stamp.py", "tools/choose_db.py"]
 
 
 def read_kv(p: Path) -> dict:

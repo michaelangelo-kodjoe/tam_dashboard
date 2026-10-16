@@ -66,7 +66,8 @@ export function SettingsPage() {
             <dt>Data source</dt><dd>{rt.source === 'mock' ? 'In-memory mock data (nothing is saved)' : 'Live API'}</dd>
             <dt>Version</dt><dd className="mono">{rt.version}</dd>
             <dt>Schema version</dt><dd className="mono">{rt.schema_version}</dd>
-            <dt>Database</dt><dd className="mono break">{rt.db_path}</dd>
+            <dt>Database</dt><dd className="mono break">{rt.db_name ?? '-'}</dd>
+            <dt>Database file</dt><dd className="mono break">{rt.db_path}</dd>
             <dt>Backup folder</dt><dd className="mono break">{rt.backup_dir ?? '-'}</dd>
             <dt>Today</dt><dd className="num">{state.today}</dd>
           </dl>

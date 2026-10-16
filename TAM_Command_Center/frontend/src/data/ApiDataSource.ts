@@ -188,7 +188,7 @@ export class ApiDataSource implements DataSource {
 
   async getRuntime(): Promise<Runtime> {
     const h = await this.request<Json>('GET', '/api/health');
-    return { ok: true, mode: h.mode as Runtime['mode'], version: String(h.version), schema_version: Number(h.schema_version), db_path: String(h.db_path), source: 'api' };
+    return { ok: true, mode: h.mode as Runtime['mode'], version: String(h.version), schema_version: Number(h.schema_version), db_path: String(h.db_path), ...(h.db_name ? { db_name: String(h.db_name) } : {}), source: 'api' };
   }
 
   async getState(): Promise<AppState> {

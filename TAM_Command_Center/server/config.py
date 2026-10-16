@@ -12,6 +12,7 @@ Rules
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Mapping, Optional
@@ -22,6 +23,20 @@ from .errors import StartupRefused
 APP_ROOT = Path(__file__).resolve().parent.parent
 PROD_DB_NAME = "tam_command_center.db"
 DEV_DB_NAME = "tam_dev.db"
+DB_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+_RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
+
+
+def validate_db_name(name: str) -> str:
+    """TAM_DB_NAME: a bare name (the server adds .db). Letters, digits, underscore, hyphen; 1-40 characters; no path
+    parts, dots or spaces; not a reserved Windows device name. Raises StartupRefused."""
+    if not DB_NAME_RE.match(name):
+        raise StartupRefused(
+            f"TAM_DB_NAME {name!r} is not allowed. Use 1-40 letters, digits, underscores or hyphens only "
+            "(no spaces, dots, slashes or '..'); the server adds .db itself.")
+    if name.lower() in _RESERVED:
+        raise StartupRefused(f"TAM_DB_NAME {name!r} is a reserved Windows name; choose another.")
+    return name
 
 
 @dataclass(frozen=True)
@@ -40,6 +55,13 @@ class Config:
     dev_seed: bool
     host: str = C.HOST
     notes: List[str] = field(default_factory=list)   # startup notes to log (ignored flags etc.)
+    db_name: str = "tam_command_center"              # bare name of the active database (file is <db_name>.db)
+    named_db: bool = False                           # True when TAM_DB_NAME selected a non-default database
+
+    @property
+    def restore_tmp(self) -> Path:
+        """Per-database staging folder, so two databases never share (or delete) each other's staged files."""
+        return self.data_dir / ("restore_tmp" if not self.named_db else f"restore_tmp_{self.db_name}")
 
     @property
     def lock_path(self) -> Path:
@@ -107,18 +129,25 @@ def load_config(environ: Optional[Mapping[str, str]] = None, app_root: Optional[
         if not 1024 <= port <= 65535:
             raise StartupRefused("TAM_PORT must be between 1024 and 65535.")
 
+    default_name = (DEV_DB_NAME if mode == "DEV" else PROD_DB_NAME)[:-3]
+    raw_name = env.get("TAM_DB_NAME")
+    db_name = validate_db_name(raw_name.strip()) if raw_name and raw_name.strip() else default_name
+    named = db_name != default_name
     prod_dir = _prod_dir(env)
     prod_db = prod_dir / PROD_DB_NAME
     if mode == "DEV":
         data_dir = root / "dev_data"
-        db_path = data_dir / DEV_DB_NAME
-        backup_dir = data_dir / "TAM_Backups"
-        log_dir = data_dir / "logs"
+        db_path = data_dir / f"{db_name}.db"
     else:
         data_dir = prod_dir
-        db_path = prod_db
-        backup_dir = prod_dir / "TAM_Backups"
-        log_dir = prod_dir / "logs"
+        db_path = prod_dir / f"{db_name}.db"
+    # The default database keeps the original folders (existing backups stay visible); a named database gets its own
+    # backup and log subfolders so backups, logs and staged restores never mix up databases.
+    backup_dir = data_dir / "TAM_Backups" / (db_name if named else "")
+    log_dir = data_dir / "logs" / (db_name if named else "")
+    backup_dir, log_dir = Path(os.path.normpath(backup_dir)), Path(os.path.normpath(log_dir))
+    if data_dir.resolve() not in db_path.resolve().parents:
+        raise StartupRefused("The database path must stay inside the data folder.")
 
     # Isolation assertions (US-1.2 AC1)
     if db_path.resolve() == prod_db.resolve() and mode == "DEV":
@@ -133,4 +162,4 @@ def load_config(environ: Optional[Mapping[str, str]] = None, app_root: Optional[
     dev_seed = mode == "DEV" and env.get("TAM_DEV_SEED", "1") != "0"
     return Config(app_root=root, mode=mode, channel=mode.lower(), build_channel=build_channel, version=version,
                   port=port, db_path=db_path, data_dir=data_dir, backup_dir=backup_dir, log_dir=log_dir,
-                  web_dir=root / "web", dev_seed=dev_seed, notes=notes)
+                  web_dir=root / "web", dev_seed=dev_seed, notes=notes, db_name=db_name, named_db=named)

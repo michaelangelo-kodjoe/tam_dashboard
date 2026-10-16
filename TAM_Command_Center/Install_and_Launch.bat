@@ -1,13 +1,13 @@
 @echo off
 rem ============================================================================
-rem  TAM Command Center - ONE-CLICK entry point (install on first run, then launch).
+rem  TAM Command Center - first-time SETUP (installs only if needed). Daily use: Launch_TAM_Command_Center.bat.
 rem  Reuses tools\_resolve_python.bat, Install_Dependency.bat, tools\env_check.py and
 rem  Launch_TAM_Command_Center.bat. Never touches the database (it lives in
 rem  %LOCALAPPDATA%\TAM_Command_Center, outside this folder).
 rem  NOT validated on Windows or on the Bloomberg workstation (see VALIDATION.txt).
 rem ============================================================================
 setlocal EnableExtensions
-title TAM Command Center - install and launch
+title TAM Command Center - first-time setup
 
 rem --- refuse to run from inside a zip (Explorer preview extracts only this one file) ---
 if not exist "%~dp0server\__main__.py" goto :err_incomplete
@@ -24,23 +24,35 @@ set "TAM_NO_PAUSE="
 set "PYTHONUTF8=1"
 
 echo ============================================================
-echo  TAM Command Center - install and launch
+echo  TAM Command Center - first-time setup
 echo  Folder: %CD%
 echo ============================================================
 
 echo.
-echo [1/5] Looking for Python 3.10 or newer ...
+echo [1/4] Looking for Python 3.10 or newer ...
 call "%CD%\tools\_resolve_python.bat"
 if errorlevel 1 goto :err_python
 echo       Found: %TAM_PY_SRC%
 
 echo.
-echo [2/5] Python packages ...
+echo [2/4] Python packages ...
 if defined TAM_PYTHON goto :tam_python_set
-if not exist "%CD%\.venv\Scripts\python.exe" goto :do_install
-"%CD%\.venv\Scripts\python.exe" "%CD%\tools\install_stamp.py" check
-if errorlevel 1 goto :do_install
-echo       Already installed and requirements.txt is unchanged: skipping.
+rem  Decision = can the resolved Python import fastapi, uvicorn, pydantic and openpyxl? (a missing or
+rem  different requirements stamp is NOT a reason to reinstall; it is just rewritten.)
+"%TAM_PY_EXE%" %TAM_PY_ARGS% "%CD%\tools\install_stamp.py" ensure > "%TEMP%\tam_ensure.txt" 2>&1
+set "RC=%ERRORLEVEL%"
+if "%RC%"=="0" goto :already_installed
+set "TAM_WHY="
+set /p TAM_WHY=<"%TEMP%\tam_ensure.txt"
+del "%TEMP%\tam_ensure.txt" >nul 2>&1
+echo       Installing because: %TAM_WHY%
+goto :do_install
+
+:already_installed
+set "TAM_WHY="
+set /p TAM_WHY=<"%TEMP%\tam_ensure.txt"
+del "%TEMP%\tam_ensure.txt" >nul 2>&1
+echo       Not installing: %TAM_WHY%.
 goto :step3
 
 :tam_python_set
@@ -49,54 +61,54 @@ echo       Install requirements.txt into it yourself if the check below reports 
 goto :step3
 
 :do_install
-echo       First run or requirements changed: creating .venv and installing (needs a package index
-echo       or a wheelhouse folder). This can take a few minutes ...
+echo       Creating .venv and installing from the package index or a wheelhouse folder (a few minutes) ...
 set "TAM_NO_PAUSE=1"
 call "%CD%\Install_Dependency.bat"
 set "RC=%ERRORLEVEL%"
 set "TAM_NO_PAUSE="
 if not "%RC%"=="0" goto :err_install
 "%CD%\.venv\Scripts\python.exe" "%CD%\tools\install_stamp.py" write
-if errorlevel 1 goto :err_install
+if errorlevel 1 echo       [WARN] Could not write the install stamp (harmless).
 
 :step3
 echo.
-echo [3/5] Checking the environment ...
+echo [3/4] Checking the environment ...
 call "%CD%\tools\_resolve_python.bat"
 if errorlevel 1 goto :err_python
-"%TAM_PY_EXE%" %TAM_PY_ARGS% "%CD%\tools\env_check.py" --mode prod
-set "RC=%ERRORLEVEL%"
-if "%RC%"=="0" goto :step4
-"%TAM_PY_EXE%" %TAM_PY_ARGS% "%CD%\tools\env_check.py" --mode prod --core-only >nul
+"%TAM_PY_EXE%" %TAM_PY_ARGS% "%CD%\tools\env_check.py" --mode prod --core-only
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" goto :err_env
+"%TAM_PY_EXE%" %TAM_PY_ARGS% "%CD%\tools\env_check.py" --mode prod >nul
+if not errorlevel 1 goto :step4
 echo.
 echo [NOTE] BLPAPI (Bloomberg Python API) is not installed in this Python.
 echo        Bloomberg BAMS live data will NOT work. Everything else works (accounts, tasks,
 echo        operations, backups, export/restore). To enable BAMS, install the Bloomberg-provided
-echo        blpapi package into this Python (or the .venv here) and run this file again.
+echo        blpapi package into this Python (or the .venv here).
 
 :step4
 echo.
-echo [4/5] Desktop shortcut ...
-if exist "%CD%\.tam_shortcut_prompted" goto :step5
-choice /c YN /n /t 30 /d N /m "Create a Desktop shortcut 'TAM Command Center'? [Y/N] (N in 30 s) "
+echo [4/4] Desktop shortcut ...
+choice /c YN /n /t 30 /d N /m "Create a Desktop shortcut 'TAM Command Center' (starts Launch_TAM_Command_Center.bat)? [Y/N] (N in 30 s) "
 if errorlevel 2 goto :shortcut_done
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=[Environment]::GetFolderPath('Desktop'); $s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'TAM Command Center.lnk')); $s.TargetPath=Join-Path $env:TAM_APPDIR 'Install_and_Launch.bat'; $s.WorkingDirectory=$env:TAM_APPDIR; $s.Description='TAM Command Center'; $s.Save()"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=[Environment]::GetFolderPath('Desktop'); $s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'TAM Command Center.lnk')); $s.TargetPath=Join-Path $env:TAM_APPDIR 'Launch_TAM_Command_Center.bat'; $s.WorkingDirectory=$env:TAM_APPDIR; $s.Description='TAM Command Center'; $s.Save()"
 if errorlevel 1 goto :shortcut_failed
-echo       Shortcut created on the Desktop.
+echo       Shortcut created on the Desktop (it starts Launch_TAM_Command_Center.bat).
 goto :shortcut_done
 
 :shortcut_failed
-echo       [WARN] Could not create the shortcut (PowerShell blocked?). Not needed: just run this file again.
+echo       [WARN] Could not create the shortcut (PowerShell blocked?). Not needed: just double-click Launch_TAM_Command_Center.bat.
 
 :shortcut_done
-echo done> "%CD%\.tam_shortcut_prompted"
-
-:step5
 echo.
-echo [5/5] Starting TAM Command Center. The browser opens at http://127.0.0.1:8765
-echo       Keep this window open while you work; close it (or Ctrl+C) to stop the server.
+echo ============================================================
+echo  SETUP IS DONE. From now on, start the app with
+echo      Launch_TAM_Command_Center.bat   (or the Desktop shortcut)
+echo  and do NOT run Install_and_Launch.bat again. It only installs the first time
+echo  (or after an update that needs new packages).
+echo ============================================================
+choice /c YN /n /t 30 /d N /m "Start TAM Command Center now? [Y/N] (N in 30 s) "
+if errorlevel 2 goto :done
 set "TAM_OPEN_BROWSER=1"
 call "%CD%\Launch_TAM_Command_Center.bat"
 set "RC=%ERRORLEVEL%"

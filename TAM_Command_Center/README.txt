@@ -7,7 +7,7 @@ Single user. No login. Nothing is reachable from the network.
 STATUS: NOT PRODUCTION-READY. This build has not been validated on the target
 Bloomberg Windows workstation. Read VALIDATION.txt before relying on it.
 
-WHAT IS IN THIS BUILD (0.1.0-rc4, spec runs 1-6)
+WHAT IS IN THIS BUILD (0.1.0-rc5, spec runs 1-6)
   Today queue, Accounts (with bulk import), Account Workspace, Tasks, Quick Capture,
   BAMS monitor and appliance import, Operations (quarters, account-grouped appliances,
   target versions; entered manually), Settings, backups, and portability: Excel export,
@@ -23,17 +23,30 @@ REQUIREMENTS
   BLPAPI is NOT installed by this package: use the Bloomberg-provided package
   for your workstation.
 
-QUICK START (one file)
+QUICK START
   Unzip the whole archive anywhere (spaces in the path are fine; do NOT run from inside the
-  zip), then double-click Install_and_Launch.bat. It: finds Python 3.10+; on first run creates
-  .\.venv and pip-installs requirements.txt (skipped later while requirements.txt is
-  unchanged); runs the PROD environment check; offers a Desktop shortcut; starts the app and
-  opens http://127.0.0.1:8765 . If BLPAPI is missing it says so: BAMS live data will not work,
-  the rest does. Install the Bloomberg-provided blpapi package into the .venv to enable BAMS.
+  zip). FIRST TIME ONLY: double-click Install_and_Launch.bat. It finds Python 3.10+; creates
+  .\.venv and pip-installs requirements.txt ONLY if fastapi, uvicorn, pydantic and openpyxl
+  cannot already be imported (it prints why it is or is not installing); runs the PROD
+  environment check; offers a Desktop shortcut to Launch_TAM_Command_Center.bat. If BLPAPI is
+  missing it says so: BAMS live data will not work, the rest does.
+  DAILY: double-click Launch_TAM_Command_Center.bat (or the Desktop shortcut). It never installs.
+  It asks which database to use (below), starts the app and opens http://127.0.0.1:8765 .
+
+DATABASE CHOICE (Launch_TAM_Command_Center.bat)
+  Databases are the *.db files in %LOCALAPPDATA%\TAM_Command_Center. At launch the list is
+  shown (names only) with the last used one marked. Enter, or no key for 10 seconds = keep the
+  last used. A number = open that existing one. N = create a NEW empty database: type a name
+  (1-40 letters, digits, _ or -); a name that already exists is refused unless you type OPEN
+  to open it. The choice is remembered in last_database.txt next to the databases. Nothing is
+  ever deleted, renamed or overwritten. An already-set TAM_DB_NAME environment variable is used
+  without asking. The chosen database is shown in the console banner. To run two databases at
+  the same time, set TAM_PORT (e.g. set TAM_PORT=8766) before the second launch; the second
+  launch otherwise stops with "port in use" (exit 5).
 
 UPDATING
-  Unzip a newer version next to the old one (or over it) and run its Install_and_Launch.bat.
-  Your database is NEVER inside this folder: it is in %LOCALAPPDATA%\TAM_Command_Center
+  Unzip a newer version next to the old one (or over it) and run its Install_and_Launch.bat once.
+  Your databases are NEVER inside this folder: they are in %LOCALAPPDATA%\TAM_Command_Center
   (backups and logs too), so unzipping, replacing or deleting the app folder does not touch
   your data. A newer app upgrades the database on start, after an automatic safety backup.
   A new folder builds its own .venv on first run; unzipping over an old folder reuses it.
@@ -53,12 +66,13 @@ FIRST-TIME SETUP (manual alternative to the above)
      makes the launcher open the page for you (default: off).
 
 FILES
-  Install_and_Launch.bat         One-click: install on first run, check, shortcut, launch, open browser.
-  START_HERE.txt                 Five-line start instructions.
-  Launch_TAM_Command_Center.bat  Production, port 8765. Clears TAM_DEV_MODE and TAM_BAMS_TEST_MODE.
+  Install_and_Launch.bat         First-time SETUP only: install if needed, check, Desktop shortcut.
+  START_HERE.txt                 Short start instructions.
+  Launch_TAM_Command_Center.bat  DAILY start: database choice, production, port 8765. Never installs. Clears TAM_DEV_MODE and TAM_BAMS_TEST_MODE.
   Launch_DEV_Preview.bat         DEV preview, port 8766, simulated data. Only works on a
                                  dev-channel package (this release is channel=prod, so it refuses).
-  Install_Dependency.bat         Creates .venv and installs requirements.txt.
+  Install_Dependency.bat         Creates .venv and installs requirements.txt (also usable on its own).
+  tools\choose_db.py             Database chooser used by the launcher (stdlib only).
   Check_PROD_Environment.bat     Read-only preflight for production (fails closed, BLPAPI required).
   Check_DEV_Environment.bat      Read-only preflight for DEV (BLPAPI only a warning).
   VERSION.txt                    version, channel (prod), build time, validation state.
@@ -83,6 +97,8 @@ WHERE DATA LIVES
   A safety backup is taken before a schema upgrade and before every delete.
 
 SETTINGS VIA ENVIRONMENT (optional)
+  TAM_DB_NAME  Database name (bare, 1-40 of A-Za-z0-9_-; the server adds .db; new name = new empty DB).
+               Set by the launcher prompt; if already set the prompt is skipped.
   TAM_PORT   Override the port (1024-65535). Defaults: 8765 production, 8766 DEV.
   TAM_NO_PAUSE=1  Do not wait for a key press at the end of a launcher/check (for scripts).
 

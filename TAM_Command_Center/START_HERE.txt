@@ -1,8 +1,10 @@
 TAM COMMAND CENTER - START HERE
 1. Unzip the whole archive to a normal folder (not from inside the zip). Any path works, spaces included.
-2. Double-click Install_and_Launch.bat. First run installs Python packages (needs pip access, a few minutes).
-3. Your browser opens http://127.0.0.1:8765 . Keep the black window open while you work; close it to stop.
-4. To update: unzip the newer version next to or over the old one. Your data is in %LOCALAPPDATA%\TAM_Command_Center and is never touched.
-5. NOT production-ready until validated on your Bloomberg workstation. Read README.txt and VALIDATION.txt.
-Install problems (pip "No matching distribution found")? Your internal package mirror may lag public PyPI. requirements.txt uses version ranges, so pip takes what the mirror has. If it still fails, send the full text of the window.
-Custom package index: set PIP_INDEX_URL (e.g. set PIP_INDEX_URL=https://your.mirror/simple) or put a pip.ini in %APPDATA%\pip before running Install_and_Launch.bat. No internet at all: put the wheels in a folder named "wheelhouse" next to Install_and_Launch.bat; it is used with --no-index.
+2. Run Install_and_Launch.bat ONCE (first-time setup; installs Python packages, needs pip access, a few minutes).
+3. From then on start the app with Launch_TAM_Command_Center.bat or the Desktop shortcut (setup offers it). Launch never installs anything.
+4. At start it lists your databases: Enter (or wait 10 s) keeps the last one; a number picks another; N starts from scratch with a NEW empty database. Nothing is ever deleted or overwritten.
+5. Browser opens http://127.0.0.1:8765 . Keep the black window open while you work; close it to stop.
+6. BLPAPI (Bloomberg live data) is not installed by this package; without it everything works except BAMS live data.
+7. Updating: unzip the newer version, run its Install_and_Launch.bat once. Your data (%LOCALAPPDATA%\TAM_Command_Center) is never touched.
+8. NOT production-ready until validated on your Bloomberg workstation. See README.txt and VALIDATION.txt.
+Pip "No matching distribution found"? requirements.txt uses version ranges so a lagging mirror works; if it still fails send the full window text. Custom index: set PIP_INDEX_URL or use %APPDATA%\pip\pip.ini. No internet: put wheels in a folder named "wheelhouse" next to Install_and_Launch.bat.
