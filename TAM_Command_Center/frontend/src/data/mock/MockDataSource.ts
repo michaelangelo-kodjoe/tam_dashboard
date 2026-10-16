@@ -52,6 +52,8 @@ import { rebaseTables, type MockFile, type Row, type Tables } from './rebase';
 import { rankToday } from './today';
 import { MockBams } from './mockBams';
 import { MockOperations } from './mockOperations';
+import { MockPortability } from './mockPortability';
+import type { DbRestorePreview, DbRestoreResult, RestoreIssueQuery, RestorePlan, RestoreResult } from '../../portTypes';
 import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../../opsTypes';
 import { MockBamsImport, bamsTemplateRows, parseBamsGrid } from './mockBamsImport';
 import type {
@@ -121,6 +123,7 @@ export class MockDataSource implements DataSource {
   private bamsEngine!: MockBams;
   private bamsImp!: MockBamsImport;
   private ops!: MockOperations;
+  private port!: MockPortability;
   /** Test/dev hook: make the next N calls fail with a network error. */
   failNext = 0;
   private imports = new Map<string, { parsed: Parsed; fileName: string; size: number; format: ImportFormat; sheet: string | null; encoding: string | null; delimiter: string | null; notes: { code: string; text: string }[]; applied: ImportResult | null; skippedRaw: Map<number, Record<string, string>> }>();
@@ -155,6 +158,7 @@ export class MockDataSource implements DataSource {
         });
         this.bamsImp = new MockBamsImport(this.bamsEngine, { t: this.t, now: () => this.now(), uuid, backup: () => { this.safetyBackup('pre-import'); return this.backups[0]; } });
         this.ops = new MockOperations({ t: this.t, today: () => this.today, now: () => this.now(), uuid, audit: (a) => this.audit({ ...a, category: 'operations' }), backup: () => this.safetyBackup('pre-delete') });
+        this.port = new MockPortability({ t: this.t, now: () => this.now(), uuid, backups: () => this.backups, backup: () => { this.safetyBackup('pre-import'); return this.backups[0]; }, schema: 3 });
         this.log('INFO', `Mock data loaded; rebased to ${this.today}; BAMS mock clock ${this.clock.toISOString()}`);
       })();
     }
@@ -945,4 +949,19 @@ export class MockDataSource implements DataSource {
   async saveOperationsAppliance(input: OpsApplianceInput): Promise<OpsRow> { await this.enter(); return this.ops.saveAppliance(input); }
   async resetOperationsAppliance(input: { object_id: string; year: number; quarter: OpsQuarterName; confirm: boolean; expected_row_version?: number }): Promise<OpsRow> { await this.enter(); return this.ops.resetAppliance(input); }
   async setOperationsVersion(input: { year: number; quarter: OpsQuarterName; object_ids: string[]; target_version: string | null }): Promise<OpsSetVersionResult> { await this.enter(); return this.ops.setVersion(input); }
+
+  // ------------------------------------------------------------------ Portability (contract section 14)
+
+  async exportExcel(): Promise<DownloadedFile> { await this.enter(); return { blob: new Blob(['mock export'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename: 'tam_export_mock.xlsx' }; }
+  async exportDatabase(): Promise<DownloadedFile> { await this.enter(); return { blob: new Blob(['SQLite format 3\0mock'], { type: 'application/vnd.sqlite3' }), filename: 'tam_backup_mock_v3.db' }; }
+  async inspectRestoreFile(file: File, opts: { session?: string; table?: string } = {}): Promise<RestorePlan> { await this.enter(); return this.port.inspect(file, opts); }
+  async getRestorePlan(id: string, q: RestoreIssueQuery = {}): Promise<RestorePlan> { await this.enter(); return this.port.get(id, q); }
+  async removeRestoreFile(id: string, fileId: string): Promise<RestorePlan> { await this.enter(); return this.port.remove(id, fileId); }
+  async setRestoreTable(id: string, fileId: string, table: string): Promise<RestorePlan> { await this.enter(); return this.port.setTable(id, fileId, table); }
+  async applyRestore(input: { restore_id: string; plan_hash: string }): Promise<RestoreResult> { await this.enter(); return this.port.apply(input); }
+  async downloadRestoreSkipped(id: string, format: ImportFormat): Promise<DownloadedFile> { await this.enter(); this.port.skipped(id); return { blob: new Blob(['table,source_row,outcome,reason,values\n']), filename: `tam_restore_skipped.${format}` }; }
+  async inspectDatabaseRestore(file: File): Promise<DbRestorePreview> { await this.enter(); return this.port.inspectDb(file); }
+  async previewBackupRestore(name: string): Promise<DbRestorePreview> { await this.enter(); return this.port.fromBackup(name); }
+  async cancelDatabaseRestore(id: string): Promise<void> { await this.enter(); this.port.cancelDb(id); }
+  async applyDatabaseRestore(input: { restore_id: string; confirm: string }): Promise<DbRestoreResult> { await this.enter(); return this.port.applyDb(input); }
 }

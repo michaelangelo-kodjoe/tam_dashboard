@@ -16,7 +16,7 @@ Runs 1-4 are built, QA-passed, and committed (latest gate: `docs/qa/ERROR_LOG_5.
 ## Not built (spec phases still ahead)
 Operations (Run 5, planned), portability (Excel export/restore, DB export), ChatGPT Bridge. Schema for these tables already exists in `db/schema.sql`. Each needs PM spec, then **mockups the user approves**, then build.
 
-Next step: new minimal Operations mockups (T-169), user approval, then build. Open questions: PM spec 13.6.
+Run 6 (Portability) is in planning: PM spec section 14 (D-122..D-142, T-174..T-185), brief `docs/qa/PORTABILITY_MOCKUP_BRIEF.md`; open questions in 14.6; mockup gate applies unless the user waives it. Operations (Run 5) status: see the state file.
 
 ## Do not do without the user
 - Build any UI before mockups are approved.

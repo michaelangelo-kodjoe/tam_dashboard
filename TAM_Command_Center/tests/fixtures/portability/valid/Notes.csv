@@ -1,0 +1,2 @@
+id,client_id,account_name,note_type,timestamp,subject,body,action_items,source,row_version,created_at,updated_at
+fx-not-1,fx-acc-1,Fixture Capital One,Meeting Note,2026-09-30T14:00:00.000Z,Quarterly sync,Discussed roadmap.,,GUI,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

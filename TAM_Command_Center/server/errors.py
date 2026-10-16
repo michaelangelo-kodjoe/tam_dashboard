@@ -100,3 +100,30 @@ class PossibleDuplicate(AppError):
 # ---- Run 4: BAMS import (docs/04_API_CONTRACT.md section 12)
 class ImportFailed(AppError):
     code, status = "import_failed", 500
+
+
+# ---- Run 6 phase 2: database restore (docs/04_API_CONTRACT.md section 14.5)
+class RestoreRefusal(AppError):
+    """A staged database was refused. `code` is one of: not_sqlite, too_large, no_space, integrity_failed, schema_newer,
+    channel_mismatch, no_channel_stamp, migration_failed."""
+    status = 422
+
+    def __init__(self, code: str, message: str, *, status: int = 422, details: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(message, details=details)
+        self.code, self.status = code, status
+
+
+class RestoreExpired(AppError):
+    code, status = "restore_expired", 410
+
+
+class ConfirmMismatch(AppError):
+    code, status = "confirm_mismatch", 409
+
+
+class RestoreFailed(AppError):
+    code, status = "restore_failed", 500
+
+
+class Restoring(AppError):
+    code, status = "restoring", 503

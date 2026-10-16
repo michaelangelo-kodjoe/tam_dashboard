@@ -1,0 +1,2 @@
+id,object_id,appliance_name,account_name,metric_name,ticker,enabled,stale_after_seconds,stale_suppressed,row_version,created_at,updated_at
+fx-met-1,fx-app-1,FX-APP-A,Fixture Capital One,Queue depth,FX TEST 1 Index,1,120,0,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

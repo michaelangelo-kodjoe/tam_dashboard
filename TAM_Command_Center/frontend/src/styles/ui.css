@@ -304,3 +304,59 @@ kbd { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--mu
 .starbtn { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); height: var(--ctrl-h-sm); padding: 0 6px; border-radius: var(--r-md); font-size: var(--fs-sm); }
 .starbtn:hover { color: var(--text); background: var(--surface-3); }
 .starbtn.is-primary { color: var(--accent); }
+
+/* Collapsible panel (Settings Data / Logging) */
+.cpanel__h { margin: 0; }
+.cpanel__btn { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 44px; padding: var(--sp-3) var(--sp-4); border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; border-radius: var(--r-lg); }
+.cpanel__btn:hover { background: var(--surface-2); }
+.cpanel__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.cpanel__title { margin: 0; }
+.cpanel.is-open .cpanel__btn { border-bottom: 1px solid var(--border); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.cpanel__body { padding: var(--sp-4); }
+.cpanel__body[hidden] { display: none; }
+.cpanel__bar { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+
+/* Portability (Settings > Data) */
+.pt-rows { list-style: none; margin: 0 0 var(--sp-4); padding: 0; border: 1px solid var(--border); border-radius: var(--r-md); }
+.pt-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--border); }
+.pt-row:last-child { border-bottom: 0; }
+.pt-row p { margin: 2px 0 0; }
+.pt-spacer { flex: 1; }
+.pt-restore { display: flex; flex-direction: column; gap: var(--sp-3); }
+.pt-what { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); }
+.pt-what ul { margin: var(--sp-2) 0 0; padding-left: 18px; }
+.pt-drop { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4); border: 1px dashed var(--border-strong); border-radius: var(--r-md); background: var(--surface-1); color: var(--muted); }
+.pt-drop.is-drag { border-color: var(--accent); background: var(--accent-tint); }
+.pt-drop span { flex: 1; }
+.pt-err { margin: 0; }
+.pt-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.pt-file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-1); }
+.pt-file__name { flex: 1; min-width: 120px; font-weight: 500; }
+.pt-file__msg { flex-basis: 100%; margin: 0; }
+.pt-total th, .pt-total td { border-top: 1px solid var(--border-strong); font-weight: 600; }
+.pt-issuehead { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.pt-issues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; font-size: var(--fs-sm); }
+.pt-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.pt-danger { display: flex; align-items: flex-start; gap: var(--sp-2); margin: 0; padding: var(--sp-3); border: 1px solid var(--danger); border-radius: var(--r-md); background: var(--danger-tint); color: var(--danger); font-weight: 500; }
+.pt-fewer td, .pt-fewer th { background: var(--warning-tint); }
+.pt-progress { display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-start; }
+.pt-okbanner { border-left: 3px solid var(--success); background: var(--success-tint); }
+
+/* Portability at narrow widths (QA-7-4) */
+@media (max-width: 599px) {
+  .pt-row { flex-direction: column; align-items: stretch; gap: var(--sp-2); }
+  .pt-row .btn { width: 100%; justify-content: center; }
+  .cpanel__body { padding: var(--sp-3); }
+  .pt-drop { flex-direction: column; align-items: stretch; text-align: left; }
+  .pt-file { flex-direction: column; align-items: stretch; }
+  .pt-file .select { width: 100%; }
+  .pt-issuehead { flex-wrap: wrap; }
+  .pt-issuehead .pt-spacer { display: none; }
+  .cpanel__bar { flex-wrap: wrap; }
+  .settings__data .table-scroll { max-width: 100%; overflow-x: auto; }
+  .settings__data .table th, .settings__data .table td { white-space: normal; word-break: break-all; padding: 6px 6px; height: auto; }
+  .settings__data .table th:nth-child(2), .settings__data .table td:nth-child(2), .settings__data .table th:nth-child(3), .settings__data .table td:nth-child(3), .settings__data .table th:nth-child(4), .settings__data .table td:nth-child(4) { display: none; }
+  .settings__data .table .btn { white-space: nowrap; }
+  .overlay__foot { flex-wrap: wrap; }
+  .overlay__foot .btn { flex: 1 1 auto; }
+}

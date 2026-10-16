@@ -1,0 +1,2 @@
+id,client_id,account_name,name,region,location,environment,enabled,row_version,created_at,updated_at
+fx-app-1,fx-acc-1,Fixture Capital One,FX-APP-A,US-East,,PROD,1,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

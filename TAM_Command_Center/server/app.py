@@ -20,13 +20,14 @@ from . import infra, reads, services
 from .importer import service as import_service
 from .config import Config
 from .errors import (AppError, ForbiddenOrigin, MethodNotAllowed, NotFound, NotImplementedYet, PayloadTooLarge,
-                     ValidationFailed)
+                     Restoring, ValidationFailed)
 from .logsetup import is_disconnect, log_connection_event, tail
 from .runtime import Runtime
 from .schemas import (CheckSimilar, ImportApply, ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
                       SettingsSave, TaskArchive, TaskSave)
 from .bams import routes as bams_routes
 from .ops import routes as ops_routes
+from .portability import routes as portability_routes
 from .bams.clock import Clock as BamsClock
 from .bams.monitor import Monitor
 from .bams.notify import select_notifier
@@ -38,10 +39,9 @@ log = logging.getLogger("tam.api")
 
 _STUB_PHASES = {
     "operations": "Phase 3: Operations (schedule sync and server-upgrade importers are out of scope, D-118)",
-    "export": "Phase 5: data portability",
     "import": "Phase 5: data portability",
     "data/reset": "Phase 5: data portability",
-    "restore": "Phase 5: data portability",
+    "restore": "Phase 5: database restore (T-184/T-185) is not built yet",
     "context": "Phase 5: ChatGPT Bridge",
     "chat": "Phase 5: ChatGPT Bridge",
 }
@@ -197,9 +197,20 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
             origin = request.headers.get("origin")
             if origin and request.method not in ("GET", "HEAD", "OPTIONS") and origin not in config.allowed_origins:
                 raise ForbiddenOrigin("Cross-origin writes are not allowed.")
-            response = await call_next(request)
+            path = request.url.path
+            is_api = path.startswith("/api")
+            health = path == "/api/health"
+            admitted = rt.gate.enter(health or not is_api)
+            if not admitted:
+                raise Restoring("The app is restoring a database. Please wait a moment.")
+            try:
+                response = await call_next(request)
+            finally:
+                rt.gate.leave(health or not is_api)
         except AppError as exc:
             response = _json(exc.status, exc.body())
+            if exc.status == 503:
+                response.headers["Retry-After"] = "2"
         except Exception as exc:  # noqa: BLE001
             if is_disconnect(exc):
                 log_connection_event(exc)
@@ -258,6 +269,8 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
 
     @api.get("/health")
     def health() -> Dict[str, Any]:
+        if rt.gate.restoring:                      # the file is being swapped: answer without touching it
+            return {"ok": True, "restoring": True, "mode": config.mode, "channel": config.channel, "version": config.version}
         with rt.db() as conn:
             r = runtime_info(conn)
         return {"ok": True, "mode": r["mode"], "channel": r["channel"], "version": r["version"],
@@ -429,6 +442,7 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
     # ------------------------------------------------------------ BAMS monitoring (Run 4) and BAMS import
     bams_routes.register(api, rt)
     bams_routes.register_import(api, rt)
+    portability_routes.register(api, rt)  # Run 6 export + restore from file
     ops_routes.register(api, rt)          # Run 5 Operations (replaces the 501 stub)
 
     # ------------------------------------------------------------ DEV-only routes: not registered in PROD

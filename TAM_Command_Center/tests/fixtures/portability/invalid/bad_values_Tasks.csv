@@ -1,0 +1,3 @@
+id,client_id,account_name,task,category,priority,due,next_update,status,waiting,notes,archived,row_version,created_at,updated_at
+fx-tsk-bad1,,,Bad status,Other,Medium,,,Done-ish,,,0,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z
+fx-tsk-bad2,,,Bad priority,Other,Urgent,,,Not Started,,,0,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

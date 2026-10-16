@@ -560,14 +560,40 @@ describe('overlays, Quick Capture and account jump', () => {
   });
 
   it('Settings: changing a setting saves it and the runtime panel is read-only', async () => {
+    sessionStorage.clear();
     const { user } = await boot('/settings');
     await screen.findByRole('heading', { level: 1, name: 'Settings' });
     await user.click(screen.getByRole('radio', { name: 'GMT' }));
     expect(await screen.findByText('Time display saved')).toBeInTheDocument();
     expect(screen.getByText('DEV', { selector: 'dd' })).toBeInTheDocument();
+    // Data and Logging are collapsed by default; nothing inside is rendered or reachable
+    const data = screen.getByRole('button', { name: /^Data/ });
+    const logging = screen.getByRole('button', { name: /^Logging/ });
+    expect(data).toHaveAttribute('aria-expanded', 'false');
+    expect(logging).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /Create backup now/ })).toBeNull();
+    expect(screen.queryByText('Recent log')).toBeNull();
+    data.focus();
+    await user.keyboard('{Enter}');
+    expect(data).toHaveAttribute('aria-expanded', 'true');
     await user.click(screen.getByRole('button', { name: /Create backup now/ }));
     expect(await screen.findByText('Backup created')).toBeInTheDocument();
     expect((await screen.findAllByText(/^tam_manual_/)).length).toBeGreaterThan(0);
+    await user.click(logging);
+    expect(await screen.findByText('Recent log')).toBeInTheDocument();
+    await user.click(logging);
+    expect(logging).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Recent log')).toBeNull();
+    sessionStorage.clear();
+  });
+
+  it('Settings: open state is remembered for the session only (sessionStorage)', async () => {
+    sessionStorage.clear();
+    sessionStorage.setItem('tam.panel.settings-logging', '1');
+    await boot('/settings');
+    expect(await screen.findByRole('button', { name: /^Logging/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /^Data/ })).toHaveAttribute('aria-expanded', 'false');
+    sessionStorage.clear();
   });
 
   it('shows an error banner with Retry when the first load fails, and recovers', async () => {

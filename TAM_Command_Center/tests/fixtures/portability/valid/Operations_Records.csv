@@ -1,0 +1,2 @@
+id,client_id,account_name,server_name,environment,polarity,schedule_year,schedule_quarter,current_version,target_version,scheduled_date,maintenance_window,status,validation_status,waiting_on,reference,notes,source_url,row_version,created_at,updated_at
+fx-ops-1,fx-acc-1,Fixture Capital One,fx-srv-01,PROD,East,2026,Q4,,,,,Planned,Pending,,,,,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

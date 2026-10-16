@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import logging
+import shutil
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -33,6 +34,10 @@ class Runtime:
         self.log_file: Optional[Path] = None
         self.startup_result: dict = {}
         self.bams: Any = None                     # server.bams.monitor.Monitor, attached by create_app
+        from .portability.dbrestore import Gate      # lazy: keeps runtime import-light
+        self.gate = Gate()                        # D-140 maintenance gate
+        self.db_restore: Any = None               # staged whole-database restore (one at a time)
+        self.restore_sessions: Any = None         # restore-from-file sessions
         self.import_sessions: Any = None          # server.importer.sessions.SessionStore, created on first use
         self._closed = False
         # D-18: lock BEFORE the DB is opened.
@@ -55,6 +60,8 @@ class Runtime:
         for note in cfg.notes:
             log.warning("startup: %s", note)
         log.info("database: %s", cfg.db_path)
+        from .portability.dbrestore import startup_recovery
+        startup_recovery(cfg)                      # D-140: finish or undo a swap interrupted by a crash
         existed = cfg.db_path.exists() and cfg.db_path.stat().st_size > 0
         try:
             conn = open_db(cfg.db_path, channel=cfg.channel, rows=False)
@@ -102,6 +109,7 @@ class Runtime:
         if self._closed:
             return
         self._closed = True
+        shutil.rmtree(self.config.data_dir / "restore_tmp", ignore_errors=True)
         if self.bams is not None:
             self.bams.shutdown()
         self.lock.release()

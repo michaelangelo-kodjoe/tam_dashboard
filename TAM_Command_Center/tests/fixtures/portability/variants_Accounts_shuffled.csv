@@ -1,0 +1,3 @@
+updated_at,created_at,row_version,notes,next_contact,last_contact,contact,products,bpid,status,name,id
+2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z,1,,2026-10-20,,,,,Active,Fixture Capital One,fx-acc-1
+2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z,1,,,,,,FX2,Inactive,Fixture Markets Two,fx-acc-2

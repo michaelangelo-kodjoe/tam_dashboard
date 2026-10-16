@@ -1,0 +1,3 @@
+id,client_id,account_name,name,role,email,team,is_primary,row_version,created_at,updated_at
+fx-con-p1,fx-acc-1,,One,,,,1,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z
+fx-con-p2,fx-acc-1,,Two,,,,1,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

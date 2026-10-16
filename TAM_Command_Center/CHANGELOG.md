@@ -2,8 +2,29 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased - Run 6 T-175 schema confirmation and fixtures (data-architect)
+- Confirmed, no schema change: audit vocabulary already covers restore events. Table-level restore = category `data`, object_type `import`, object_id = table name, action `restored`, source `Bulk Import`; post-database-restore = category `data`, object_type `backup` (or `system`/`schema`), action `restored`, source `System`. Explicit-id inserts (ids, created/updated timestamps, row_version) work for all 8 restored tables; insert fires no row_version/id guards; one-primary and unique guards reject clashes; parents-before-children needed with foreign_keys=ON (incl. quarter before upgrade record); rollback leaves nothing. `support_cases` has no UI/API, so it is not an export table.
+- Added: `db/tests/test_portability_restore.py` (10 tests); fixtures `tests/fixtures/portability/` (generator `build_fixtures.py`; valid CSV per table, CSV variants, invalid CSVs incl. Unrecognized and missing-parent, xlsx valid DEV/PROD, newer schema, non-export). Column names follow SPEC 14 until contract section 14 exists.
+
+## Unreleased - Run 6 planning (Portability)
+- Added (docs only): `docs/01_PM_SPEC.md` section 14 (D-122..D-135, E16 stories, T-174..T-183) and `docs/qa/PORTABILITY_MOCKUP_BRIEF.md`: Excel export (9 sheets), safe database copy, restore from Excel that only adds missing rows (preview, `pre-import` backup, one transaction), reusing the Run 3/4 import safety code. Amended: restore also accepts .csv (one table per file, table identified from headers or picked by the user, several files per session, D-135, US-16.7); wording is 'Restore from file'. In-app database restore (replace the live DB from an uploaded .db or a listed backup; staged verification, typed RESTORE, `pre-restore` backup, atomic swap with rollback, D-136..D-142, US-16.8..16.10, T-184/T-185) added by user decision; Reset all data stays out. No code or schema change.
+
 ## Unreleased - Run 5 Operations DEV seed (T-166)
 - Changed: DEV mock seed (`db/seed_mock.py`, `db/mock_data.json`): PROD appliances now carry Region East/West (3 left on EMEA = "Set East or West"); 2 DEV appliances (NWH, KMC) added on an isolated RNG/id stream so no other seeded value moved; next quarter (2027 Q1) has no PROD West date; server_upgrades gain one date override (kmc-bpipe-hk-01, 2026 Q4) and one version override (brs-sapi-ny-01, 7.2.0-rc2). Existing quarters/status mix/overdue (BRS DEV In Progress) already covered. No schema change. 636 tests pass.
+
+## Unreleased - Run 6 xlsx workbook entry (contract 14.3 amendment)
+- Changed: an .xlsx is one file row with its sheets summarised (no table dropdown); Remove drops the workbook; skipped-row list shows the new `tab_or_linebreak` / `leading_trailing_space` texts. `RestoreFile.sheets` added (Api mapper defaults it). Vitest 451.
+
+## Unreleased - Run 6 QA-7-2 and QA-7-4 (frontend)
+- Fixed: restore result names the workbook/files once (UI and adapter de-duplicate, accept `file` or `files`). Settings > Data usable at 375 px (stacked actions, compact Backups table, wrapping dialog footers). Vitest 450.
+
+## Unreleased - Run 6 portability UI (frontend)
+- Added in Settings > Data: Export to Excel and Export database (downloads), Restore from file (one .xlsx or up to nine .csv; per-file table dropdown, Unrecognized / Missing columns states, remove file, CSV notice, New/Identical/Differs/Invalid per table, skipped-row list with outcome and table filters, "Add N missing rows", result with safety backup and skipped .xlsx/.csv download), Restore database (file chooser, and "Restore this backup" on every Backups row): file vs current counts with "fewer" highlight, red replace-everything warning, typed RESTORE, Restoring progress (polls health on 503/network), result with Reload app and 5 s auto-reload, failure states "Your data was not changed" / "Restored from safety backup <name>", graceful not-built message on 501.
+- Added: `DataSource` portability methods (Api + Mock; mock restores CSV only and never mutates its tables), `portTypes.ts`, `lib/portability.ts`, `components/portability/`.
+- Tests: +17 Vitest (components/portability/Portability.test.tsx, data/ApiPortability.test.ts); 448 total. Not exercised live: file uploads and the real restore paths (the running dev server predates backend phase 1 and still answers 501 on export).
+
+## Unreleased - Settings collapsible sections
+- Changed: Settings Data (Backups) and Logging (log level, recent log; formerly Diagnostics) are collapsible panels, collapsed by default, chevron button header with `aria-expanded`/`aria-controls`, open state remembered per browser session (`sessionStorage`), content loads only when opened. New `components/ui/CollapsiblePanel.tsx`; `DataSection` in `SettingsPage.tsx` is the drop-in container for the Run 6 portability UI (not built). Vitest updated (+1, 432 total).
 
 ## Unreleased - Run 5 Operations frontend polish
 - Changed: Operations status is a colored badge button opening the status menu (Select gains optional `renderValue`; keyboard/ARIA unchanged). Header chevron toggles expand/collapse all; checkboxes and Select all appear only in selection mode ("Select" button).
@@ -16,6 +37,18 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - Added: `DataSource` methods `getOperations`, `saveOperationsQuarter`, `deleteOperationsQuarter`, `saveOperationsAppliance`, `resetOperationsAppliance`, `setOperationsVersion` (Api + Mock; `data/mock/mockOperations.ts`), `src/opsTypes.ts`, `src/lib/operations.ts`.
 - Added: BAMS import preview and result show the `operations_note` line ("N appliances need East or West set for Operations"), informational only.
 - Tests: +30 Vitest (lib, mock adapter, API adapter, page). Verified live on tam-app-dev: grouped table, select + Set version, edit + East save, no console errors. Known: `today.test.ts` parity fails after the data architect's in-progress `db/mock_data.json` extension (passes on the committed data).
+
+## Unreleased - QA gate 7 fixes (QA-7-1..3)
+- Fixed: from-backup staging no longer writes `-wal`/`-shm` beside the backup (immutable read-only open). xlsx restore lists the workbook once (`files[].sheets`), result file names deduplicated. A leading tab, line break or leading/trailing space in name-like columns gets specific skip reasons (`tab_or_linebreak`, `leading_trailing_space`) instead of `database_rule`. Contract section 14 amended; 3 tests.
+
+## Unreleased - Run 6 portability phase 2 (T-184, T-185): restore database
+- Added: `server/portability/dbrestore.py` and routes `POST /api/restore/database/inspect|from-backup|apply|{id}/cancel`, `GET /api/restore/database/{id}`. Staging in `<data>/restore_tmp` (500 MiB, 3x free disk, header/read-only/integrity/FK/channel/schema checks, guard-trigger check via the migration runner on the staged copy, older schema migrated on the copy only), typed `RESTORE` re-checked server-side, maintenance gate (503 `restoring` + Retry-After, in-flight drain, `/api/health` answers `restoring`), BAMS monitor stopped and restarted, `pre-restore` safety backup (never auto-pruned), WAL checkpoint, copy to `.restore-new`, rename live to `.pre-restore-old`, `os.replace` with 5 retries, verification, post-restore audit event, rollback to the renamed original or to the safety backup, startup recovery. The instance lock is untouched.
+- Tests: `server/tests/test_dbrestore.py` (36 incl. parametrized fault injection at 9 swap steps).
+
+## Unreleased - Run 6 portability phase 1 (T-174, T-176..T-179)
+- Added: `server/portability/` (tables, export, readers, planner, restore, routes). `GET /api/export/excel` (About + 8 sheets, text-guarded, no formulas), `GET /api/export/database` (online backup to temp, integrity check, stream, delete temp), restore from file: `POST /api/restore/inspect|apply|{id}/remove|{id}/table`, `GET /api/restore/{id}` and `skipped.xlsx|csv` (.xlsx and .csv, New/Identical/Differs/Invalid, never overwrite, parents first, `pre-import` backup, one transaction, audit per table: data/import/restored/Bulk Import). 25 MiB upload cap on `/api/restore/inspect`.
+- Contract `docs/04_API_CONTRACT.md` section 14 FINAL, including the database-restore routes (not built: still 501, T-184/T-185). Column headers equal DB column names (matches the T-175 fixtures). `data/reset` stays 501. No schema change.
+- Tests: `server/tests/test_portability.py` (34), export -> restore round trips for xlsx and csv into an emptied DB.
 
 ## Unreleased - Rename carries Operations records
 - Fixed: renaming a BAMS appliance now renames its `server_upgrades` records in the same transaction (audited); a collision with an existing record of the new name in the same quarter is refused with 409 (no merge). Import apply cannot rename. Contract 13.8; 3 tests.

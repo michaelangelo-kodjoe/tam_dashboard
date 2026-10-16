@@ -1,0 +1,2 @@
+id,client_id,account_name,name,role,email,team,is_primary,row_version,created_at,updated_at
+fx-con-orphan,fx-acc-GONE,Nowhere Inc,Orphan Example,,,,0,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

@@ -1,0 +1,4 @@
+id,client_id,account_name,task,category,priority,due,next_update,status,waiting,notes,archived,row_version,created_at,updated_at
+fx-tsk-1,fx-acc-1,Fixture Capital One,Send usage report,Reporting,High,2026-10-16,,In Progress,,,0,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z
+fx-tsk-2,,,Internal housekeeping,Internal,Low,,,Not Started,,,0,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z
+fx-tsk-3,fx-acc-2,Fixture Markets Two,=Formula-looking title is data,Other,Medium,,,Waiting,Client reply,,0,1,2026-09-01T10:00:00.000Z,2026-09-01T10:00:00.000Z

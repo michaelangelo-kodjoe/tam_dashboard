@@ -18,6 +18,7 @@ import type {
   BamsImportPlan, BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRow, BamsRule,
   BamsRuleInput, BamsSettings, BamsState, BamsStateQuery, BamsTrend, TrendRange,
 } from '../bamsTypes';
+import type { DbRestorePreview, DbRestoreResult, RestoreIssueQuery, RestorePlan, RestoreResult } from '../portTypes';
 import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../opsTypes';
 import { FileRefusal, MAX_BYTES, readBytes, sniff } from './importFile';
 import { DataSourceError, type ActivityQuery, type DataSource, type ErrorCode } from './DataSource';
@@ -151,7 +152,7 @@ export class ApiDataSource implements DataSource {
   }
 
   /** Binary upload / download helper (the only non-JSON transport; stays inside src/data). */
-  private async rawRequest(method: 'GET' | 'POST', path: string, body?: Uint8Array, headers?: Record<string, string>): Promise<Response> {
+  private async rawRequest(method: 'GET' | 'POST', path: string, body?: Uint8Array | Blob, headers?: Record<string, string>): Promise<Response> {
     let res: Response;
     try {
       res = await fetch(this.base + path, { method, headers, body: body as BodyInit | undefined });
@@ -445,6 +446,48 @@ export class ApiDataSource implements DataSource {
     return this.download(`/api/import/bams/${encodeURIComponent(importId)}/skipped.${format}`, `tam_bams_skipped.${format}`);
   }
 
+  // ---- Portability (contract section 14) -----------------------------------------------------
+  async exportExcel(): Promise<DownloadedFile> { return this.download('/api/export/excel', 'tam_export.xlsx'); }
+  async exportDatabase(): Promise<DownloadedFile> { return this.download('/api/export/database', 'tam_backup.db'); }
+  private async upload(path: string, file: File, maxBytes: number): Promise<Response> {
+    if (file.size > maxBytes) throw new DataSourceError('payload_too_large', `This file is larger than ${Math.round(maxBytes / 1_048_576)} MiB.`, undefined, 413, { reason: 'too_large' });
+    return this.rawRequest('POST', path, file, { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name.replace(/^.*[\\/]/, '').slice(0, 200)) });
+  }
+  async inspectRestoreFile(file: File, opts: { session?: string; table?: string } = {}): Promise<RestorePlan> {
+    const res = await this.upload(`/api/restore/inspect${this.qs({ session: opts.session, table: opts.table })}`, file, 25 * 1_048_576);
+    return mapRestorePlan(((await res.json()) as { item: RestorePlan }).item);
+  }
+  async getRestorePlan(id: string, q: RestoreIssueQuery = {}): Promise<RestorePlan> {
+    return mapRestorePlan((await this.request<{ item: RestorePlan }>('GET', `/api/restore/${encodeURIComponent(id)}${this.qs({ ...q })}`)).item);
+  }
+  async removeRestoreFile(id: string, fileId: string): Promise<RestorePlan> {
+    return mapRestorePlan((await this.request<{ item: RestorePlan }>('POST', `/api/restore/${encodeURIComponent(id)}/remove`, { file_id: fileId })).item);
+  }
+  async setRestoreTable(id: string, fileId: string, table: string): Promise<RestorePlan> {
+    return mapRestorePlan((await this.request<{ item: RestorePlan }>('POST', `/api/restore/${encodeURIComponent(id)}/table`, { file_id: fileId, table })).item);
+  }
+  async applyRestore(input: { restore_id: string; plan_hash: string }): Promise<RestoreResult> {
+    const r = (await this.request<{ item: RestoreResult }>('POST', '/api/restore/apply', { ...input, confirm: true })).item;
+    const one = (r as unknown as { file?: string }).file;
+    return { ...r, files: [...new Set(r.files ?? (one ? [one] : []))], tables: r.tables ?? [], skipped_preview: r.skipped_preview ?? [], backup: r.backup ?? null };
+  }
+  async downloadRestoreSkipped(id: string, format: ImportFormat): Promise<DownloadedFile> {
+    return this.download(`/api/restore/${encodeURIComponent(id)}/skipped.${format}`, `tam_restore_skipped.${format}`);
+  }
+  async inspectDatabaseRestore(file: File): Promise<DbRestorePreview> {
+    const res = await this.upload('/api/restore/database/inspect', file, 500 * 1_048_576);
+    return ((await res.json()) as { item: DbRestorePreview }).item;
+  }
+  async previewBackupRestore(name: string): Promise<DbRestorePreview> {
+    return (await this.request<{ item: DbRestorePreview }>('POST', '/api/restore/database/from-backup', { name })).item;
+  }
+  async cancelDatabaseRestore(id: string): Promise<void> {
+    await this.request('POST', `/api/restore/database/${encodeURIComponent(id)}/cancel`, {});
+  }
+  async applyDatabaseRestore(input: { restore_id: string; confirm: string }): Promise<DbRestoreResult> {
+    return (await this.request<{ item: DbRestoreResult }>('POST', '/api/restore/database/apply', input)).item;
+  }
+
   // ---- Operations (contract section 13) -----------------------------------------------------
   async getOperations(q: OpsQuery): Promise<OpsData> {
     const r = await this.request<OpsData & { ok: true }>('GET', `/api/operations${this.qs({ year: q.year, quarter: q.quarter, q: q.q?.trim(), status: q.status, environment: q.environment, polarity: q.polarity, client_id: q.client_id })}`);
@@ -492,6 +535,9 @@ export function mapBamsPlan(w: BamsImportPlan): BamsImportPlan {
     })),
     rows: w.rows.map((r) => ({ ...r, raw: r.raw ?? null, fills: r.fills ?? {}, kept: r.kept ?? {}, errors: r.errors ?? [], warnings: r.warnings ?? [], notes: r.notes ?? [] })),
   };
+}
+export function mapRestorePlan(p: RestorePlan): RestorePlan {
+  return { ...p, csv_notice: p.csv_notice ?? null, files: (p.files ?? []).map((f) => ({ ...f, missing_columns: f.missing_columns ?? [], ignored_columns: f.ignored_columns ?? [], ...(f.format === 'xlsx' ? { sheets: f.sheets ?? [] } : {}) })), tables: p.tables ?? [], blocking: p.blocking ?? [], warnings: p.warnings ?? [], issues: p.issues ?? [], issues_total: p.issues_total ?? 0 };
 }
 export function mapBamsResult(r: BamsImportResult): BamsImportResult {
   return { ...r, backup: r.backup ?? null, created: r.created ?? [], updated: r.updated ?? [], skipped: r.skipped ?? [], decisions: r.decisions ?? [], touched_accounts: r.touched_accounts ?? [], breakdown: r.breakdown ?? {}, audit_breakdown: r.audit_breakdown ?? {} };

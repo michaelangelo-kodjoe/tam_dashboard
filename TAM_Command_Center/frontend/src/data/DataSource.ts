@@ -1,3 +1,4 @@
+import type { DbRestorePreview, DbRestoreResult, RestoreIssueQuery, RestorePlan, RestoreResult } from '../portTypes';
 import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../opsTypes';
 import type {
   AccountInput,
@@ -48,6 +49,10 @@ export type ErrorCode =
   | 'already_applied'
   | 'possible_duplicate'
   | 'import_failed'
+  | 'restoring'
+  | 'restore_expired'
+  | 'confirm_mismatch'
+  | 'restore_failed'
   | 'monitor_unavailable'
   | 'network'
   | 'internal';
@@ -165,4 +170,20 @@ export interface DataSource {
   saveOperationsAppliance(input: OpsApplianceInput): Promise<OpsRow>;
   resetOperationsAppliance(input: { object_id: string; year: number; quarter: OpsQuarterName; confirm: boolean; expected_row_version?: number }): Promise<OpsRow>;
   setOperationsVersion(input: { year: number; quarter: OpsQuarterName; object_ids: string[]; target_version: string | null }): Promise<OpsSetVersionResult>;
+
+  // ---- Portability (contract section 14) ------------------------------------------------------
+  exportExcel(): Promise<DownloadedFile>;
+  exportDatabase(): Promise<DownloadedFile>;
+  /** One file per call; `session` adds a CSV to an existing session, `table` forces the table of a CSV. Writes nothing. */
+  inspectRestoreFile(file: File, opts?: { session?: string; table?: string }): Promise<RestorePlan>;
+  getRestorePlan(id: string, q?: RestoreIssueQuery): Promise<RestorePlan>;
+  removeRestoreFile(id: string, fileId: string): Promise<RestorePlan>;
+  setRestoreTable(id: string, fileId: string, table: string): Promise<RestorePlan>;
+  applyRestore(input: { restore_id: string; plan_hash: string }): Promise<RestoreResult>;
+  downloadRestoreSkipped(id: string, format: ImportFormat): Promise<DownloadedFile>;
+  /** Whole-database restore (D-136..D-142). Answers 501 not_implemented until backend phase 2. */
+  inspectDatabaseRestore(file: File): Promise<DbRestorePreview>;
+  previewBackupRestore(name: string): Promise<DbRestorePreview>;
+  cancelDatabaseRestore(id: string): Promise<void>;
+  applyDatabaseRestore(input: { restore_id: string; confirm: string }): Promise<DbRestoreResult>;
 }

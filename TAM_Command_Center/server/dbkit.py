@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -46,6 +47,24 @@ def open_db(path: Path, *, channel: str, rows: bool = True) -> sqlite3.Connectio
     except Exception:
         conn.close()
         raise
+    return conn
+
+
+def atomic_replace(src: Any, dst: Any) -> None:
+    """The ONE place a database file is swapped (whole-database restore, D-140): same-volume atomic rename."""
+    os.replace(src, dst)
+
+
+def raw_connect(target: Any, *, uri: bool = False) -> sqlite3.Connection:
+    """Plain connection for the whole-database restore (staged copies, read-only checks, the swap). Only dbkit opens files."""
+    return sqlite3.connect(str(target), uri=uri)
+
+
+def open_scratch() -> sqlite3.Connection:
+    """Empty in-memory database with the full schema (no file, no live data): used to dry-run row validity."""
+    conn = sqlite3.connect(":memory:", isolation_level=None)
+    conn.executescript((DB_DIR / "schema.sql").read_text(encoding="utf-8"))
+    conn.execute("PRAGMA foreign_keys = OFF")
     return conn
 
 

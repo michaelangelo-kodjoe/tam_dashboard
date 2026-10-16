@@ -97,3 +97,11 @@ New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `t
 | OPS-FE-2 | Low | frontend-dev | Workspace "Open in Operations" link missing (D-117) | FIXED: Infrastructure tab, Server upgrades panel, link `/operations?q=<account name>` (default quarter, account auto-expanded); Vitest |
 | OPS-FE-3 | Low | frontend-dev | Enter did not submit Operations dialogs | FIXED: Enter in a single-line input submits quarter, appliance and Set version dialogs (textarea and Select menus unaffected); Vitest |
 
+
+## Run 6 Portability gate, ERROR_LOG_7 (2026-10-15): PASS (0 open Blocker/High)
+| ID | Sev | Owner | Item | Check at |
+|---|---|---|---|---|
+| QA-7-1 | Low | backend-dev | from-backup leaves -wal/-shm sidecars in TAM_Backups | FIXED: backups are opened read-only + immutable, nothing written beside them; test_from_backup_writes_nothing_beside_the_backup |
+| QA-7-2 | Low | backend-dev / frontend-dev | xlsx restore result lists the workbook name once per sheet (8x) | FIXED (backend): xlsx workbook is one files[] entry with sheets[]; result files deduplicated; contract 14 amendments; frontend to render |
+| QA-7-3 | Low | backend-dev | TAB-leading text skipped with vague `database_rule` message | FIXED: tab/line break/leading-trailing space get specific codes tab_or_linebreak and leading_trailing_space |
+| QA-7-4 | Low | frontend-dev | Data section cramped at 375 px | FIXED: action rows stack with full-width buttons, Backups table shows name + Restore only under 600 px, dialog footers wrap; verified live at 375 px, no horizontal page scroll |

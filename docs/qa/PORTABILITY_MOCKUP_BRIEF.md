@@ -1,0 +1,15 @@
+# Portability mockup brief (T-180, frontend-dev-agent)
+
+Only if the user does not waive the mockup gate. Spec: `docs/01_PM_SPEC.md` section 14 (D-122 to D-142). Keep it sparse like Operations v2: static HTML in `TAM_Command_Center/mockups/portability/`, reuse `mockups/import/` and `mockups/bams/bams-import.css` look, width 1440 only, no new nav item, no scores or percentages. Max seven frames. Stop after delivery.
+
+1. **Settings > Data section** (crop of the existing Settings page): three rows, each with a one-line description and a button: "Download Excel export" (accounts, contacts, tasks, notes, appliances, Operations), "Download database copy" (note: contains all your data), "Restore from file" (Excel export or CSV files; adds missing rows, never overwrites). Existing Backups list below. Show a success toast for a download.
+2. **Restore step 1**: file chooser/drop zone (one .xlsx, or several .csv at once; up to 25 MiB each) with the list of added files (each row: file name, detected table, remove), a short "What happens" box (safety backup first; only missing rows are added; nothing existing changes), upload error examples (not an export from this app, mixing .xlsx and .csv, second file for the same table, newer version, DEV file in PROD, too large).
+3. **Restore preview**: per-table list with New / Identical / Differs / Invalid counts (up to nine tables), a detected-table dropdown per CSV (show one Unrecognized file asking the user to pick), a fixed notice for CSV "CSV files cannot tell which database they came from; check the source", a missing-parent hint ("Add the Accounts file"), issue list with sheet row and plain sentence and a filter, button "Add 412 missing rows" (disabled variant "Nothing to restore").
+4. **Result and failure**: counts added per sheet, safety backup name, "Download skipped rows"; failure frame "Nothing was changed".
+
+README: no open questions (14.6 answered or defaulted).
+
+**Added 2026-10-15 (D-136..D-142) - Restore database, three more frames (max seven in total):**
+5. **Restore database** dialog opened from Settings > Data (choose a `.db` from a Database export or backup) and from the Backups list (a "Restore this backup" button on every row, shown on one row incl. a `pre-restore` one): side-by-side preview "In the file" vs "In the current database" (schema version with "will be upgraded", latest activity, channel, row counts per table, rows where the file has fewer records highlighted), the red sentence "Everything currently in the app will be replaced. A safety backup is taken first and stays in the Backups list.", a field "Type RESTORE to continue" with the button disabled until typed. Include the refusal examples (not a SQLite file, DEV file in PROD, newer version, failed integrity check).
+6. **Restoring** progress: "Restoring... do not close this window".
+7. **Result and failure**: success (safety backup name, counts, **Reload app**, auto-reload note); failure frames "Your data was not changed" and "Restored from safety backup <name>".

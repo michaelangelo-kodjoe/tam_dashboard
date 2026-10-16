@@ -54,7 +54,9 @@ MAX_BODY_BYTES = 2 * 1024 * 1024
 # Account bulk import (Run 3, D-37..D-48). The ONE constant for Status; a test pins it to the clients.status CHECK.
 CLIENT_STATUSES = ("Active", "Inactive")
 MAX_IMPORT_BYTES = 5 * 1024 * 1024                       # per-route override of MAX_BODY_BYTES (upload route only)
-IMPORT_ROUTE_LIMITS = {"/api/import/accounts/inspect": MAX_IMPORT_BYTES, "/api/import/bams/inspect": MAX_IMPORT_BYTES}
+IMPORT_ROUTE_LIMITS = {"/api/import/accounts/inspect": MAX_IMPORT_BYTES, "/api/import/bams/inspect": MAX_IMPORT_BYTES,
+                      "/api/restore/inspect": 25 * 1024 * 1024,
+                      "/api/restore/database/inspect": 500 * 1024 * 1024}
 IMPORT_MAX_ROWS = 500
 IMPORT_SCAN_ROWS = 10000                                  # physical rows scanned in a sheet
 IMPORT_MAX_CANDIDATES = 5
