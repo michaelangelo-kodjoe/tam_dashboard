@@ -7,12 +7,14 @@ Single user. No login. Nothing is reachable from the network.
 STATUS: NOT PRODUCTION-READY. This build has not been validated on the target
 Bloomberg Windows workstation. Read VALIDATION.txt before relying on it.
 
-WHAT IS IN THIS BUILD (spec phases 1-2)
-  Today queue, Accounts, Account Workspace (overview, tasks, activity,
-  infrastructure, contacts), Tasks, Quick Capture, Settings, backups.
-  NOT in this build (deferred): Operations (schedule sync, bulk upload),
-  BAMS monitor, workbook import/export, ChatGPT Bridge. Their pages are
-  placeholders and their API routes answer 501.
+WHAT IS IN THIS BUILD (0.1.0-rc2, spec runs 1-6)
+  Today queue, Accounts (with bulk import), Account Workspace, Tasks, Quick Capture,
+  BAMS monitor and appliance import, Operations (quarters, account-grouped appliances,
+  target versions; entered manually), Settings, backups, and portability: Excel export,
+  database export, restore from .xlsx/.csv (add-missing-only) and in-app whole-database
+  restore. See docs\guides\USER_GUIDE.txt.
+  NOT in this build: schedule sync (TEAM/BSSO), start-with-Windows, ChatGPT Bridge (dropped).
+  The Bloomberg-facing parts are UNTESTED (see VALIDATION.txt).
 
 REQUIREMENTS
   Windows 10/11, Python 3.10 or newer (64-bit), a modern Chrome or Edge.
@@ -44,6 +46,7 @@ FILES
   VERSION.txt                    version, channel (prod), build time, validation state.
   BUILD_MANIFEST.txt             SHA-256 of every shipped file.
   VALIDATION.txt                 What was and was not verified.
+  docs\guides\USER_GUIDE.txt     Short guide: Operations, export, restore.
   tools\                         Launcher helpers (env_check.py, open_when_ready.py, _resolve_python.bat).
 
 HOW PYTHON IS FOUND (first match wins, must be 3.10+)
@@ -76,5 +79,5 @@ TROUBLESHOOTING
   Logs: see the logs folder above. Do not send logs outside your organisation without review.
 
 BACKUP / UNINSTALL
-  Use Settings > Data > Create backup. To remove the app, delete the folder; your data stays in
+  Use Settings > Data > Create backup (or Export database / Export to Excel). To remove the app, delete the folder; your data stays in
   %LOCALAPPDATA%\TAM_Command_Center until you delete that too.

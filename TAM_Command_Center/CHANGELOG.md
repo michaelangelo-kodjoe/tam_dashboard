@@ -2,6 +2,10 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased - Release 0.1.0-rc2 packaged (deployment-agent, Phase 4.3)
+- Fixed `tools/build_release.py`: it shipped only top-level `server/*.py`, so the archive could not start (missing server.importer/ops/bams/portability); now recursive, tests dirs excluded. Found by the smoke test.
+- Built `dist/TAM_Command_Center_0.1.0-rc2_win.zip` (channel=prod, from HEAD ee5945d, fresh `build:api`): 711 pytest + 452 Vitest passed first; smoke test run. Added `docs/guides/USER_GUIDE.txt` (Operations, export, restore). README and VALIDATION updated; still UNVALIDATED (not tested on Windows or Bloomberg BLPAPI/TEAM/BSSO). The rc1 zip in dist/ was left untouched. Missing: CRM guide, screenshots. dist/ is gitignored; nothing committed.
+
 ## Unreleased - Run 6 T-175 schema confirmation and fixtures (data-architect)
 - Confirmed, no schema change: audit vocabulary already covers restore events. Table-level restore = category `data`, object_type `import`, object_id = table name, action `restored`, source `Bulk Import`; post-database-restore = category `data`, object_type `backup` (or `system`/`schema`), action `restored`, source `System`. Explicit-id inserts (ids, created/updated timestamps, row_version) work for all 8 restored tables; insert fires no row_version/id guards; one-primary and unique guards reject clashes; parents-before-children needed with foreign_keys=ON (incl. quarter before upgrade record); rollback leaves nothing. `support_cases` has no UI/API, so it is not an export table.
 - Added: `db/tests/test_portability_restore.py` (10 tests); fixtures `tests/fixtures/portability/` (generator `build_fixtures.py`; valid CSV per table, CSV variants, invalid CSVs incl. Unrecognized and missing-parent, xlsx valid DEV/PROD, newer schema, non-export). Column names follow SPEC 14 until contract section 14 exists.

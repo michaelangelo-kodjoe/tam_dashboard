@@ -73,8 +73,11 @@ def requirements(src: Path) -> str:
 
 def collect(channel: str) -> list[str]:
     files: list[str] = []
-    for p in sorted((APP / "server").glob("*.py")):
-        files.append(f"server/{p.name}")
+    # recursive: server/bams, importer, ops, portability are packages; tests dirs are excluded
+    for p in sorted((APP / "server").rglob("*.py")):
+        if "tests" in p.relative_to(APP / "server").parts:
+            continue
+        files.append(p.relative_to(APP).as_posix())
     db = APP / "db"
     for rel in ["migrate.py", "schema.sql"]:
         files.append(f"db/{rel}")

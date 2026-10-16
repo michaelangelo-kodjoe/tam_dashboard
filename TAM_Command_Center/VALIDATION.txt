@@ -1,6 +1,7 @@
 TAM COMMAND CENTER - VALIDATION REPORT
 ======================================
-Build: 0.1.0-rc1   Report date: 2026-10-12   Author: deployment-agent (Phase 4.3)
+Build: 0.1.0-rc2   Report date: 2026-10-15   Author: deployment-agent (Phase 4.3)
+STATUS: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 
 *** THIS BUILD IS NOT PRODUCTION-READY. ***
 It has NOT been validated on the target Bloomberg Windows environment, and nothing in
@@ -11,9 +12,9 @@ flags ignored, DEV routes absent); it is not a statement that validation passed.
 
 1. WHAT PASSED (all on macOS, Apple silicon, Python 3.10 and 3.12, SQLite 3.38-3.53)
    Source suites, run by the PM/deployment agents on the build tree:
-     - pytest server db tests ........ 267 passed (backend 118, DB contract 77, e2e 44, other)
+     - pytest server db tests/e2e .... 711 passed (HEAD ee5945d, 2026-10-15)
      - tsc --noEmit .................. clean
-     - vitest ........................ 120 passed
+     - vitest ........................ 452 passed (33 files); frontend built with build:api
      - sql_safety_scan.py ............ 0 violations (whole tree, including release tooling)
    Release smoke test (tools/smoke_release.py), real run in a scratch directory, with HOME,
    USERPROFILE and LOCALAPPDATA redirected so no real user data or %LOCALAPPDATA% was touched:
@@ -57,12 +58,16 @@ flags ignored, DEV routes absent); it is not a statement that validation passed.
      - requirements are pinned by version but not by hash; the release zip is not code-signed
      - npm audit shows open findings (QA-E1-6, Low); pip-audit run earlier on server/requirements.txt
 
-3. DEFERRED PHASES (not in this build)
-   Spec phase 3 Operations (schedule sync, server upgrades, bulk upload, 501 routes);
-   phase 4 BAMS monitor and provider (501 routes, seeded read-only data only);
-   phase 5 portability (export/import, restore, data reset) and the ChatGPT Bridge;
-   spec section 56 items still missing: CRM guide, Operations guide, screenshots of
+3. SCOPE AND GAPS
+   Built since rc1 (macOS/test-client only, never on Windows): account import, BAMS monitor
+   and appliance import (simulated provider; BlpapiProvider untested against Bloomberg),
+   Operations (manual quarters), Excel/DB export, restore from .xlsx/.csv, in-app database
+   restore (file replacement on Windows, open handles, AV and OneDrive UNTESTED).
+   Not built: schedule sync (TEAM/BSSO), start-with-Windows. ChatGPT Bridge dropped.
+   Spec section 56 items missing: CRM guide, separate Operations guide (a short user guide
+   is shipped in docs\guides), screenshots of Today / Account Overview / Activity /
    Operations / Bulk Upload / BAMS.
+   The 501 stub routes for dropped/unbuilt features still answer 501.
 
 4. DEPENDENCY NOTES (found while building)
    - server/requirements.txt pins websockets==17.2, which needs Python 3.11+, so
@@ -70,11 +75,11 @@ flags ignored, DEV routes absent); it is not a statement that validation passed.
      The release requirements.txt drops the optional uvicorn[standard] extras (uvloop - no
      Windows wheels - httptools, watchfiles, websockets, python-dotenv, PyYAML) and all
      test-only packages. The app runs without them (smoke test on 3.10).
-   - openpyxl (spec section 48) is not included because nothing in this build uses it yet.
+   - openpyxl is included (xlsx import/export); pure Python.
 
 5. RELEASE CRITERIA BEFORE ANYONE CALLS THIS PRODUCTION-READY
    [ ] Install on the target Bloomberg Windows workstation; run every .bat; fix defects
    [ ] Check_PROD_Environment.bat passes with the real BLPAPI package
    [ ] Two-instance, reboot, forced-kill and AV/OneDrive tests of the production DB
-   [ ] Spec phases 3-5 built and validated, or explicitly accepted as out of scope
+   [ ] Unbuilt scope (schedule sync) validated or explicitly accepted as out of scope
    [ ] User sign-off recorded in TAM_PROJECT_STATE.md and CHANGELOG.md

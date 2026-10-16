@@ -1,0 +1,45 @@
+TAM COMMAND CENTER - SHORT USER GUIDE (0.1.0-rc2)
+=================================================
+Status: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
+This is a short guide, not the full CRM guide (see "Missing" at the end).
+
+OPERATIONS (left rail > Operations)
+  One page that tracks BAMS appliances per quarter. Nothing is synced from a network:
+  you enter the quarter, its dates and the target version yourself.
+  - Pick a quarter at the top; Edit or Add quarter sets the DEV / East / West dates and the
+    Target version. The quarter version applies to every appliance in that quarter and shows
+    as a grey "default X"; an appliance with its own version is marked.
+  - Rows are grouped by account (collapsed by default). The header chevron expands or
+    collapses all. Filters: search, status, environment, polarity, Reset (kept in the URL).
+  - Status is a coloured badge; click it to change status.
+  - "Select" turns on checkboxes (per appliance, per account, Select all). With rows selected,
+    "Set version" sets the target version for all of them; skipped rows are named in the toast.
+  - Row edit: date override, own version, note, Environment and East/West fixes, and
+    "Reset to quarter" to drop the overrides.
+  - Appliances come from the BAMS appliance import (xlsx/csv). The import accepts a
+    Polarity / Region column (East or West); anything else shows as "Set East or West".
+  - Account Workspace > Infrastructure has "Open in Operations" for that account.
+
+PORTABILITY AND RESTORE (Settings > Data; collapsed by default, click the header to open)
+  - Export to Excel: downloads a workbook (9 sheets) of your data.
+  - Export database: downloads a copy of the SQLite database file.
+  - Restore from file (.xlsx, or up to nine .csv files, one table per file):
+      This never overwrites. It previews each table (New / Identical / Differs / Invalid),
+      lists skipped rows, and "Add N missing rows" only adds rows that are not already there.
+      A safety backup is taken first and everything is applied in one transaction.
+  - Restore database (choose a .db file, or "Restore this backup" on any Backups row):
+      This REPLACES the whole live database. You see file vs current counts, a red warning,
+      and must type RESTORE. A "pre-restore" backup is taken, the file is verified before the
+      swap, and on failure the previous database is put back ("Your data was not changed" or
+      "Restored from safety backup <name>"). The app reloads when done.
+      Windows file replacement behaviour (open handles, AV, OneDrive) is UNTESTED.
+  - Backups: Settings > Data > Create backup. A backup is also taken before schema upgrades
+    and before every delete.
+
+NOT IN THIS BUILD
+  Schedule sync / TEAM / BSSO, start-with-Windows, and the ChatGPT Bridge (dropped by decision).
+  The BAMS provider for real Bloomberg data (BlpapiProvider) is untested; see VALIDATION.txt.
+
+MISSING FROM THIS PACKAGE (spec section 56)
+  Full CRM guide, a separate Operations guide beyond the section above, and screenshots of
+  Today, Account Overview, Account Activity, Operations, Bulk Upload, BAMS.
