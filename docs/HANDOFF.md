@@ -15,7 +15,7 @@ Runs 1-6 are built, QA-passed, and committed (latest gates: `docs/qa/ERROR_LOG_6
 | 6 | Portability: Excel export (9 sheets), database export, restore from .xlsx/.csv (never overwrites), in-app whole-database restore (typed RESTORE, pre-restore backup, rollback); Settings Data and Logging collapsed by default | Done, gate PASS |
 
 ## Not built (spec phases still ahead)
-Nothing planned. The ChatGPT Bridge was dropped by the user (the nav rail still shows a "Later" placeholder for it; remove only if the user asks). Windows and Bloomberg verification remain.
+Nothing planned. The ChatGPT Bridge was dropped by the user (removed from the nav rail and routes). Windows and Bloomberg verification remain.
 
 
 ## Do not do without the user

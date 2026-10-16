@@ -21,9 +21,8 @@
 .rail__item.is-active { background: var(--accent-tint); color: var(--accent); font-weight: 600; }
 .rail__item.is-active::before { content: ''; position: absolute; left: -8px; top: 4px; bottom: 4px; width: 2px; background: var(--accent); border-radius: 1px; }
 .rail__icon { flex: none; }
-.rail__later { margin-left: auto; flex: none; font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.06em; color: var(--subtle); border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 0 4px; line-height: 14px; }
 @media (max-width: 1279px) {
-  .rail__label, .rail__later, .rail__name { display: none; }
+  .rail__label, .rail__name { display: none; }
   .rail__brand { justify-content: center; padding: 0; }
   .rail__item { justify-content: center; padding: 0; }
   .rail__list { padding-left: var(--sp-1); padding-right: var(--sp-1); }

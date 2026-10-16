@@ -164,3 +164,4 @@ Real Bloomberg provider is built and fake-session tested only. Left for later, t
 - Settings (2026-10-15): Data and Logging are collapsible, collapsed by default (CollapsiblePanel); Data is the container for Run 6 portability content.
 - Run 6 portability UI built (2026-10-15): Settings > Data export, restore from file, restore database per contract section 14; database restore awaits backend phase 2 (501 handled). Live check pending a server restart with phase 1 code.
 - QA-7-2 (frontend side) and QA-7-4 fixed (2026-10-16).
+- ChatGPT Bridge dropped by the user (2026-10-16): nav item, placeholder page and route removed; spec D-21 superseded for it; backend stubs unchanged.

@@ -227,11 +227,13 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     expect(document.querySelector('[role="dialog"]')).toBeNull(); // no drawer
   });
 
-  it('nav rail: Today/Accounts/Tasks/Settings/BAMS work; Operations is built (no Later tag); Bridge shows "Later"; no Journal', async () => {
+  it('nav rail: Today/Accounts/Tasks/Settings/BAMS work; Operations is built; no Bridge or Journal; /bridge is not found', async () => {
     const { user } = await boot('/today');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(nav).queryByText(/journal/i)).toBeNull();
-    expect(within(nav).getAllByText('Later')).toHaveLength(1);
+    expect(within(nav).queryByText('Later')).toBeNull();
+    expect(within(nav).queryByText(/bridge|chatgpt/i)).toBeNull();
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Today', 'Accounts', 'Tasks', 'Operations', 'BAMS', 'Settings']);
     expect(within(nav).getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
     await user.click(within(nav).getByRole('link', { name: /Operations/ }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Operations' })).toBeInTheDocument();
@@ -239,6 +241,11 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     expect(await screen.findByRole('heading', { level: 1, name: 'BAMS' })).toBeInTheDocument();
     await user.click(within(nav).getByRole('link', { name: 'Accounts' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Accounts' })).toBeInTheDocument();
+  });
+
+  it('/bridge falls through to the normal not-found page', async () => {
+    await boot('/bridge');
+    expect(await screen.findByRole('heading', { level: 1, name: /not found/i })).toBeInTheDocument();
   });
 });
 

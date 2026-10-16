@@ -1,10 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { Activity, Building2, CalendarCheck, ListChecks, MessagesSquare, ServerCog, Settings, type LucideIcon } from 'lucide-react';
+import { Activity, Building2, CalendarCheck, ListChecks, ServerCog, Settings, type LucideIcon } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
 import { useMediaQuery } from '../../lib/hooks';
 import { cx } from '../../lib/cx';
 
-interface Item { to: string; label: string; icon: LucideIcon; later?: boolean }
+interface Item { to: string; label: string; icon: LucideIcon }
 
 const MAIN: Item[] = [
   { to: '/today', label: 'Today', icon: CalendarCheck },
@@ -12,7 +12,6 @@ const MAIN: Item[] = [
   { to: '/tasks', label: 'Tasks', icon: ListChecks },
   { to: '/operations', label: 'Operations', icon: ServerCog },
   { to: '/bams', label: 'BAMS', icon: Activity },
-  { to: '/bridge', label: 'ChatGPT Bridge', icon: MessagesSquare, later: true },
 ];
 const FOOT: Item[] = [{ to: '/settings', label: 'Settings', icon: Settings }];
 
@@ -24,17 +23,16 @@ export function NavRail() {
       <NavLink
         key={it.to}
         to={it.to}
-        aria-label={collapsed ? (it.later ? `${it.label} (later release)` : it.label) : undefined}
+        aria-label={collapsed ? it.label : undefined}
         className={({ isActive }) => cx('rail__item', isActive && 'is-active')}
       >
         <Icon size={18} strokeWidth={1.5} aria-hidden="true" className="rail__icon" />
         <span className="rail__label">{it.label}</span>
-        {it.later && <span className="rail__later">Later</span>}
       </NavLink>
     );
     return (
       <li key={it.to}>
-        <Tooltip text={it.later ? `${it.label} · later release` : it.label} placement="right" disabled={!collapsed}>
+        <Tooltip text={it.label} placement="right" disabled={!collapsed}>
           {link}
         </Tooltip>
       </li>

@@ -12,6 +12,9 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 ## Unreleased - Run 5 Operations DEV seed (T-166)
 - Changed: DEV mock seed (`db/seed_mock.py`, `db/mock_data.json`): PROD appliances now carry Region East/West (3 left on EMEA = "Set East or West"); 2 DEV appliances (NWH, KMC) added on an isolated RNG/id stream so no other seeded value moved; next quarter (2027 Q1) has no PROD West date; server_upgrades gain one date override (kmc-bpipe-hk-01, 2026 Q4) and one version override (brs-sapi-ny-01, 7.2.0-rc2). Existing quarters/status mix/overdue (BRS DEV In Progress) already covered. No schema change. 636 tests pass.
 
+## Unreleased - ChatGPT Bridge dropped (frontend)
+- Removed: the ChatGPT Bridge nav item, its placeholder page and `/bridge` route (now the normal not-found page), the unused `PlaceholderPage` and the rail "Later" tag code. Backend 501 stubs untouched. Spec D-21 is superseded for the Bridge. Vitest 452.
+
 ## Unreleased - Run 6 xlsx workbook entry (contract 14.3 amendment)
 - Changed: an .xlsx is one file row with its sheets summarised (no table dropdown); Remove drops the workbook; skipped-row list shows the new `tab_or_linebreak` / `leading_trailing_space` texts. `RestoreFile.sheets` added (Api mapper defaults it). Vitest 451.
 
