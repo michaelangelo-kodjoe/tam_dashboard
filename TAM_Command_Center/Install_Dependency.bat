@@ -5,6 +5,7 @@ rem  Does NOT install BLPAPI (workstation-specific; install the Bloomberg-provid
 rem  package into .venv yourself) and does NOT need Node.
 rem  Offline/locked-down machines: put wheels in a "wheelhouse" folder next to this
 rem  file and they are used with --no-index. Respects PIP_INDEX_URL / pip.ini.
+rem  requirements.txt uses version ranges so a lagging internal mirror still resolves.
 rem ============================================================================
 setlocal EnableExtensions
 title TAM Command Center - install dependencies
@@ -68,6 +69,13 @@ goto :fail_pause
 
 :err_pip
 echo [ERROR] Installing or verifying the dependencies failed. Nothing was changed outside .venv.
+echo.
+echo   Look above for the line starting with "ERROR:" (for example
+echo   "No matching distribution found for <package>"). That line names the package
+echo   your package index does not have. Please send the FULL text of this window
+echo   (select all, copy) so the exact line can be seen.
+echo   Using an internal mirror? Set PIP_INDEX_URL or put a pip.ini in %%APPDATA%%\pip,
+echo   or use a "wheelhouse" folder (see START_HERE.txt).
 set "RC=1"
 goto :fail_pause
 

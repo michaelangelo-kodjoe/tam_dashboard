@@ -1,0 +1,9 @@
+# Source for the RELEASE requirements.txt (tools/build_release.py copies the non-comment lines).
+# Direct dependencies only, as compatible ranges, so pip can resolve a consistent set from whatever
+# the corporate package mirror carries (the Bloomberg mirror lags public PyPI).
+# Transitive packages (starlette, pydantic_core, anyio, click, h11, ...) are deliberately NOT pinned:
+# fastapi and pydantic declare their own compatible ranges. Audited exact pins stay in requirements.txt.
+openpyxl>=3.1,<4
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+pydantic>=2.9,<3

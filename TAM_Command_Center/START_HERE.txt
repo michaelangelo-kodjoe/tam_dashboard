@@ -4,3 +4,5 @@ TAM COMMAND CENTER - START HERE
 3. Your browser opens http://127.0.0.1:8765 . Keep the black window open while you work; close it to stop.
 4. To update: unzip the newer version next to or over the old one. Your data is in %LOCALAPPDATA%\TAM_Command_Center and is never touched.
 5. NOT production-ready until validated on your Bloomberg workstation. Read README.txt and VALIDATION.txt.
+Install problems (pip "No matching distribution found")? Your internal package mirror may lag public PyPI. requirements.txt uses version ranges, so pip takes what the mirror has. If it still fails, send the full text of the window.
+Custom package index: set PIP_INDEX_URL (e.g. set PIP_INDEX_URL=https://your.mirror/simple) or put a pip.ini in %APPDATA%\pip before running Install_and_Launch.bat. No internet at all: put the wheels in a folder named "wheelhouse" next to Install_and_Launch.bat; it is used with --no-index.

@@ -1,6 +1,6 @@
 TAM COMMAND CENTER - VALIDATION REPORT
 ======================================
-Build: 0.1.0-rc3   Report date: 2026-10-15   Author: deployment-agent (Phase 4.3)
+Build: 0.1.0-rc4   Report date: 2026-10-15   Author: deployment-agent (Phase 4.3)
 STATUS: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 
 *** THIS BUILD IS NOT PRODUCTION-READY. ***
@@ -48,7 +48,7 @@ flags ignored, DEV routes absent); it is not a statement that validation passed.
        "python.exe" stub fall-through
      - %LOCALAPPDATA% data/backup/log paths, msvcrt.locking single-instance lock, file
        locking/AV/OneDrive interactions with SQLite WAL, path length and spaces in paths
-     - pip install of the pinned requirements on Windows (wheels for pydantic_core etc.),
+     - pip install of the ranged requirements on Windows (and against the Bloomberg mirror) (wheels for pydantic_core etc.),
        corporate proxy / offline wheelhouse path of Install_Dependency.bat
      - Windows socket errors 10053/10054 handling (spec section 40), Ctrl+C / console close
        behaviour, "Open browser on start" (open_when_ready.py) with Edge/Chrome
@@ -60,7 +60,16 @@ flags ignored, DEV routes absent); it is not a statement that validation passed.
      - TEAM / CMS / BSSO schedule sync, bbg:// link behaviour, Bloomberg terminal integration
      - the BAMS monitor itself (not built)
    SECURITY / SUPPLY CHAIN:
-     - requirements are pinned by version but not by hash; the release zip is not code-signed
+     - rc4: requirements.txt now uses compatible RANGES for direct dependencies (openpyxl>=3.1,<4,
+       fastapi>=0.115,<1, uvicorn>=0.30,<1, pydantic>=2.9,<3) and leaves transitive packages
+       (starlette, pydantic_core, anyio, click, h11, ...) to pip, because the Bloomberg internal
+       mirror lags public PyPI. THE pip-audit RUN ON THE EXACT PINS (server/requirements.txt)
+       NO LONGER COVERS THE INSTALLED SET: the workstation installs whatever versions the mirror
+       resolves. Re-run pip-audit against the installed .venv (pip freeze) on the workstation.
+       Tested sets (macOS, Py 3.10 and 3.12): newest allowed with pydantic capped at 2.14.0
+       (fastapi 0.143.2, starlette 1.7/1.8) and the OLDEST allowed (fastapi 0.115.0, starlette
+       0.38.6, pydantic 2.9.0, uvicorn 0.30.0, openpyxl 3.1.0). Combinations in between are untested.
+     - requirements are not pinned by hash; the release zip is not code-signed
      - npm audit shows open findings (QA-E1-6, Low); pip-audit run earlier on server/requirements.txt
 
 3. SCOPE AND GAPS

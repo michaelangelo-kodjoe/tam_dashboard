@@ -161,7 +161,9 @@ def main() -> int:
         reqs = z.read("TAM_Command_Center/requirements.txt").decode()
         check("pytest" not in reqs and "pip-audit" not in reqs and "bandit" not in reqs, "requirements.txt has no test/audit tooling")
         check("uvloop" not in reqs and "websockets" not in reqs, "optional uvicorn extras (uvloop, websockets: no Windows wheel / py3.11+) are not pinned")
-        check("fastapi==" in reqs and "uvicorn==" in reqs and "pydantic==" in reqs, "core pins present")
+        import re as _re
+        check(all(_re.search(rf"^{n}>=[0-9.]+,<[0-9]+$", reqs, _re.M) for n in ("fastapi", "uvicorn", "pydantic", "openpyxl")) and "==" not in reqs,
+              "core dependencies are ranges (>=lower,<next major), no exact pins")
         manifest = z.read("TAM_Command_Center/BUILD_MANIFEST.txt").decode().splitlines()
         rows = [l.split("  ", 2) for l in manifest if len(l.split("  ", 2)) == 3 and len(l.split("  ", 2)[0]) == 64]
         listed = {r[2] for r in rows}

@@ -7,7 +7,7 @@ Single user. No login. Nothing is reachable from the network.
 STATUS: NOT PRODUCTION-READY. This build has not been validated on the target
 Bloomberg Windows workstation. Read VALIDATION.txt before relying on it.
 
-WHAT IS IN THIS BUILD (0.1.0-rc3, spec runs 1-6)
+WHAT IS IN THIS BUILD (0.1.0-rc4, spec runs 1-6)
   Today queue, Accounts (with bulk import), Account Workspace, Tasks, Quick Capture,
   BAMS monitor and appliance import, Operations (quarters, account-grouped appliances,
   target versions; entered manually), Settings, backups, and portability: Excel export,
@@ -42,7 +42,8 @@ FIRST-TIME SETUP (manual alternative to the above)
   1. Unzip the archive to a normal folder, e.g. C:\Tools\TAM_Command_Center
      (avoid synced/network folders).
   2. Double-click Install_Dependency.bat. It creates .\.venv and installs the
-     pinned requirements.txt into it.
+     requirements.txt (version ranges for fastapi, uvicorn, pydantic, openpyxl; pip
+     picks the rest from your index, so a lagging internal mirror still works) into it.
      Offline/locked-down: create a folder named "wheelhouse" next to this file,
      put the wheels listed in requirements.txt in it, and run the script again.
   3. Double-click Check_PROD_Environment.bat. Every line must be PASS, including
