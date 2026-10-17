@@ -7,7 +7,21 @@ Single user. No login. Nothing is reachable from the network.
 STATUS: NOT PRODUCTION-READY. This build has not been validated on the target
 Bloomberg Windows workstation. Read VALIDATION.txt before relying on it.
 
-WHAT IS IN THIS BUILD (0.1.0-rc5, spec runs 1-6)
+*** UPGRADE WARNING (rc6) ***
+  The first start of rc6 migrates an existing database from schema 1 to schema 2. A
+  pre-migration backup is taken automatically. An older build CANNOT open the upgraded
+  database afterwards. Keep the previous zip to roll back, and take a manual backup
+  (Settings > Data > Create backup) before the first rc6 start.
+
+NEW IN RC6
+  - Settings > Audit log: records changes; entries older than 14 days are pruned automatically.
+  - Weekly automatic backups (retention applied) and log cleanup/download in Settings.
+  - Terminal links: write {..} in a note or task to make a clickable Terminal link.
+  - Task popup: click a task to see it read-only, with complete (confirm + undo).
+  - Note action items offer to create a task.
+  - BAMS is grouped by account and sections are collapsible.
+
+WHAT IS IN THIS BUILD (0.1.0-rc6, spec runs 1-6)
   Today queue, Accounts (with bulk import), Account Workspace, Tasks, Quick Capture,
   BAMS monitor and appliance import, Operations (quarters, account-grouped appliances,
   target versions; entered manually), Settings, backups, and portability: Excel export,

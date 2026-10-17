@@ -1,6 +1,6 @@
 TAM COMMAND CENTER - VALIDATION REPORT
 ======================================
-Build: 0.1.0-rc5   Report date: 2026-10-16   Author: deployment-agent (Phase 4.3)
+Build: 0.1.0-rc6   Report date: 2026-10-17   Author: deployment-agent (Phase 4.3)
 STATUS: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 
 *** THIS BUILD IS NOT PRODUCTION-READY. ***
@@ -9,6 +9,13 @@ it has been exercised against Bloomberg BLPAPI, TEAM or BSSO. Per spec section 5
 must not be called production-ready until that is done. The "channel=prod" stamp in
 VERSION.txt only selects the production code path (production database location, test
 flags ignored, DEV routes absent); it is not a statement that validation passed.
+
+RC6 SUMMARY: gate on HEAD 1586b58 (macOS): 831 pytest, 496 Vitest, tsc clean. Schema 1 -> 2
+migration (0002_audit_prune.sql) tested on macOS only; Windows file locking during migration
+and backup untested. Audit pruning, weekly backups, log download/cleanup untested on Windows.
+pip-audit was run on the exact pins (server/requirements.txt); the shipped requirements.txt
+uses compatible RANGES, so that audit does NOT cover what pip installs on the workstation.
+NOT RUN on Windows or against Bloomberg. NOT production-ready.
 
 1. WHAT PASSED (all on macOS, Apple silicon, Python 3.10 and 3.12, SQLite 3.38-3.53)
    Source suites, run by the PM/deployment agents on the build tree:

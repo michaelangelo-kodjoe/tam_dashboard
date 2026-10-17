@@ -6,5 +6,7 @@ TAM COMMAND CENTER - START HERE
 5. Browser opens http://127.0.0.1:8765 . Keep the black window open while you work; close it to stop.
 6. BLPAPI (Bloomberg live data) is not installed by this package; without it everything works except BAMS live data.
 7. Updating: unzip the newer version, run its Install_and_Launch.bat once. Your data (%LOCALAPPDATA%\TAM_Command_Center) is never touched.
-8. NOT production-ready until validated on your Bloomberg workstation. See README.txt and VALIDATION.txt.
+8. UPGRADING FROM rc5 OR OLDER: the first start of rc6 migrates an existing database from schema 1 to 2 (a backup is taken automatically first). An older build CANNOT open the upgraded database afterwards. Keep the previous zip to roll back, and take a manual backup (Settings > Data > Create backup) BEFORE you start rc6.
+   New in rc6: Audit log in Settings (14-day pruning), weekly backups and log cleanup, Terminal links, task popup, note action items offer to create a task, BAMS grouped by account.
+9. NOT production-ready until validated on your Bloomberg workstation. See README.txt and VALIDATION.txt.
 Pip "No matching distribution found"? requirements.txt uses version ranges so a lagging mirror works; if it still fails send the full window text. Custom index: set PIP_INDEX_URL or use %APPDATA%\pip\pip.ini. No internet: put wheels in a folder named "wheelhouse" next to Install_and_Launch.bat.

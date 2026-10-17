@@ -1,7 +1,21 @@
-TAM COMMAND CENTER - SHORT USER GUIDE (0.1.0-rc5)
+TAM COMMAND CENTER - SHORT USER GUIDE (0.1.0-rc6)
 =================================================
 Status: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 This is a short guide, not the full CRM guide (see "Missing" at the end).
+
+*** UPGRADE WARNING (rc6) ***
+  The first start of rc6 migrates an existing database from schema 1 to schema 2. A
+  pre-migration backup is taken automatically. An older build CANNOT open the upgraded
+  database afterwards. Keep the previous zip to roll back, and take a manual backup
+  (Settings > Data > Create backup) before the first rc6 start.
+
+NEW IN RC6
+  - Settings > Audit log: records changes; entries older than 14 days are pruned automatically.
+  - Weekly automatic backups (retention applied) and log cleanup/download in Settings.
+  - Terminal links: write {..} in a note or task to make a clickable Terminal link.
+  - Task popup: click a task to see it read-only, with complete (confirm + undo).
+  - Note action items offer to create a task.
+  - BAMS is grouped by account and sections are collapsible.
 
 STARTING THE APP
   First time only: double-click Install_and_Launch.bat in the unzipped folder (see START_HERE.txt).
