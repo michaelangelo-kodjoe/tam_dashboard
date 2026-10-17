@@ -47,17 +47,12 @@ describe('ApiDataSource mapping (docs/04_API_CONTRACT.md)', () => {
     expect(i.upgrades).toHaveLength(2);
   });
 
-  it('maps kind-tagged activity entries (notes get a Note; BAMS and upgrade events get a server link target)', () => {
+  it('maps activity notes (notes only, contract 18.1)', () => {
     const note = mapActivity({ kind: 'note', entry_key: 'n:1', ts: '2026-10-11T10:00:00.000Z', id: '1', client_id: 'c1', created_at: '2026-10-11T09:59:00.000Z', note_type: 'Call Note', subject: 'S', body: null, action_items: null, source: 'GUI', row_version: 2, updated_at: 'u' });
-    expect(note.entry_kind === 'note' && note.note.client_id).toBe('c1');
-    expect(note.entry_kind === 'note' && note.note.created_at).toBe('2026-10-11T09:59:00.000Z');
-    const bams = mapActivity({ kind: 'system', entry_key: 'b:e:opened', ts: 't', event_type: 'bams_alert.opened', object_type: 'bams_alert_event', object_id: 'e', label: 'bxa-ny-01 · CPU', server_name: 'bxa-ny-01', severity: 'Critical', source: 'System', sentence: 'BAMS alert opened: bxa-ny-01 · CPU (Critical)' });
-    expect(bams.entry_kind === 'system' && bams.server_name).toBe('bxa-ny-01');
-    const up = mapActivity({ kind: 'system', entry_key: 'a:1', ts: 't', event_type: 'server_upgrade.created', object_type: 'server_upgrade', object_id: 'u', label: 'srv-02', server_name: 'srv-02', severity: null, source: 'GUI', sentence: 'Server upgrade scheduled: srv-02' });
-    expect(up.entry_kind === 'system' && up.server_name).toBe('srv-02');
-    const task = mapActivity({ kind: 'system', entry_key: 'a:2', ts: 't', event_type: 'task.completed', object_type: 'task', object_id: 't', label: 'x', server_name: null, severity: null, source: 'GUI', sentence: 'Task completed: x' });
-    expect(task.entry_kind === 'system' && task.server_name).toBeNull();
+    expect(note.note.client_id).toBe('c1');
+    expect(note.note.created_at).toBe('2026-10-11T09:59:00.000Z');
   });
+
 });
 
 describe('ApiDataSource requests', () => {
@@ -149,13 +144,5 @@ describe('Run 2 wire shapes (docs/04_API_CONTRACT.md §2 and §9)', () => {
     expect(i.servers[1].spark).toBeNull();
     expect(i.servers[2]).toMatchObject({ environment: null, version: null, alert_severity: null, spark: null });
     expect(mapServers(wireInfra as never)).toEqual([]);
-  });
-
-  it('activity trend requests days=14 and returns the series keyed by client id', async () => {
-    const series = { c1: Array.from({ length: 14 }, (_, i) => i) };
-    const calls = mockFetch(() => ({ body: { ok: true, today: '2026-10-13', days: 14, series } }));
-    const r = await new ApiDataSource().getActivityTrend();
-    expect(calls[0].url).toBe('/api/accounts/activity-trend?days=14');
-    expect(r).toEqual({ today: '2026-10-13', days: 14, series });
   });
 });

@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import json
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,11 +19,12 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import constants as C
-from . import infra, reads, services
+from . import auditlog, auditprune, infra, reads, services
 from .importer import service as import_service
 from .config import Config
 from .errors import (AppError, ForbiddenOrigin, MethodNotAllowed, NotFound, NotImplementedYet, PayloadTooLarge,
                      Restoring, ValidationFailed)
+from . import logsetup
 from .logsetup import is_disconnect, log_connection_event, tail
 from .runtime import Runtime
 from .schemas import (CheckSimilar, ImportApply, ClientDelete, ClientSave, ContactSave, DeleteBody, DevReseed, EmptyBody, NoteSave,
@@ -201,11 +204,24 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
     # BAMS monitor (D-49..D-51): provider and notifier come from the MODE only; tests may inject fakes.
     rt.bams = Monitor(rt, provider or select_provider(config.mode), notifier or select_notifier(config.mode),
                       BamsClock(utc_base), threaded=monitor_thread)
+    stop_backups = threading.Event()
+
+    def _backup_loop() -> None:
+        # Weekly backup (D-22 amended): on start, then an hourly check while running. Retention runs with it.
+        while True:
+            rt.backups.run_scheduled(rt.db)
+            logsetup.weekly_cleanup(config.log_dir, _dt.datetime.now())
+            auditprune.run_scheduled(rt)                                    # every 14 days: audit entries older than 14 days      # application log files only, weekly
+            if stop_backups.wait(3600):
+                return
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):  # type: ignore[no-untyped-def]
         if monitor_thread:
             rt.bams.resume()
+            threading.Thread(target=_backup_loop, name="weekly-backup", daemon=True).start()
         yield
+        stop_backups.set()
         rt.close()
 
     app = FastAPI(title="TAM Command Center API", version=config.version, docs_url=None, redoc_url=None,
@@ -337,6 +353,18 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
     def save_settings(body: SettingsSave) -> Dict[str, Any]:
         return services.save_settings(rt, body)
 
+    @api.get("/logs/download")
+    def logs_download(file: Literal["zip", "current"] = "zip") -> Response:
+        d = config.log_dir                                     # the ACTIVE database's log folder; no client-supplied path
+        stamp = _dt.datetime.now().strftime("%Y%m%d")
+        if file == "current":
+            return Response(content=logsetup.read_current(d), media_type="text/plain; charset=utf-8", headers={
+                "Content-Disposition": f'attachment; filename="tam_command_center_{stamp}.log"', "Cache-Control": "no-store"})
+        data, omitted = logsetup.build_zip(d)
+        return Response(content=data, media_type="application/zip", headers={
+            "Content-Disposition": f'attachment; filename="tam_logs_{stamp}.zip"', "Cache-Control": "no-store",
+            "X-Log-Files-Omitted": str(omitted)})
+
     @api.get("/logs/recent")
     def logs_recent(limit: int = Query(C.LOGS_DEFAULT_LIMIT, ge=1, le=C.LOGS_MAX_LIMIT)) -> Dict[str, Any]:
         path = rt.log_file
@@ -362,6 +390,43 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
         with rt.db() as conn:
             page = reads.activity_page(conn, client_id, filter_=filter, q=q, before=before, limit=limit)
         return {"ok": True, **page}
+
+    # ------------------------------------------------------------ audit log (read-only)
+    def _audit_filters(from_: Optional[str], to: Optional[str], category: Optional[str], object_type: Optional[str],
+                       action: Optional[str], source: Optional[str], client_id: Optional[str], q: Optional[str]) -> Dict[str, Any]:
+        return {"from": from_, "to": to, "category": category, "object_type": object_type, "action": action,
+                "source": source, "client_id": client_id, "q": q}
+
+    AuditQ = dict(max_length=200)
+
+    @api.get("/audit/facets")
+    def audit_facets() -> Dict[str, Any]:
+        with rt.db() as conn:
+            return auditlog.facets(conn)
+
+    @api.get("/audit/export")
+    def audit_export(format: Literal["xlsx", "csv"] = "xlsx", from_: Optional[str] = Query(None, alias="from", max_length=40),
+                     to: Optional[str] = Query(None, max_length=40), category: Optional[Literal["crm", "operations", "bams", "settings", "data", "system"]] = None,
+                     object_type: Optional[str] = Query(None, max_length=60), action: Optional[str] = Query(None, max_length=60),
+                     source: Optional[Literal["GUI", "System", "Migration", "Bulk Import", "ChatGPT Bridge"]] = None,
+                     client_id: Optional[str] = Query(None, max_length=64), q: Optional[str] = Query(None, **AuditQ)) -> Response:
+        with rt.db() as conn:
+            rows = auditlog.export_rows(conn, _audit_filters(from_, to, category, object_type, action, source, client_id, q))
+        data = auditlog.to_csv(rows) if format == "csv" else auditlog.to_xlsx(rows)
+        name = f"tam_audit_{_dt.datetime.now().strftime('%Y%m%d-%H%M')}_{config.mode}.{format}"
+        media = "text/csv; charset=utf-8" if format == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return Response(content=data, media_type=media, headers={"Content-Disposition": f'attachment; filename="{name}"',
+                                                                 "Cache-Control": "no-store"})
+
+    @api.get("/audit")
+    def audit_list(from_: Optional[str] = Query(None, alias="from", max_length=40), to: Optional[str] = Query(None, max_length=40),
+                   category: Optional[Literal["crm", "operations", "bams", "settings", "data", "system"]] = None,
+                   object_type: Optional[str] = Query(None, max_length=60), action: Optional[str] = Query(None, max_length=60),
+                   source: Optional[Literal["GUI", "System", "Migration", "Bulk Import", "ChatGPT Bridge"]] = None,
+                   client_id: Optional[str] = Query(None, max_length=64), q: Optional[str] = Query(None, **AuditQ),
+                   limit: int = Query(50, ge=1, le=auditlog.MAX_LIMIT), offset: int = Query(0, ge=0, le=auditlog.MAX_OFFSET)) -> Dict[str, Any]:
+        with rt.db() as conn:
+            return auditlog.list_page(conn, _audit_filters(from_, to, category, object_type, action, source, client_id, q), limit, offset)
 
     @api.get("/note/{note_id}")
     def note_get(note_id: str) -> Any:

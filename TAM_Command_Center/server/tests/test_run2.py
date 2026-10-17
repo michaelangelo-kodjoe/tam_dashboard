@@ -188,7 +188,7 @@ def test_trend_bucket_edges_and_orientation(api):
     assert len(s) == 14 and s[13] == 2 and s[12] == 1 and s[0] == 1 and sum(s) == 4
 
 
-def test_trend_counts_system_events_and_alerts_and_deleted_notes(api):
+def test_trend_counts_notes_only(api):
     _set_day(api)
     c = api.mk_client("Mix")["id"]
     _note(api, c, "2026-10-12T10:00:00.000Z")
@@ -199,7 +199,7 @@ def test_trend_counts_system_events_and_alerts_and_deleted_notes(api):
              " source) VALUES ('2026-10-10T08:00:00.000Z','crm',?,'note','x','Gone','deleted','GUI')", (c,))
     _alert(api, c, opened="2026-10-12T12:00:00.000Z")
     s = _trend(api)["series"][c]
-    assert s[13] == 3 and s[11] == 1 and s[12] == 0 and sum(s) == 4
+    assert s[13] == 1 and sum(s) == 1                      # the note; task, deleted-note and alert events no longer count
 
 
 def test_trend_matches_activity_timeline_counts(seeded):

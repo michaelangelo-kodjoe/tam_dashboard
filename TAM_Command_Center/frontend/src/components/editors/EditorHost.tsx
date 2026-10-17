@@ -1,5 +1,6 @@
 import { useMatch, useNavigate, useLocation } from 'react-router-dom';
 import { TaskDrawer } from './TaskDrawer';
+import { TaskViewDialog } from './TaskViewDialog';
 import { NoteDrawer } from './NoteDrawer';
 import { ContactDrawer } from './ContactDrawer';
 import { AccountDrawer } from './AccountDrawer';
@@ -21,12 +22,18 @@ export function EditorHost() {
 
   const closeParam = (key: string) => () => {
     let s = withoutParam(loc.search, key);
+    if (key === 'task') s = withoutParam(s, 'edit');
     if (key === 'note') s = withoutParam(s, 'type');
     navigate({ pathname: loc.pathname, search: s, hash: loc.hash }, { replace: true });
   };
 
   const task = q.get('task');
-  if (task) return <TaskDrawer key={task} taskId={task} defaultClientId={routeClient} onClose={closeParam('task')} />;
+  if (task) {
+    // opening an existing task shows the read-only popup first; Edit (or ?edit=1) opens the drawer; "new" goes straight to the form
+    if (task === 'new' || q.get('edit')) return <TaskDrawer key={task} taskId={task} defaultClientId={routeClient} onClose={closeParam('task')} />;
+    const edit = () => { const p = new URLSearchParams(loc.search); p.set('edit', '1'); navigate({ pathname: loc.pathname, search: `?${p.toString()}`, hash: loc.hash }, { replace: true }); };
+    return <TaskViewDialog key={task} taskId={task} onClose={closeParam('task')} onEdit={edit} />;
+  }
 
   const note = q.get('note');
   if (note && routeClient) {

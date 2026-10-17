@@ -38,27 +38,3 @@ export function dayProgress(t: Tables, today: string, midnight: LocalMidnight): 
   }
   return { day: today, total: done + open, done, open, done_other: doneOther };
 }
-
-/** `days + 1` bucket bounds: local midnights of (today - days + 1) ... (today + 1). */
-export function trendBounds(today: string, days: number, midnight: LocalMidnight): string[] {
-  const out: string[] = [];
-  for (let i = 0; i <= days; i++) out.push(midnight(addDays(today, i - days + 1)));
-  return out;
-}
-
-/** Count timestamps into the half-open buckets [b_i, b_i+1). Timestamps outside all buckets are ignored. */
-export function bucketCounts(timestamps: Iterable<string>, bounds: string[]): number[] {
-  const counts = new Array<number>(bounds.length - 1).fill(0);
-  for (const ts of timestamps) {
-    if (ts < bounds[0] || ts >= bounds[bounds.length - 1]) continue;
-    let lo = 0;
-    let hi = counts.length - 1;
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >> 1;
-      if (ts >= bounds[mid]) lo = mid;
-      else hi = mid - 1;
-    }
-    counts[lo]++;
-  }
-  return counts;
-}

@@ -18,7 +18,7 @@ describe('dates', () => {
     expect(formatDate('2026-10-12', '2026-10-12')).toBe('12 Oct');
     expect(formatDate('2027-01-03', '2026-10-12')).toBe('03 Jan 2027');
     expect(formatDateLong('2026-10-12')).toBe('Mon 12 Oct');
-    expect(formatTimestamp('2026-10-12T18:05:00.000Z', 'gmt')).toBe('12 Oct 18:05 GMT');
+    expect(formatTimestamp('2026-10-12T18:05:00.000Z', 'gmt')).not.toMatch(/GMT|UTC/); // always local
     expect(dayHeading('2026-10-12', '2026-10-12')).toBe('TODAY');
     expect(dayHeading('2026-10-11', '2026-10-12')).toBe('YESTERDAY');
     expect(dayHeading('2026-10-09', '2026-10-12')).toBe('FRI 09 OCT');

@@ -29,8 +29,16 @@ LOGS_MAX_LIMIT = 1000
 BACKUPS_DEFAULT_LIMIT = 20
 
 # Backups (D-22)
-AUTO_BACKUP_REASONS = ("pre-delete", "pre-migration", "pre-import")
-AUTO_BACKUP_KEEP = 30
+# Retention (amends D-22, 2026-10-16): one automatic weekly backup, 8 kept; safety backups (any pre-* reason except
+# pre-restore, which is never auto-pruned) keep the newest 5 per reason and nothing older than 30 days; manual never
+# pruned; the single newest backup of any kind is never pruned.
+WEEKLY_REASON = "weekly"
+WEEKLY_INTERVAL_DAYS = 7
+WEEKLY_KEEP = 8
+SAFETY_KEEP_PER_REASON = 5
+SAFETY_MAX_AGE_DAYS = 30
+NEVER_PRUNE_REASONS = ("manual", "pre-restore")
+AUTO_BACKUP_REASONS = ("pre-delete", "pre-migration", "pre-import")      # kept for compatibility (named safety reasons)
 MANUAL_BACKUP_REASON = "manual"
 
 # Settings (spec section 39, PM US-11.1)

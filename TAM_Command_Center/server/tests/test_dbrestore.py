@@ -100,7 +100,7 @@ def test_pre_restore_backup_is_never_pruned(ra):
     item = stage(ra, copy_bytes(ra))
     name = go(ra, item)["item"]["backup"]["name"]
     with ra.rt.db() as conn:
-        for _ in range(C.AUTO_BACKUP_KEEP + 2):
+        for _ in range(C.SAFETY_KEEP_PER_REASON + 4):
             ra.rt.backups.create(conn, "pre-delete")
     assert "pre-restore" not in C.AUTO_BACKUP_REASONS
     assert name in {b["name"] for b in ra.rt.backups.list(500)}
@@ -215,21 +215,44 @@ def test_inspect_leaves_the_live_database_untouched(ra, tmp_path):
     assert before == after and leftovers(ra) == []
 
 
-def test_older_schema_is_migrated_on_the_staged_copy_only(ra, tmp_path, monkeypatch):
-    good = copy_bytes(ra)
-    mig = tmp_path / "0002_test.sql"
-    mig.write_text("CREATE TABLE zz_new (id INTEGER);\nUPDATE app_meta SET value='2' WHERE key='schema_version';\n")
-    real = DR.migrate.discover
-    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(2, mig)])
-    item = stage(ra, good)
+def schema1_db(tmp_path, name="Old Co"):
+    """A genuine schema-1 database (migration 0001 only) stamped DEV, holding one account and one audit row."""
+    p = tmp_path / "v1.db"
+    c = sqlite3.connect(p)
+    c.executescript((DR.migrate.MIGRATIONS_DIR / "0001_initial.sql").read_text(encoding="utf-8"))
+    c.execute("INSERT INTO app_meta (key, value) VALUES ('db.channel', 'dev')")
+    c.execute("INSERT INTO clients (id, name) VALUES ('old1', ?)", (name,))
+    c.execute("INSERT INTO audit_events (category, client_id, object_type, object_id, object_label, action, source) "
+              "VALUES ('crm','old1','client','old1',?, 'created','GUI')", (name,))
+    c.commit()
+    c.execute("PRAGMA journal_mode=DELETE")
+    c.close()
+    return p.read_bytes()
+
+
+def test_schema_1_database_is_upgraded_to_2_on_the_staged_copy_only(ra, tmp_path):
+    """Real 0001 -> 0002 upgrade (audit prune guard) on the staged copy; the live database is never migrated by inspect."""
+    old = schema1_db(tmp_path)
+    live_before = live_sha(ra)
+    item = stage(ra, old)
     assert item["file"]["will_upgrade_from"] == 1 and item["file"]["schema_version"] == 2
-    assert item["current"]["schema_version"] == 1
-    assert not ra.sql("SELECT name FROM sqlite_master WHERE name='zz_new'")             # live DB not migrated
+    assert item["current"]["schema_version"] == 2 and item["file"]["counts"]["accounts"] == 1
+    assert live_sha(ra) == live_before and leftovers(ra) == []
     go(ra, item)
-    assert ra.sql("SELECT name FROM sqlite_master WHERE name='zz_new'")
-    bad = tmp_path / "0002_bad.sql"
+    assert accounts(ra) == ["Old Co"]
+    with ra.rt.db() as conn:
+        assert conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "2"
+        trg = conn.execute("SELECT sql FROM sqlite_master WHERE name='trg_audit_events_no_delete'").fetchone()[0]
+        assert "14 days" in trg
+        DR.migrate.assert_guards(conn)
+
+
+def test_failed_upgrade_of_a_staged_database_is_refused(ra, tmp_path, monkeypatch):
+    good = copy_bytes(ra)
+    bad = tmp_path / "0003_bad.sql"
     bad.write_text("CREATE TABLE broken (;\n")
-    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(2, bad)])
+    real = DR.migrate.discover
+    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(3, bad)])
     err = stage(ra, good, status=422)
     assert err["code"] == "migration_failed" and "nothing was changed" in err["message"]
 

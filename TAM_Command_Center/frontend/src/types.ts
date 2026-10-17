@@ -286,16 +286,11 @@ export interface TodayData {
   generated_at: ISOInstant;
 }
 
-/** GET /api/accounts/activity-trend (PM-AC-2): per account, `days` daily counts, oldest first. */
-export interface ActivityTrend {
-  today: ISODate;
-  days: number;
-  series: Record<string, number[]>;
-}
 
 // ---- Activity ------------------------------------------------------------
 
-export type ActivityFilter = 'all' | 'meeting' | 'call' | 'general' | 'system';
+/** Activity holds manual notes only (contract 18.1); system history is in the Audit log. */
+export type ActivityFilter = 'all' | 'meeting' | 'call' | 'general';
 
 export interface ActivityNoteEntry {
   entry_kind: 'note';
@@ -303,19 +298,7 @@ export interface ActivityNoteEntry {
   ts: ISOInstant;
   note: Note;
 }
-export interface ActivitySystemEntry {
-  entry_kind: 'system';
-  entry_key: string;
-  ts: ISOInstant;
-  object_type: string;
-  object_id: string;
-  sentence: string;
-  source: string;
-  severity: string | null;
-  /** Server name to deep-link to infrastructure (BAMS / upgrades) */
-  server_name: string | null;
-}
-export type ActivityEntry = ActivityNoteEntry | ActivitySystemEntry;
+export type ActivityEntry = ActivityNoteEntry;
 
 export interface ActivityPage {
   items: ActivityEntry[];
@@ -383,6 +366,8 @@ export interface MutationResult<T> {
 export interface BackupInfo {
   name: string;
   reason: string;
+  /** weekly (automatic), safety (before imports/deletes/restores), manual; absent on older servers (derived from reason) */
+  kind?: 'weekly' | 'safety' | 'manual';
   size_bytes: number;
   created_at: ISOInstant;
 }
@@ -483,4 +468,20 @@ export interface ImportResult {
   updated: { id: string; name: string; rows: number[]; filled: string[] }[];
   skipped: ImportSkipped[];
 }
-export interface DownloadedFile { blob: Blob; filename: string }
+export interface DownloadedFile { blob: Blob; filename: string; /** X-Log-Files-Omitted: older log files left out of a zip (size cap) */ omitted?: number }
+
+// ---- Audit log (contract 18.2) ---------------------------------------------------------
+export interface AuditEvent {
+  id: number; timestamp: ISOInstant; category: string; client_id: string | null; client_name: string | null;
+  object_type: string; object_id: string; object_label: string | null; action: string; source: string; reason: string | null;
+  summary: string; old_value: Record<string, unknown> | null; new_value: Record<string, unknown> | null;
+}
+export interface AuditQuery {
+  from?: string; to?: string; category?: string; object_type?: string; action?: string; source?: string; client_id?: string; q?: string; limit?: number; offset?: number;
+}
+export interface AuditRetention { retention_days: number; interval_days: number; last_pruned_at: string | null; next_due_at: string | null }
+export interface AuditPage { total: number; limit: number; offset: number; has_more: boolean; items: AuditEvent[]; retention?: AuditRetention | null }
+export interface AuditFacets { categories: string[]; object_types: string[]; actions: string[]; sources: string[]; retention?: AuditRetention | null }
+export function backupKind(b: BackupInfo): NonNullable<BackupInfo['kind']> {
+  return b.kind ?? (b.reason === 'weekly' ? 'weekly' : b.reason === 'manual' ? 'manual' : 'safety');
+}

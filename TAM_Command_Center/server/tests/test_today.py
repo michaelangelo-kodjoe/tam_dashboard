@@ -281,6 +281,6 @@ def test_seeded_activity_pages_and_filters(seeded):
     for flt, want in (("meeting", "Meeting Note"), ("call", "Call Note"), ("general", "General Note")):
         items = seeded.get(base, filter=flt, limit=100).json()["items"]
         assert items and {i["note_type"] for i in items} == {want}
-    sysi = seeded.get(base, filter="system", limit=100).json()["items"]
-    assert sysi and all(i["kind"] == "system" and i["sentence"] for i in sysi)
+    assert seeded.get(base, filter="system", limit=100).json()["items"] == []        # system events: Audit log only
+    assert all(i["kind"] == "note" for i in seeded.get(base, limit=100).json()["items"])
     assert seeded.get(base, limit=101).status_code == 422

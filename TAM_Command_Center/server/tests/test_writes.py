@@ -404,8 +404,9 @@ def test_note_crud_each_type_and_system_event(api, ntype):
     api.err("/api/note/delete", {"id": n["id"]}, 409, "confirmation_required")
     j = api.ok("/api/note/delete", {"id": n["id"], "confirm": True})
     assert (api.rt.config.backup_dir / j["side_effects"][0]["file"]).exists()
-    items = api.get(f"/api/client/{c['id']}/activity", filter="system").json()["items"]
-    assert items[0]["sentence"] == f"{ntype} deleted: Subj2" and items[0]["kind"] == "system"
+    assert api.get(f"/api/client/{c['id']}/activity").json()["items"] == []            # deleted note gone; no system row
+    ev = api.get("/api/audit", object_type="note", action="deleted").json()["items"]
+    assert ev[0]["summary"] == f"{ntype} deleted: Subj2" and ev[0]["client_name"] == "Acme"
 
 
 def test_note_validation_and_no_forged_source(api):
@@ -421,9 +422,8 @@ def test_note_validation_and_no_forged_source(api):
                                   "timestamp": "2026-10-01T10:00:00+02:00"})["item"]
     assert n["timestamp"] == "2026-10-01T08:00:00.000Z"
     # system events live in audit_events, not notes: no route can edit them
-    sys_ev = api.get(f"/api/client/{c['id']}/activity", filter="system").json()["items"]
+    assert api.get(f"/api/client/{c['id']}/activity", filter="system").json()["items"] == []
     api.err("/api/note/save", {"id": "a:000000000001", "subject": "hack"}, 404, "not_found")
-    assert all(e["kind"] == "system" for e in sys_ev)
 
 
 def test_d08_last_contact_only_for_meeting_and_call(api):
@@ -455,10 +455,11 @@ def test_activity_filters_search_and_pagination(api):
     api.ok("/api/task/save", {"id": t["id"], "status": "Complete"})
     base = f"/api/client/{c['id']}/activity"
     kinds = lambda **p: {i.get("note_type", "system") for i in api.get(base, **p).json()["items"]}  # noqa: E731
+    assert kinds() == {"Meeting Note", "Call Note", "General Note"}              # no task events in Activity
     assert kinds(filter="meeting") == {"Meeting Note"}
     assert kinds(filter="call") == {"Call Note"}
     assert kinds(filter="general") == {"General Note"}
-    assert kinds(filter="system") == {"system"}
+    assert kinds(filter="system") == set()
     assert [i["subject"] for i in api.get(base, q="needle").json()["items"]] == ["note 4"]
     # pagination without overlap, notes carry row_version
     seen, cursor = [], None
@@ -468,7 +469,7 @@ def test_activity_filters_search_and_pagination(api):
         cursor = r["next_cursor"]
         if not r["has_more"]:
             break
-    assert len(seen) == len(set(seen)) == 7 + 2        # 7 notes + task created/completed system events
+    assert len(seen) == len(set(seen)) == 7        # the 7 notes only (task events are Audit-log only)
     first = api.get(base, filter="meeting").json()["items"][0]
     assert first["row_version"] == 1
     assert api.get(base, filter="bogus").status_code == 422
@@ -506,22 +507,21 @@ def test_manual_backup_listing_and_integrity(api):
     bk.close()
 
 
-def test_retention_prunes_only_automatic_keeps_30_and_all_manual(tmp_path):
-    svc = BackupService(tmp_path)
-    for i in range(35):
-        (tmp_path / f"tam_20260101T0000{i:02d}000000Z_pre-delete_v1.db").write_bytes(b"x")
+def test_retention_prunes_safety_by_count_and_age_keeps_manual_and_newest(tmp_path):
+    import datetime as dt
+    svc = BackupService(tmp_path, clock=lambda: dt.datetime(2026, 1, 20, tzinfo=dt.timezone.utc))
+    for i in range(12):
+        (tmp_path / f"tam_20260119T0000{i:02d}000000Z_pre-delete_v1.db").write_bytes(b"x")
     for i in range(3):
-        (tmp_path / f"tam_20250101T0000{i:02d}000000Z_pre-migration_v1.db").write_bytes(b"x")
+        (tmp_path / f"tam_20251101T0000{i:02d}000000Z_pre-migration_v1.db").write_bytes(b"x")      # older than 30 days
     for i in range(5):
         (tmp_path / f"tam_20240101T0000{i:02d}000000Z_manual_v1.db").write_bytes(b"x")
     removed = svc.prune()
     left = sorted(p.name for p in tmp_path.iterdir())
-    assert len(removed) == 8
     assert sum("manual" in n for n in left) == 5
-    assert sum("manual" not in n for n in left) == 30
-    assert all("pre-migration" not in r or True for r in removed)
-    # the 30 newest automatic ones were kept: the 2025 pre-migration files (oldest) are gone
-    assert not any("2025" in n for n in left)
+    assert sum("pre-delete" in n for n in left) == 5 and not any("pre-migration" in n for n in left)
+    assert len(removed) == 7 + 3
+    assert any("20260119T000011" in n for n in left)                           # the newest pre-delete survives
 
 
 def test_backup_under_concurrent_wal_writes_passes_integrity_check(api):

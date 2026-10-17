@@ -82,14 +82,14 @@ describe('MockDataSource', () => {
       await expectCode(ds.saveTask({ ...input, task: 'again' }), 'stale_write'); // still carries the old version
     });
 
-    it('completing writes an audit "completed" that surfaces as a system event in Activity', async () => {
+    it('completing writes an audit "completed" that surfaces in the Audit log (not in Activity, contract 18.1)', async () => {
       const ds = newMock();
       const s = await ds.getState();
       const t = s.tasks.find((x) => x.client_id && x.status !== 'Complete')!;
       await ds.saveTask({ ...t, status: 'Complete', expected_row_version: t.row_version });
-      const page = await ds.getActivity(t.client_id!, { filter: 'system' });
-      expect(page.items[0].entry_kind).toBe('system');
-      expect(page.items[0].entry_kind === 'system' && page.items[0].sentence).toBe(`Task completed: ${t.task}`);
+      const page = await ds.getAudit({ client_id: t.client_id!, action: 'completed' });
+      expect(page.items[0].summary).toBe(`Task completed: ${t.task}`);
+      expect((await ds.getActivity(t.client_id!, { filter: 'all', limit: 100 })).items.every((e) => e.entry_kind === 'note')).toBe(true);
     });
 
     it('D-07: Client Follow-Up sets next_contact when empty or earlier, and not otherwise', async () => {
@@ -143,8 +143,7 @@ describe('MockDataSource', () => {
       await ds.deleteTask({ id: t.id, confirm: true });
       expect((await ds.listBackups())[0].reason).toBe('pre-delete');
       expect((await ds.listBackups()).length).toBeGreaterThanOrEqual(Math.min(nBackups + 1, 20));
-      const sys = await ds.getActivity(t.client_id!, { filter: 'system' });
-      expect(sys.items.some((e) => e.entry_kind === 'system' && e.sentence === `Task deleted: ${t.task}`)).toBe(true);
+      expect((await ds.getAudit({ client_id: t.client_id!, action: 'deleted' })).items.some((e) => e.summary === `Task deleted: ${t.task}`)).toBe(true);
       await expectCode(ds.archiveTask({ id: t.id, archived: true }), 'not_found');
     });
   });
@@ -161,8 +160,7 @@ describe('MockDataSource', () => {
         await expectCode(ds.saveNote({ ...c.item, subject: 'stale', expected_row_version: c.item.row_version }), 'stale_write');
         await expectCode(ds.deleteNote({ id: u.item.id, confirm: false as never }), 'confirmation_required');
         await ds.deleteNote({ id: u.item.id, confirm: true });
-        const sys = await ds.getActivity(acc.id, { filter: 'system' });
-        expect(sys.items.some((e) => e.entry_kind === 'system' && e.sentence === `${type} deleted: Edited`)).toBe(true);
+        expect((await ds.getAudit({ client_id: acc.id, action: 'deleted' })).items.some((e) => e.summary === `${type} deleted: Edited`)).toBe(true);
       }
     });
 
@@ -175,28 +173,28 @@ describe('MockDataSource', () => {
       expect(m.side_effects).toContain('last_contact_updated');
     });
 
-    it('filters return only their type; System Events returns only derived events (US-7.2 AC1)', async () => {
+    it('filters return only their type; Activity holds notes only (contract 18.1)', async () => {
       const ds = newMock();
       const acc = (await ds.getState()).accounts.find((a) => a.name.startsWith('Halvorsen'))!;
-      const kinds = async (f: 'meeting' | 'call' | 'general' | 'system') => (await ds.getActivity(acc.id, { filter: f, limit: 100 })).items;
+      const kinds = async (f: 'meeting' | 'call' | 'general' | 'all') => (await ds.getActivity(acc.id, { filter: f, limit: 100 })).items;
       expect((await kinds('meeting')).every((e) => e.entry_kind === 'note' && e.note.note_type === 'Meeting Note')).toBe(true);
       expect((await kinds('call')).every((e) => e.entry_kind === 'note' && e.note.note_type === 'Call Note')).toBe(true);
       expect((await kinds('general')).every((e) => e.entry_kind === 'note' && e.note.note_type === 'General Note')).toBe(true);
-      const sys = await kinds('system');
-      expect(sys.length).toBeGreaterThan(0);
-      expect(sys.every((e) => e.entry_kind === 'system')).toBe(true);
+      const all = await kinds('all');
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.every((e) => e.entry_kind === 'note')).toBe(true);
     });
 
-    it('paginates 50 at a time with a stable cursor and no overlap', async () => {
+    it('paginates with a stable cursor and no overlap (notes only)', async () => {
       const ds = newMock();
       const acc = (await ds.getState()).accounts.find((a) => a.name.startsWith('Halvorsen'))!;
-      const p1 = await ds.getActivity(acc.id, { filter: 'all', limit: 50 });
-      expect(p1.items).toHaveLength(50);
+      const p1 = await ds.getActivity(acc.id, { filter: 'all', limit: 8 });
+      expect(p1.items).toHaveLength(8);
       expect(p1.next_cursor).not.toBeNull();
-      const p2 = await ds.getActivity(acc.id, { filter: 'all', limit: 50, cursor: p1.next_cursor });
+      const p2 = await ds.getActivity(acc.id, { filter: 'all', limit: 8, cursor: p1.next_cursor });
       const keys = new Set(p1.items.map((e) => e.entry_key));
       expect(p2.items.every((e) => !keys.has(e.entry_key))).toBe(true);
-      expect(p1.items[49].ts >= p2.items[0].ts).toBe(true);
+      expect(p1.items[7].ts >= p2.items[0].ts).toBe(true);
     });
 
     it('search narrows by text', async () => {
@@ -222,8 +220,7 @@ describe('MockDataSource', () => {
       expect(r.side_effects).toContain('primary_cleared');
       const after = (await ds.getState()).contacts.filter((c) => c.client_id === acc.id);
       expect(after.filter((c) => c.is_primary).map((c) => c.id)).toEqual([b.id]);
-      const sys = await ds.getActivity(acc.id, { filter: 'system', limit: 5 });
-      expect(sys.items.some((e) => e.entry_kind === 'system' && e.sentence === `${b.name} is now primary (was ${a.name})`)).toBe(true);
+      expect((await ds.getAudit({ client_id: acc.id, limit: 20 })).items.some((e) => e.summary === `${b.name} is now primary (was ${a.name})`)).toBe(true);
     });
 
     it('an account may have zero primary contacts', async () => {

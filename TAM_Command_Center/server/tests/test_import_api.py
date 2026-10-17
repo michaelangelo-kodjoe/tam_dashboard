@@ -531,9 +531,9 @@ def test_second_concurrent_apply_gets_409_conflict(api):
 def test_pre_import_backups_are_automatic_and_pruned_with_the_others(api):
     from server.backups import BackupService
     assert "pre-import" in C.AUTO_BACKUP_REASONS
-    for i in range(C.AUTO_BACKUP_KEEP + 3):
+    for i in range(C.SAFETY_KEEP_PER_REASON + 3):
         api.rt.backups.create(sqlite3.connect(str(api.rt.config.db_path)), "pre-import")
-    assert len([b for b in api.rt.backups.list(100) if b["reason"] == "pre-import"]) == C.AUTO_BACKUP_KEEP
+    assert len([b for b in api.rt.backups.list(100) if b["reason"] == "pre-import"]) == C.SAFETY_KEEP_PER_REASON
     assert BackupService  # noqa
 
 

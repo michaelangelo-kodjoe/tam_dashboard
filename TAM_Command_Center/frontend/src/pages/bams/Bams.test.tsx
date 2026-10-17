@@ -15,23 +15,63 @@ async function boot(path: string, ds = newMock()) {
   return { user, ds };
 }
 const loc = () => window.location.pathname + window.location.search;
-beforeEach(() => { document.body.style.overflow = ''; });
+beforeEach(() => { document.body.style.overflow = ''; sessionStorage.clear(); });
+const dataRows = (t: HTMLElement) => [...t.querySelectorAll<HTMLElement>('tr[data-row-key]')];
+async function expandAll(user: ReturnType<typeof userEvent.setup>) {
+  const b = await screen.findByRole('button', { name: /^(Expand|Collapse) all accounts$/ });
+  if (b.getAttribute('aria-expanded') === 'false') await user.click(b);
+}
 afterEach(() => cleanup());
+
+describe('dashboard grouped by account', () => {
+  it('collapses by account like Operations: only accounts with an active alert start open; header toggle and group rows toggle; summary has no percentages', async () => {
+    const ds = newMock();
+    const s = await ds.getBamsState({});
+    const { user } = await boot('/bams', ds);
+    const table = await screen.findByRole('table', { name: 'Monitored metrics' });
+    const accounts = new Map<string, typeof s.rows>();
+    for (const r of s.rows) accounts.set(r.object.client_id, [...(accounts.get(r.object.client_id) ?? []), r]);
+    const alerting = [...accounts.values()].filter((g) => g.some((r) => r.display_status === 'open' || r.display_status === 'recovered' || r.active_alerts > 0));
+    expect(dataRows(table)).toHaveLength(alerting.reduce((n, g) => n + g.length, 0));
+    const toggles = within(table).getAllByRole('button', { name: /^(Expand|Collapse) (?!all)/ });
+    expect(toggles).toHaveLength(accounts.size);
+    expect(toggles.filter((b) => b.getAttribute('aria-expanded') === 'true')).toHaveLength(alerting.length);
+    expect(table.textContent).not.toMatch(/\d\s?%\s*(of|healthy|live)/i);
+    expect(table.querySelector('.ops-acct')?.textContent).toMatch(/\d+ appliances?/);
+    // header chevron: expand all, then collapse all
+    const all = screen.getByRole('button', { name: /^(Expand|Collapse) all accounts$/ });
+    if (all.getAttribute('aria-expanded') === 'true') await user.click(all);
+    await user.click(screen.getByRole('button', { name: 'Expand all accounts' }));
+    expect(dataRows(table)).toHaveLength(s.rows.length);
+    await user.click(screen.getByRole('button', { name: 'Collapse all accounts' }));
+    expect(dataRows(table)).toHaveLength(0);
+    // one group opens by its row and by keyboard, and the choice is remembered for the session
+    const first = within(table).getAllByRole('button', { name: /^Expand (?!all)/ })[0];
+    first.focus();
+    await user.keyboard('{Enter}');
+    expect(first).toHaveAttribute('aria-expanded', 'true');
+    expect(JSON.parse(sessionStorage.getItem('tam.bams.groups') ?? '{}')).toBeTruthy();
+    // a row still opens the metric drawer
+    await user.click(within(dataRows(table)[0]).getAllByRole('button')[0]);
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+});
 
 describe('dashboard (mockups 01, 02)', () => {
   it('shows monitor strip, summary KPIs, quick views with counts and one row per metric, worst first', async () => {
     const ds = newMock();
     const s = await ds.getBamsState({});
-    await boot('/bams', ds);
+    const { user } = await boot('/bams', ds);
     const table = await screen.findByRole('table', { name: 'Monitored metrics' });
-    expect(within(table).getAllByRole('row')).toHaveLength(s.rows.length + 1);
+    await expandAll(user);
+    expect(dataRows(table)).toHaveLength(s.rows.length);
     expect(screen.getByText('Monitor Running')).toBeInTheDocument();
     expect(screen.getAllByText('SIMULATED').length).toBeGreaterThan(1);
     const kpis = screen.getByRole('group', { name: 'Summary' });
     expect(within(kpis).getByText('Active alerts').parentElement).toHaveTextContent(String(s.summary.active_alerts));
     const tabs = within(screen.getByRole('tablist', { name: 'Quick views' })).getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual([`All${s.view_counts.all}`, `Active Alerts${s.view_counts.active_alerts}`, `Delayed / Stale${s.view_counts.delayed_stale}`, `Live${s.view_counts.live}`, `No Data${s.view_counts.no_data}`]);
-    const firstRow = within(table).getAllByRole('row')[1];
+    const firstRow = dataRows(table)[0];
     expect(firstRow.className).toMatch(/bm-row--open|bm-row--recovered/);
     expect(within(firstRow).getByText(/Open alert|Recovered, awaiting close/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Import appliances' })).toHaveAttribute('href', '/bams/import');
@@ -44,7 +84,7 @@ describe('dashboard (mockups 01, 02)', () => {
     await screen.findByRole('table', { name: 'Monitored metrics' });
     await user.click(screen.getByRole('tab', { name: /^Active Alerts/ }));
     await waitFor(() => expect(loc()).toBe('/bams?view=active_alerts'));
-    await waitFor(() => expect(within(screen.getByRole('table', { name: 'Monitored metrics' })).getAllByRole('row')).toHaveLength(s.view_counts.active_alerts + 1));
+    await waitFor(() => expect(dataRows(screen.getByRole('table', { name: 'Monitored metrics' }))).toHaveLength(s.view_counts.active_alerts)); // a quick view auto-expands matching accounts
     await user.type(screen.getByRole('searchbox', { name: /Search appliance or metric/ }), 'cpu');
     await waitFor(() => expect(loc()).toContain('q=cpu'));
     await user.click(await screen.findByRole('button', { name: 'Clear filters' }));
@@ -65,13 +105,15 @@ describe('dashboard (mockups 01, 02)', () => {
   });
   it('PROD, provider unavailable (mockup 02A): banner, Start disabled, every row No data, no number and no SIMULATED anywhere', async () => {
     const ds = newMock({ bamsProvider: 'unavailable' });
-    await boot('/bams', ds);
+    const { user } = await boot('/bams', ds);
     const table = await screen.findByRole('table', { name: 'Monitored metrics' });
+    await expandAll(user);
     const banner = (await screen.findByText(/BAMS provider unavailable/)).closest('[role="alert"]') as HTMLElement;
     expect(banner).toHaveTextContent(/No values are simulated in PROD/);
     expect(screen.getByRole('button', { name: /Start monitor/ })).toBeDisabled();
     expect(screen.queryByText('SIMULATED')).toBeNull();
-    const body = within(table).getAllByRole('row').slice(1);
+    const body = dataRows(table);
+    expect(body.length).toBeGreaterThan(0);
     for (const r of body) {
       const cells = within(r).getAllByRole('cell');
       expect(cells[3]).toHaveTextContent('No data');

@@ -3,7 +3,7 @@
 import { useRef, type KeyboardEvent } from 'react';
 import { cx } from '../../lib/cx';
 import { formatDate, formatDateLong } from '../../lib/dates';
-import { histogramSummary, initials, meterLabel, stackRows, type HistBin, type Meter, type TimelineMarker } from '../../lib/instruments';
+import { initials, meterLabel, stackRows, type Meter, type TimelineMarker } from '../../lib/instruments';
 import type { ChipDef } from '../../lib/triage';
 
 export type InstrumentTone = 'danger' | 'warning' | 'info' | 'accent' | 'neutral';
@@ -49,33 +49,6 @@ export function Sparkline({ values, label, tone = 'neutral', width = 120, height
       <title>{label}</title>
       <polyline points={pts.join(' ')} fill="none" vectorEffect="non-scaling-stroke" />
     </svg>
-  );
-}
-
-// ------------------------------------------------------------------ due histogram
-
-export function DueHistogram({ bins, today }: { bins: HistBin[]; today: string }) {
-  const max = Math.max(1, ...bins.map((b) => b.count));
-  const summary = histogramSummary(bins, today);
-  return (
-    <div className="duehist">
-      <div className="duehist__bars" role="img" aria-label={summary}>
-        {bins.map((b) => (
-          <i
-            key={b.date}
-            className={cx('duehist__bar', `duehist__bar--${b.kind}`, b.count === 0 && 'duehist__bar--zero')}
-            style={{ height: b.count === 0 ? 3 : 3 + Math.round((b.count / max) * 45) }}
-            title={`${formatDate(b.date, today)}: ${b.count} ${b.count === 1 ? 'task' : 'tasks'}`}
-          />
-        ))}
-      </div>
-      <div className="duehist__axis" aria-hidden="true"><span>6d overdue</span><span>Today</span><span>+14d</span></div>
-      <table className="sr-only">
-        <caption>Open tasks by due date</caption>
-        <thead><tr><th>Date</th><th>Tasks</th></tr></thead>
-        <tbody>{bins.filter((b) => b.count > 0).map((b) => <tr key={b.date}><td>{formatDate(b.date, today)}</td><td>{b.count}</td></tr>)}</tbody>
-      </table>
-    </div>
   );
 }
 

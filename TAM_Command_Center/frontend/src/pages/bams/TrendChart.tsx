@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { BamsTrend, Severity } from '../../bamsTypes';
 import { formatPlain } from '../../lib/bams';
-import { pad2 } from '../../lib/dates';
+import { formatTimestamp, timeOfDay } from '../../lib/dates';
 
 const H = 220;
 const TOP = 10;
@@ -25,7 +25,7 @@ const sevColor = (s: Severity) => (s === 'Critical' ? 'var(--danger)' : s === 'W
 
 function tick(ts: number, range: string): string {
   const d = new Date(ts);
-  return range === '24h' ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${d.getDate()}/${d.getMonth() + 1}`;
+  return range === '24h' ? timeOfDay(d) : `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
 /** One tick per distinct label (first occurrence), so date labels never repeat. */
@@ -71,7 +71,7 @@ export function TrendChart({ trend }: { trend: BamsTrend }) {
             contentStyle={{ background: 'var(--surface-2)', border: '1px solid var(--border-strong)', borderRadius: 4, fontSize: 12 }}
             labelStyle={{ color: 'var(--muted)' }}
             itemStyle={{ color: 'var(--text)' }}
-            labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
+            labelFormatter={(t) => formatTimestamp(new Date(Number(t)).toISOString(), 'local', '1970-01-01')}
             formatter={(v) => [`${Number(v).toFixed(1)}%`, 'Value']}
           />
           {lines.map((l, i) => (

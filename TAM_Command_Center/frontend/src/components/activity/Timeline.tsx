@@ -1,13 +1,12 @@
 import { Fragment, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Cog, FileText, Pencil, Phone, Trash2, UsersRound } from 'lucide-react';
+import { FileText, Pencil, Phone, Trash2, UsersRound } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { RichText } from '../ui/Feedback';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../ui/Toast';
 import { useData } from '../../store/DataContext';
-import type { ActivityEntry, ActivityNoteEntry, ActivitySystemEntry, Note } from '../../types';
-import { accountPath } from '../../lib/links';
+import type { ActivityEntry, ActivityNoteEntry, Note } from '../../types';
 import { dayHeading, formatTimestamp, instantLocalDate } from '../../lib/dates';
 import { cx } from '../../lib/cx';
 
@@ -88,27 +87,7 @@ export function NoteEntry({ entry, tz, today, onDeleted }: { entry: ActivityNote
   );
 }
 
-function systemLink(e: ActivitySystemEntry, clientId: string): string | null {
-  if (e.server_name) return accountPath(clientId, 'infrastructure', { server: e.server_name });
-  if (e.object_type === 'task' && !/ deleted:/.test(e.sentence)) return accountPath(clientId, 'tasks', { task: e.object_id });
-  if (e.object_type === 'contact' && !/removed:/.test(e.sentence)) return accountPath(clientId, 'contacts', { contact: e.object_id });
-  return null;
-}
-
-/** One 28px line, no container, no edit or delete controls (guidelines §9). */
-export function SystemEventEntry({ entry, clientId, tz, today }: { entry: ActivitySystemEntry; clientId: string; tz: 'local' | 'gmt'; today: string }) {
-  const link = systemLink(entry, clientId);
-  return (
-    <div className="sysevent">
-      <Cog size={14} strokeWidth={1.5} aria-hidden="true" className="sysevent__icon" />
-      <span className="sysevent__label label">System</span>
-      <time className="sysevent__time num muted" dateTime={entry.ts}>{formatTimestamp(entry.ts, tz, today)}</time>
-      {link ? <Link to={link} className="sysevent__text truncate" title={entry.sentence}>{entry.sentence}</Link> : <span className="sysevent__text truncate muted" title={entry.sentence}>{entry.sentence}</span>}
-    </div>
-  );
-}
-
-export function Timeline({ entries, clientId, tz, today }: { entries: ActivityEntry[]; clientId: string; tz: 'local' | 'gmt'; today: string }) {
+export function Timeline({ entries, tz, today }: { entries: ActivityEntry[]; clientId?: string; tz: 'local' | 'gmt'; today: string }) {
   let lastDay = '';
   return (
     <div className="timeline">
@@ -119,7 +98,7 @@ export function Timeline({ entries, clientId, tz, today }: { entries: ActivityEn
         return (
           <Fragment key={e.entry_key}>
             {head && <h3 className="timeline__day label">{dayHeading(day, today)}</h3>}
-            {e.entry_kind === 'note' ? <NoteEntry entry={e} tz={tz} today={today} /> : <SystemEventEntry entry={e} clientId={clientId} tz={tz} today={today} />}
+            <NoteEntry entry={e} tz={tz} today={today} />
           </Fragment>
         );
       })}

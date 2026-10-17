@@ -15,10 +15,10 @@ function write(id: string, open: boolean): void {
  * Collapsed by default; the open state is remembered for the browser session only (sessionStorage).
  * `children` is a render function so a section can skip loading its data while collapsed.
  */
-export function CollapsiblePanel({ id, title, hint, className, children }: {
-  id: string; title: ReactNode; hint?: ReactNode; className?: string; children: (open: boolean) => ReactNode;
+export function CollapsiblePanel({ id, title, hint, className, forceOpen, children }: {
+  id: string; title: ReactNode; hint?: ReactNode; className?: string; /** open on mount (deep link, e.g. ?section=audit) */ forceOpen?: boolean; children: (open: boolean) => ReactNode;
 }) {
-  const [open, setOpen] = useState(() => read(id));
+  const [open, setOpen] = useState(() => !!forceOpen || read(id));
   const bodyId = useId();
   const toggle = () => setOpen((o) => { write(id, !o); return !o; });
   return (

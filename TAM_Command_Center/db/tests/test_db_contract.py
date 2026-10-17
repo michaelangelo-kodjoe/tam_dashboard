@@ -58,7 +58,7 @@ class SchemaConstraints(unittest.TestCase):
     def test_integrity_and_fk_clean(self):
         self.assertEqual(self.c.execute("PRAGMA integrity_check").fetchone()[0], "ok")
         self.assertEqual(self.c.execute("PRAGMA foreign_key_check").fetchall(), [])
-        self.assertEqual(self.c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "1")
+        self.assertEqual(self.c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "2")
         self.assertEqual(self.c.execute("PRAGMA application_id").fetchone()[0], migrate.APPLICATION_ID)
 
     def test_one_primary_contact_per_account(self):
@@ -131,7 +131,8 @@ class SchemaConstraints(unittest.TestCase):
                        "VALUES ('crm','c1','task','t','created','GUI')")
         with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):
             self.c.execute("UPDATE audit_events SET action='deleted'")
-        with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):
+        # schema 2 (user decision 2026-10-16): a row NEWER than 14 days cannot be deleted; only old rows can
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "cannot be deleted"):
             self.c.execute("DELETE FROM audit_events")
         self.c.execute("BEGIN")
         self.assertEqual(migrate.purge_audit_events(self.c), 1)
@@ -205,22 +206,24 @@ class MigrationContract(unittest.TestCase):
         conn = migrate.connect(self.db)
         self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         r1 = migrate.migrate(conn, channel=None)
-        self.assertEqual((r1["from"], r1["to"], r1["applied"], r1["backup"]), (0, 1, ["0001_initial.sql"], None))
+        self.assertEqual((r1["from"], r1["to"], r1["applied"], r1["backup"]),
+                         (0, 2, ["0001_initial.sql", "0002_audit_prune.sql"], None))
         before = conn.execute("SELECT key, value FROM app_meta ORDER BY key").fetchall()
         calls = []
         r2 = migrate.migrate(conn, backup_hook=lambda c, why: calls.append(why), channel=None)
-        self.assertEqual((r2["from"], r2["to"], r2["applied"]), (1, 1, []))
+        self.assertEqual((r2["from"], r2["to"], r2["applied"]), (2, 2, []))
         self.assertEqual(calls, [])  # no backup when nothing is pending
         self.assertEqual(conn.execute("SELECT key, value FROM app_meta ORDER BY key").fetchall(), before)
         # executing 0001 directly a second time is also harmless (IF NOT EXISTS / guarded upsert)
         conn.executescript((migrate.MIGRATIONS_DIR / "0001_initial.sql").read_text())
-        self.assertEqual(conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "1")
+        self.assertEqual(conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "2")
 
     def _with_extra_migration(self, body: str) -> Path:
         mdir = self.tmp / "migrations"
         mdir.mkdir()
         shutil.copy(migrate.MIGRATIONS_DIR / "0001_initial.sql", mdir)
-        (mdir / "0002_test.sql").write_text(body)
+        shutil.copy(migrate.MIGRATIONS_DIR / "0002_audit_prune.sql", mdir)
+        (mdir / "0003_test.sql").write_text(body.replace("value='2'", "value='3'"))
         return mdir
 
     def test_existing_db_backup_hook_contract(self):
@@ -239,12 +242,12 @@ class MigrationContract(unittest.TestCase):
                 raise OSError("disk full")
             with self.assertRaises(OSError):                          # failing backup -> abort, untouched
                 migrate.migrate(conn, failing, channel=None)
-            self.assertEqual(migrate.current_version(conn), 1)
+            self.assertEqual(migrate.current_version(conn), 2)
             res = migrate.migrate(conn, migrate.make_backup_hook(self.tmp / "backups"), channel=None)
-            self.assertEqual((res["from"], res["to"]), (1, 2))
+            self.assertEqual((res["from"], res["to"]), (2, 3))
             b = sqlite3.connect(res["backup"])
             self.assertEqual(b.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-            self.assertEqual(b.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "1")
+            self.assertEqual(b.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "2")
             self.assertEqual(b.execute("SELECT count(*) FROM clients").fetchone()[0], 1)
             b.close()
         finally:
@@ -260,7 +263,7 @@ class MigrationContract(unittest.TestCase):
                 "UPDATE app_meta SET value='2' WHERE key='schema_version';\n")
             with self.assertRaises(sqlite3.OperationalError):
                 migrate.migrate(conn, lambda c, why: self.tmp / "unused", channel=None)
-            self.assertEqual(migrate.current_version(conn), 1)
+            self.assertEqual(migrate.current_version(conn), 2)
             self.assertIsNone(conn.execute("SELECT 1 FROM sqlite_master WHERE name='half_done'").fetchone())
         finally:
             migrate.MIGRATIONS_DIR = orig
@@ -344,13 +347,14 @@ class MockSeed(unittest.TestCase):
             self.assertTrue(rows)
             self.assertEqual({r["event_type"] for r in rows}, types)
         sysrows = conn.execute(q("activity_timeline.sql"), dict(base, filter="system")).fetchall()
-        self.assertTrue(sysrows and all(r["entry_kind"] == "system" for r in sysrows))
-        self.assertIn("contact.primary_changed", {r["event_type"] for r in sysrows})
-        self.assertIn("note.deleted", {r["event_type"] for r in sysrows})
-        p1 = conn.execute(q("activity_timeline.sql"), dict(base, filter="all", limit=50)).fetchall()
-        p2 = conn.execute(q("activity_timeline.sql"), dict(base, filter="all", limit=50,
+        self.assertEqual(sysrows, [])                                      # 2026-10-16: Activity = manual notes only
+        allrows = conn.execute(q("activity_timeline.sql"), dict(base, filter="all", limit=100000)).fetchall()
+        self.assertTrue(allrows and all(r["entry_kind"] == "note" for r in allrows))
+        page = max(1, len(allrows) // 2)
+        p1 = conn.execute(q("activity_timeline.sql"), dict(base, filter="all", limit=page)).fetchall()
+        p2 = conn.execute(q("activity_timeline.sql"), dict(base, filter="all", limit=page,
                                                             before_ts=p1[-1]["ts"], before_key=p1[-1]["entry_key"])).fetchall()
-        self.assertEqual(len(p1), 50)
+        self.assertEqual(len(p1), page)
         self.assertFalse({r["entry_key"] for r in p1} & {r["entry_key"] for r in p2})
         rc = conn.execute(q("recent_changes.sql"), {"limit": 20}).fetchall()
         self.assertEqual(len(rc), 20)
@@ -694,7 +698,7 @@ class QA_1_4_AuditPurge(unittest.TestCase):
 
     def test_persistent_flag_no_longer_enables_deletes(self):
         self.c.execute("INSERT INTO app_meta VALUES ('maintenance.audit_purge_allowed','1')")   # autocommit
-        with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "cannot be deleted"):
             self.c.execute("DELETE FROM audit_events")
 
     def test_purge_requires_a_transaction(self):
@@ -706,7 +710,7 @@ class QA_1_4_AuditPurge(unittest.TestCase):
         self.assertEqual(migrate.purge_audit_events(self.c), 1)
         self.c.execute("ROLLBACK")
         self.assertEqual(self.c.execute("SELECT count(*) FROM audit_events").fetchone()[0], 1)
-        with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "cannot be deleted"):
             self.c.execute("DELETE FROM audit_events")
 
     def test_purge_commit_leaves_guard_in_place(self):
@@ -714,7 +718,7 @@ class QA_1_4_AuditPurge(unittest.TestCase):
         migrate.purge_audit_events(self.c)
         self.c.execute("COMMIT")
         audit_row(self.c)
-        with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "cannot be deleted"):
             self.c.execute("DELETE FROM audit_events")
         migrate.assert_guards(self.c)
 
@@ -722,6 +726,78 @@ class QA_1_4_AuditPurge(unittest.TestCase):
         self.c.execute("DROP TRIGGER trg_audit_events_no_delete")   # e.g. a crashed autocommit job
         with self.assertRaisesRegex(migrate.MigrationError, "guard triggers missing"):
             migrate.migrate(self.c, channel=None)
+
+
+class Schema2_AuditPrune(unittest.TestCase):
+    """Migration 0002 (user decision 2026-10-16): only audit rows older than 14 days can be deleted."""
+
+    def setUp(self):
+        self.c = fresh()
+        add_client(self.c)
+
+    def put(self, ts):
+        self.c.execute("INSERT INTO audit_events(timestamp,category,client_id,object_type,object_id,action,source) "
+                       "VALUES (?,'crm','c1','task','t','created','GUI')", (ts,))
+
+    def ago(self, **kw):
+        t = dt.datetime.now(dt.timezone.utc) - dt.timedelta(**kw)
+        return t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z"
+
+    def test_old_rows_can_be_deleted_new_rows_cannot(self):
+        self.put(self.ago(days=15)); self.put(self.ago(days=13, hours=23)); self.put(self.ago(hours=1)); self.put(self.ago(days=400))
+        self.assertEqual(self.c.execute("DELETE FROM audit_events WHERE timestamp < ?", (self.ago(days=14),)).rowcount, 2)
+        left = [r[0] for r in self.c.execute("SELECT timestamp FROM audit_events ORDER BY timestamp")]
+        self.assertEqual(len(left), 2)
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "cannot be deleted"):
+            self.c.execute("DELETE FROM audit_events")                         # even in one statement with older rows
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "cannot be deleted"):
+            self.c.execute("DELETE FROM audit_events WHERE timestamp > ?", (self.ago(days=2),))
+        self.assertEqual(self.c.execute("SELECT count(*) FROM audit_events").fetchone()[0], 2)
+
+    def test_update_stays_forbidden_even_on_old_rows(self):
+        self.put(self.ago(days=100))
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):
+            self.c.execute("UPDATE audit_events SET reason='x'")
+
+    def test_ids_are_never_reused_after_a_prune(self):
+        self.put(self.ago(days=100)); self.put(self.ago(days=100))
+        top = self.c.execute("SELECT max(id) FROM audit_events").fetchone()[0]
+        self.c.execute("DELETE FROM audit_events")
+        self.put(self.ago(minutes=1))
+        self.assertGreater(self.c.execute("SELECT max(id) FROM audit_events").fetchone()[0], top)
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):         # explicit re-use of an id is refused
+            self.c.execute("INSERT OR REPLACE INTO audit_events(id,timestamp,category,object_type,action,source) "
+                           "VALUES (?,?,'crm','task','created','GUI')", (top + 1, self.ago(minutes=2)))
+
+    def test_guard_text_is_checked_so_a_neutered_trigger_is_refused(self):
+        self.c.execute("DROP TRIGGER trg_audit_events_no_delete")
+        self.c.execute("CREATE TRIGGER trg_audit_events_no_delete BEFORE DELETE ON audit_events WHEN 0 BEGIN SELECT 1; END")
+        with self.assertRaisesRegex(migrate.MigrationError, "altered"):
+            migrate.assert_guards(self.c)
+
+    def test_upgrade_from_schema_1_keeps_data_and_installs_the_new_guard(self):
+        tmp = Path(tempfile.mkdtemp())
+        db = tmp / "v1.db"
+        conn = migrate.connect(db)
+        orig = migrate.MIGRATIONS_DIR
+        try:
+            conn.executescript((orig / "0001_initial.sql").read_text(encoding="utf-8"))    # a genuine schema-1 database
+            self.assertEqual(migrate.current_version(conn), 1)
+            add_client(conn); audit_row(conn)
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):          # schema 1: all deletes refused
+                conn.execute("DELETE FROM audit_events")
+            res = migrate.migrate(conn, migrate.make_backup_hook(tmp / "bk"), channel=None)
+            self.assertEqual((res["from"], res["to"], res["applied"]), (1, 2, ["0002_audit_prune.sql"]))
+            self.assertTrue(res["backup"] and Path(res["backup"]).exists())               # pre-migration safety backup
+            self.assertEqual(conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT count(*) FROM clients").fetchone()[0], 1)
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "cannot be deleted"):
+                conn.execute("DELETE FROM audit_events")
+            migrate.assert_guards(conn)
+        finally:
+            migrate.MIGRATIONS_DIR = orig
+            conn.close()
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class QA_1_5_BamsFreshness(unittest.TestCase):
@@ -1519,7 +1595,7 @@ class T61_ActivityTrend(unittest.TestCase):
         names = [r[1] for r in self.rows(self.c)]
         self.assertEqual(names, sorted(names))
 
-    def test_counts_all_three_sources_and_only_listed_system_events(self):
+    def test_counts_notes_only_not_system_events(self):
         self.note("n1", "a1", "2026-10-12T10:00:00.000Z")
         self.audit("a1", "task", "completed", "2026-10-12T11:00:00.000Z")
         self.audit("a1", "task", "updated", "2026-10-12T11:30:00.000Z")        # not a timeline event
@@ -1531,17 +1607,17 @@ class T61_ActivityTrend(unittest.TestCase):
                        "trigger_value) VALUES ('e1','m1','fixed_threshold','Warning','x','2026-10-11T10:00:00.000Z',"
                        "'2026-10-11T12:00:00.000Z','2026-10-12T09:00:00.000Z','closed',90)")
         s = self.series()["a1"]
-        self.assertEqual((s[13][2], s[12][2]), (4, 2))                      # note+task+upgrade+closed / opened+recovered
-        self.assertEqual(sum(p[2] for p in s), 6)
+        self.assertEqual((s[13][2], s[12][2]), (1, 0))                      # only the note; audit and alert events are Audit-log only
+        self.assertEqual(sum(p[2] for p in s), 1)
 
-    def test_deleted_note_vanishes_but_its_audit_event_counts(self):
+    def test_deleted_note_vanishes_and_its_audit_event_does_not_count(self):
         self.note("n1", "a1", "2026-10-12T10:00:00.000Z")
         self.assertEqual(self.series()["a1"][13][2], 1)
         self.c.execute("DELETE FROM notes WHERE id='n1'")
         self.audit("a1", "note", "deleted", "2026-10-12T10:30:00.000Z")
-        self.assertEqual(self.series()["a1"][13][2], 1)                     # the deletion event, as in Activity
-        self.audit("a1", "note", "created", "2026-10-12T10:31:00.000Z")     # notes appear as notes, never twice
-        self.assertEqual(self.series()["a1"][13][2], 1)
+        self.assertEqual(self.series()["a1"][13][2], 0)                     # gone; the deletion lives in the Audit log
+        self.audit("a1", "note", "created", "2026-10-12T10:31:00.000Z")
+        self.assertEqual(self.series()["a1"][13][2], 0)
 
     def test_accounts_are_independent_and_unassigned_audit_ignored(self):
         self.note("n1", "a1", "2026-10-12T10:00:00.000Z")
@@ -1590,13 +1666,12 @@ class T61_ActivityTrend(unittest.TestCase):
                         expect[i] += 1
             self.assertEqual(pts, expect, cid)
             busy += sum(pts)
-        self.assertGreater(busy, 40)
+        self.assertGreater(busy, 10)
 
     def test_uses_per_account_indexes(self):
         plan = " ".join(str(r[-1]) for r in self.c.execute("EXPLAIN QUERY PLAN " + TREND_SQL,
                                                            seed_mock.trend_params(self.DAY, UTC)))
         self.assertIn("ix_notes_client_ts", plan)
-        self.assertIn("ix_audit_client_ts", plan)
 
 
 class T61_SeedSamplesAndVerifier(unittest.TestCase):

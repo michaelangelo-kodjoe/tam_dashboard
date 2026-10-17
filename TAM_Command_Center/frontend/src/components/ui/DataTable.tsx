@@ -1,7 +1,8 @@
-import { useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ChevronRight } from 'lucide-react';
 import { cx } from '../../lib/cx';
+import { GroupHeaderRow, ToggleAllButton } from './GroupToggle';
 
 export interface Column<T> {
   key: string;
@@ -45,12 +46,22 @@ export interface DataTableProps<T> {
   chevron?: boolean;
   /** id of the element holding a visible heading (otherwise caption is sr-only) */
   className?: string;
+  /** Collapsible groups (BAMS by account). Rows keep their order inside a group; groups appear in order of first row. */
+  grouping?: {
+    groupKey: (row: T) => string;
+    groupName: (key: string, rows: T[]) => string;
+    summary: (key: string, rows: T[]) => string;
+    isOpen: (key: string) => boolean;
+    onToggle: (key: string) => void;
+    onToggleAll: () => void;
+    noun?: string;
+  };
 }
 
 /** Native table; sticky header; sortable headers (aria-sort); whole-row navigation with a real link in the primary cell. */
 export function DataTable<T>({
   caption, columns, rows, rowKey, rowHref, onRowOpen, highlight, rowClassName, sort: sortProp, onSortChange, defaultSort = null,
-  density = 'compact', empty, fill, chevron, className,
+  density = 'compact', empty, fill, chevron, className, grouping,
 }: DataTableProps<T>) {
   const [inner, setInner] = useState<SortState | null>(defaultSort);
   const sort = sortProp !== undefined ? sortProp : inner;
@@ -80,7 +91,44 @@ export function DataTable<T>({
     else onRowOpen?.(row);
   };
   const interactive = !!(rowHref || onRowOpen);
-  const colSpan = columns.length + (chevron ? 1 : 0);
+  const colSpan = columns.length + (chevron ? 1 : 0) + (grouping ? 1 : 0);
+  const groups = useMemo(() => {
+    if (!grouping) return null;
+    const m = new Map<string, T[]>();
+    for (const r of sorted) { const k = grouping.groupKey(r); const l = m.get(k); if (l) l.push(r); else m.set(k, [r]); }
+    return [...m.entries()];
+  }, [sorted, grouping]);
+  const allOpen = !!groups && groups.length > 0 && groups.every(([k]) => grouping!.isOpen(k));
+
+  const renderRow = (row: T) => {
+            const k = rowKey(row);
+            return (
+              <tr
+                key={k}
+                className={cx(interactive && 'is-clickable', highlight?.(row) && 'is-highlight', rowClassName?.(row))}
+                data-row-key={k}
+                onClick={interactive ? (e) => onRowClick(e, row) : undefined}
+              >
+                {grouping && <td className="ops-col-cb" aria-hidden="true" />}
+                {columns.map((c) => {
+                  const content = c.cell(row);
+                  let node: ReactNode = content;
+                  if (c.primary && rowHref) node = <Link className="row-link" to={rowHref(row)}>{content}</Link>;
+                  else if (c.primary && onRowOpen) node = <button type="button" className="row-link" onClick={() => onRowOpen(row)}>{content}</button>;
+                  return (
+                    <td key={c.key} className={cx(c.align === 'right' && 'is-right', (c.num || c.align === 'right') && 'num', c.mono && 'mono', c.primary && 'is-primary', c.className)}>
+                      {node}
+                    </td>
+                  );
+                })}
+                {chevron && (
+                  <td className="is-chev" aria-hidden="true">
+                    <ChevronRight size={16} strokeWidth={1.5} className="row-chev" />
+                  </td>
+                )}
+              </tr>
+            );
+  };
 
   return (
     <div className={cx('table-scroll', fill && 'table-scroll--fill', className)}>
@@ -88,6 +136,7 @@ export function DataTable<T>({
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr>
+            {grouping && <th scope="col" className="ops-col-cb"><ToggleAllButton allOpen={allOpen} onToggle={grouping.onToggleAll} noun={grouping.noun} /></th>}
             {columns.map((c) => {
               const isSorted = sort?.key === c.key;
               return (
@@ -122,32 +171,13 @@ export function DataTable<T>({
               <td colSpan={colSpan}>{empty ?? <span className="muted">Nothing to show.</span>}</td>
             </tr>
           )}
-          {sorted.map((row) => {
-            const k = rowKey(row);
+          {!groups ? sorted.map((row) => renderRow(row)) : groups.map(([gk, grows]) => {
+            const open = grouping!.isOpen(gk);
             return (
-              <tr
-                key={k}
-                className={cx(interactive && 'is-clickable', highlight?.(row) && 'is-highlight', rowClassName?.(row))}
-                data-row-key={k}
-                onClick={interactive ? (e) => onRowClick(e, row) : undefined}
-              >
-                {columns.map((c) => {
-                  const content = c.cell(row);
-                  let node: ReactNode = content;
-                  if (c.primary && rowHref) node = <Link className="row-link" to={rowHref(row)}>{content}</Link>;
-                  else if (c.primary && onRowOpen) node = <button type="button" className="row-link" onClick={() => onRowOpen(row)}>{content}</button>;
-                  return (
-                    <td key={c.key} className={cx(c.align === 'right' && 'is-right', (c.num || c.align === 'right') && 'num', c.mono && 'mono', c.primary && 'is-primary', c.className)}>
-                      {node}
-                    </td>
-                  );
-                })}
-                {chevron && (
-                  <td className="is-chev" aria-hidden="true">
-                    <ChevronRight size={16} strokeWidth={1.5} className="row-chev" />
-                  </td>
-                )}
-              </tr>
+              <Fragment key={`g:${gk}`}>
+                <GroupHeaderRow colSpan={colSpan} open={open} onToggle={() => grouping!.onToggle(gk)} name={grouping!.groupName(gk, grows)} summary={grouping!.summary(gk, grows)} />
+                {open && grows.map((row) => renderRow(row))}
+              </Fragment>
             );
           })}
         </tbody>

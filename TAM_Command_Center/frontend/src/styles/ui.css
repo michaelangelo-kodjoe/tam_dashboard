@@ -360,3 +360,37 @@ kbd { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--mu
   .overlay__foot { flex-wrap: wrap; }
   .overlay__foot .btn { flex: 1 1 auto; }
 }
+
+/* Bloomberg Terminal links ({command}) */
+.tlink { color: var(--info); text-decoration: underline; text-underline-offset: 2px; border-radius: var(--r-sm); }
+.tlink:hover { color: var(--accent); }
+.tlink:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* Read-only task popup */
+.tv { display: flex; flex-direction: column; gap: var(--sp-4); }
+.tv-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-4); margin: 0; }
+.tv-grid dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.tv-notes__h { margin: 0 0 var(--sp-2); }
+.tv-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; }
+.tv-spacer { flex: 1; }
+@media (max-width: 599px) { .tv-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Audit log */
+.au { display: flex; flex-direction: column; gap: var(--sp-3); }
+.au-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.au-search { max-width: 260px; }
+.au-date { display: inline-flex; align-items: center; gap: 6px; }
+.au-table th, .au-table td { white-space: normal; vertical-align: top; padding: 6px 8px; height: auto; }
+.au-toggle { white-space: nowrap; }
+.au-detail td { background: var(--surface-2); padding: var(--sp-3) var(--sp-4); }
+.au-detail__grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sp-4); }
+.au-detail p { margin: 4px 0 0; }
+.au-kv { margin: 4px 0 0; display: grid; gap: 4px; }
+.au-kv > div { display: flex; gap: var(--sp-2); }
+.au-kv dt { flex: none; min-width: 90px; }
+.au-kv dd { margin: 0; overflow-wrap: anywhere; }
+.au-pager { display: flex; align-items: center; gap: var(--sp-2); }
+@media (max-width: 599px) { .au-detail__grid { grid-template-columns: 1fr; } .au-search { max-width: none; flex: 1 1 100%; } }
+.pt-backupnote { margin: 0 0 var(--sp-3); }
+.au-retention, .lg-note { margin: 0; }
+.lg-actions { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3); }

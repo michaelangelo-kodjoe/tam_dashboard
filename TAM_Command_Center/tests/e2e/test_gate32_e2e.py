@@ -169,8 +169,9 @@ def test_note_crud(c, acct, ntype, filt, affects_last):
     assert r.status_code in (409, 422)
     r = post(c, "/api/note/delete", {"id": n["id"], "confirm": True})
     assert r.status_code == 200 and any(s["type"] == "backup_created" for s in r.json()["side_effects"])
-    sysf = c.get(f"/api/client/{cid}/activity", params={"filter": "system"}).json()["items"]
-    assert any(e["sentence"].startswith(f"{ntype} deleted") for e in sysf), sysf
+    assert c.get(f"/api/client/{cid}/activity", params={"filter": "system"}).json()["items"] == []     # Audit log holds it
+    aud = c.get("/api/audit", params={"object_type": "note", "action": "deleted"}).json()["items"]
+    assert any(e["summary"].startswith(f"{ntype} deleted") for e in aud), aud
     assert not [e for e in c.get(f"/api/client/{cid}/activity", params={"filter": filt}).json()["items"]
                 if e["kind"] == "note"]
 
@@ -192,16 +193,13 @@ def test_activity_filters_and_system_distinct(c, acct):
     post(c, "/api/task/save", {"task": "t", "client_id": cid})
     allv = c.get(f"/api/client/{cid}/activity", params={"filter": "all"}).json()["items"]
     kinds = {e["kind"] for e in allv}
-    assert kinds == {"note", "system"}
-    sysv = c.get(f"/api/client/{cid}/activity", params={"filter": "system"}).json()["items"]
-    assert sysv and all(e["kind"] == "system" for e in sysv)
-    assert all("subject" not in e for e in sysv)
+    assert kinds == {"note"}                                                  # tasks/contacts no longer appear in Activity
+    assert c.get(f"/api/client/{cid}/activity", params={"filter": "system"}).json()["items"] == []
     for f, t in (("meeting", "Meeting Note"), ("call", "Call Note"), ("general", "General Note")):
         items = c.get(f"/api/client/{cid}/activity", params={"filter": f}).json()["items"]
         assert [e["note_type"] for e in items] == [t]
     # system entries are read-only: no route edits them
-    sid = sysv[0]["entry_key"]
-    assert post(c, "/api/note/delete", {"id": sid.split(":")[-1], "confirm": True}).status_code == 404
+    assert post(c, "/api/note/delete", {"id": "a:000000000001", "confirm": True}).status_code == 404
     assert c.get(f"/api/client/nope/activity").status_code == 404
     # ordering newest first
     ts = [e["ts"] for e in allv]

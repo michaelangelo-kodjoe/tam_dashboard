@@ -61,7 +61,6 @@
 .later__tab:hover { color: var(--text); background: var(--hover-row); }
 .later__tab.is-selected { color: var(--text); border-bottom-color: var(--accent); }
 .later__tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.later__hint { margin-left: auto; white-space: nowrap; padding-left: var(--sp-3); }
 .later__body { border-top: 1px solid var(--border); }
 .later__more { padding: 8px 12px; border-top: 1px solid var(--border); }
 .later__body .table { font-size: var(--fs-sm); }
@@ -76,3 +75,6 @@
   .triage__detail { position: static; }
   .pagehead__actions { flex-wrap: wrap; }
 }
+.trow__note { font-style: normal; }
+.detail__notes { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--border); }
+.detail__notes-body { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

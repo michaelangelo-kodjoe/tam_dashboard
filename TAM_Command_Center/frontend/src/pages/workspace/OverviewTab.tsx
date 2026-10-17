@@ -8,10 +8,10 @@ import { Timeline } from '../../components/activity/Timeline';
 import { taskDrawerLink } from '../../lib/links';
 import { topOpenTasks } from '../../lib/tasks';
 import { useApp, useQuery } from '../../store/DataContext';
-import { DueHistogram, TimelineTrack } from '../../components/ui/Instruments';
+import { TimelineTrack } from '../../components/ui/Instruments';
 import { TopItem } from './TopItem';
 import { ServerTiles } from './ServerTiles';
-import { dueHistogram, serverSummary, timelineMarkers, topItemFor } from '../../lib/instruments';
+import { serverSummary, timelineMarkers, topItemFor } from '../../lib/instruments';
 import type { QueryResult } from '../../store/DataContext';
 import type { AccountSummary, Infrastructure, Task, TodayData } from '../../types';
 import { accountPath } from '../../lib/links';
@@ -23,7 +23,6 @@ export function OverviewTab({ account, infra, todayQ }: { account: AccountSummar
   const mine = state.tasks.filter((t) => t.client_id === account.id);
   const top = topOpenTasks(mine, today, 8);
   const topItem = todayQ.data ? topItemFor(todayQ.data.queue, account.id) : null;
-  const bins = dueHistogram(mine, today);
   const tiles = infra.data?.servers ?? [];
   const sum = serverSummary(tiles);
   const markers = infra.data ? timelineMarkers(infra.data.upgrades, today) : [];
@@ -44,7 +43,6 @@ export function OverviewTab({ account, infra, todayQ }: { account: AccountSummar
         title="Open tasks"
         actions={<Link className="more-link" to={accountPath(account.id, 'tasks')}>View all ({account.open_tasks}) <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" /></Link>}
       >
-        <DueHistogram bins={bins} today={today} />
         <DataTable
           caption={`Top open tasks for ${account.name}`}
           columns={cols}

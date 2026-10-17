@@ -39,7 +39,7 @@ export function isISODate(s: string): boolean {
 
 /** Local calendar date (YYYY-MM-DD) of an ISO instant, in the browser's timezone (D-06). */
 export function instantLocalDate(instant: string): string {
-  const d = new Date(instant);
+  const d = parseInstant(instant);
   return localToday(d);
 }
 
@@ -57,26 +57,48 @@ export function formatDateLong(iso: string): string {
   return `${WEEKDAYS[d.getUTCDay()]} ${pad2(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]}`;
 }
 
+/** Legacy server setting (`local` | `gmt`). Timestamps are ALWAYS shown in the browser's local time zone; `gmt` is ignored. */
 export type TimeDisplay = 'local' | 'gmt';
 
-/** `12 Oct 14:05` local, or `12 Oct 18:05 GMT`. 24-hour clock. */
-export function formatTimestamp(instant: string, tz: TimeDisplay = 'local', withYearIfOld?: string): string {
-  const d = new Date(instant);
-  if (Number.isNaN(d.getTime())) return '';
-  const gmt = tz === 'gmt';
-  const day = gmt ? d.getUTCDate() : d.getDate();
-  const mon = gmt ? d.getUTCMonth() : d.getMonth();
-  const yr = gmt ? d.getUTCFullYear() : d.getFullYear();
-  const hh = gmt ? d.getUTCHours() : d.getHours();
-  const mm = gmt ? d.getUTCMinutes() : d.getMinutes();
-  const showYear = withYearIfOld ? yr !== parseDate(withYearIfOld).getUTCFullYear() : false;
-  return `${pad2(day)} ${MONTHS[mon]}${showYear ? ' ' + yr : ''} ${pad2(hh)}:${pad2(mm)}${gmt ? ' GMT' : ''}`;
+// ---- 12 / 24 hour clock (user preference, default 12-hour am/pm) ------------------------------
+export type TimeFormat = '12h' | '24h';
+const FMT_KEY = 'tam.timeFormat';
+let timeFormat: TimeFormat = (() => { try { return localStorage.getItem(FMT_KEY) === '24h' ? '24h' : '12h'; } catch { return '12h'; } })();
+const listeners = new Set<() => void>();
+export function getTimeFormat(): TimeFormat { return timeFormat; }
+export function setTimeFormat(f: TimeFormat): void {
+  timeFormat = f;
+  try { localStorage.setItem(FMT_KEY, f); } catch { /* not remembered */ }
+  listeners.forEach((l) => l());
+}
+export function subscribeTimeFormat(l: () => void): () => void { listeners.add(l); return () => { listeners.delete(l); }; }
+
+/** Server instants are UTC. A string without a zone ("2026-10-16 13:30:00" or "...T13:30:00") is treated as UTC. */
+export function parseInstant(s: string): Date {
+  const v = s.trim();
+  const naive = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(v);
+  return new Date(naive ? `${v.replace(' ', 'T')}Z` : v);
 }
 
-export function formatClock(now: Date, tz: TimeDisplay): string {
-  const hh = tz === 'gmt' ? now.getUTCHours() : now.getHours();
-  const mm = tz === 'gmt' ? now.getUTCMinutes() : now.getMinutes();
-  return `${pad2(hh)}:${pad2(mm)}${tz === 'gmt' ? ' GMT' : ' Local'}`;
+/** `9:30 AM` or `09:30` (local), optionally with seconds. */
+export function timeOfDay(d: Date, seconds = false, fmt: TimeFormat = timeFormat): string {
+  const h = d.getHours();
+  const mm = pad2(d.getMinutes());
+  const ss = seconds ? `:${pad2(d.getSeconds())}` : '';
+  if (fmt === '24h') return `${pad2(h)}:${mm}${ss}`;
+  return `${h % 12 || 12}:${mm}${ss} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/** `12 Oct 2:05 PM` in the user's local time zone (`12 Oct 14:05` in 24-hour mode). Second argument kept for old callers; ignored. */
+export function formatTimestamp(instant: string, _tz?: TimeDisplay, withYearIfOld?: string): string {
+  const d = parseInstant(instant);
+  if (Number.isNaN(d.getTime())) return '';
+  const showYear = withYearIfOld ? d.getFullYear() !== parseDate(withYearIfOld).getUTCFullYear() : false;
+  return `${pad2(d.getDate())} ${MONTHS[d.getMonth()]}${showYear ? ' ' + d.getFullYear() : ''} ${timeOfDay(d)}`;
+}
+
+export function formatClock(now: Date, _tz?: TimeDisplay): string {
+  return `${timeOfDay(now)} Local`;
 }
 
 /** Relative label from days_delta (future positive). Always shown next to the absolute date. */

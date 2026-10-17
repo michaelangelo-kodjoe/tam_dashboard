@@ -137,11 +137,16 @@ class Monitor:
                     q = quotes.get(m["ticker"])
                     if q is None:
                         continue
-                    prev = parse(m["last_source_update"]) if m["last_source_update"] else None
-                    if prev is not None and q.source_update <= prev:
+                    # Only a clock that did not advance is skipped (a frozen DEV mock clock, or a clock stepped back):
+                    # the seeded timestamps are then in the "future" and writing older ones would break the schema's
+                    # ordering checks (QA-E5-3).
+                    last = max((parse(x) for x in (m["last_received"], m["last_source_update"]) if x), default=None)
+                    if last is not None and now <= last:
                         continue
-                    updated += 1
-                    self._ingest(conn, m, q, now, settings, pending)
+                    # Every successful valid observation is ingested: it refreshes last_received and reaches alert
+                    # evaluation even when the value did not change (an unchanged value is not a missed poll).
+                    if self._ingest(conn, m, q, now, settings, pending):
+                        updated += 1
                 self._daily_prune(conn, now)
             self._deliver(conn, pending, settings)
         self.last_poll_ok, self.last_error = True, None
@@ -179,18 +184,26 @@ class Monitor:
 
     # ------------------------------------------------------------ ingest one new quote
     def _ingest(self, conn: Any, m: Dict[str, Any], q: Any, now: _dt.datetime, settings: Dict[str, Any],
-                pending: List[Dict[str, Any]]) -> None:
+                pending: List[Dict[str, Any]]) -> bool:
+        """One successful valid observation. -> True when the VALUE changed.
+
+        `last_received` (communication freshness: Live/Delayed/Stale) = now on every observation.
+        `last_source_update` (value-change time) and the change-history sample advance only when the value changed.
+        Alert evaluation runs on every observation so consecutive-observation rules count unchanged values."""
         value = float(q.value)
         now_s = fmt(now)
         highs = {k: m[k] for k in ("high_30", "high_60", "high_90")}
-        fresh = (now - q.source_update).total_seconds() <= m["stale_after_seconds"]
-        conn.execute("UPDATE bams_metrics SET current_value = :v, last_source_update = :s, last_received = :r WHERE id = :i",
-                     {"v": value, "s": fmt(q.source_update), "r": now_s, "i": m["metric_id"]})
-        repo.insert_samples(conn, [{"metric_id": m["metric_id"], "sampled_at": now_s,
-                                    "source_update": fmt(q.source_update), "value": value}])
-        if fresh:
-            for rule in repo.rules_for_metric(conn, m["metric_id"], enabled_only=True):
-                self._evaluate(conn, m, rule, value, highs, now, settings, pending)
+        prev = m["current_value"]
+        changed_value = prev is None or m["last_source_update"] is None or value != float(prev)
+        if changed_value:
+            conn.execute("UPDATE bams_metrics SET current_value = :v, last_source_update = :s, last_received = :r WHERE id = :i",
+                         {"v": value, "s": fmt(q.source_update or now), "r": now_s, "i": m["metric_id"]})
+            repo.insert_samples(conn, [{"metric_id": m["metric_id"], "sampled_at": now_s,
+                                        "source_update": fmt(q.source_update or now), "value": value}])
+        else:
+            conn.execute("UPDATE bams_metrics SET last_received = :r WHERE id = :i", {"r": now_s, "i": m["metric_id"]})
+        for rule in repo.rules_for_metric(conn, m["metric_id"], enabled_only=True):
+            self._evaluate(conn, m, rule, value, highs, now, settings, pending)
         # highs are updated AFTER evaluation so "exceeds high" compares with the prior high
         day = now_s[:10]
         new = dict(m)
@@ -202,6 +215,7 @@ class Monitor:
                 changed = True
         if changed:
             repo.set_highs(conn, m["metric_id"], new)
+        return changed_value
 
     def _evaluate(self, conn: Any, m: Dict[str, Any], rule: Dict[str, Any], value: float, highs: Dict[str, Any],
                   now: _dt.datetime, settings: Dict[str, Any], pending: List[Dict[str, Any]]) -> None:

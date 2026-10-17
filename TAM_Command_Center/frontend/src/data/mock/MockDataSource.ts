@@ -7,7 +7,7 @@ import type {
   AccountLoadRow,
   ActivityEntry,
   ActivityPage,
-  ActivityTrend,
+ 
   AppState,
   BackupInfo,
   Contact,
@@ -53,6 +53,7 @@ import { rankToday } from './today';
 import { MockBams } from './mockBams';
 import { MockOperations } from './mockOperations';
 import { MockPortability } from './mockPortability';
+import type { AuditFacets, AuditPage, AuditQuery } from '../../types';
 import type { DbRestorePreview, DbRestoreResult, RestoreIssueQuery, RestorePlan, RestoreResult } from '../../portTypes';
 import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../../opsTypes';
 import { MockBamsImport, bamsTemplateRows, parseBamsGrid } from './mockBamsImport';
@@ -61,7 +62,7 @@ import type {
   BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRule, BamsRuleInput, BamsSettings,
   BamsState, BamsStateQuery, BamsTrend, TrendRange,
 } from '../../bamsTypes';
-import { browserLocalMidnight, bucketCounts, dayProgress, trendBounds, type LocalMidnight } from './progress';
+import { browserLocalMidnight, dayProgress, type LocalMidnight } from './progress';
 
 export interface MockOptions {
   /** Local calendar date to rebase to. Defaults to the real local date. */
@@ -82,12 +83,6 @@ export interface MockOptions {
 }
 
 const VERSION = '0.1.0-dev';
-const SYSTEM_AUDIT_ACTIONS: Record<string, string[]> = {
-  task: ['created', 'completed', 'reopened', 'archived', 'deleted'],
-  contact: ['created', 'updated', 'deleted', 'primary_changed'],
-  note: ['deleted'],
-  client: ['next_contact_changed', 'status_changed'],
-};
 const RECENT_AUDIT_ACTIONS: Record<string, string[]> = {
   note: ['created', 'deleted'],
   task: ['created', 'completed', 'reopened', 'archived', 'deleted'],
@@ -297,29 +292,6 @@ export class MockDataSource implements DataSource {
     };
   }
 
-  async getActivityTrend(days = 14): Promise<ActivityTrend> {
-    await this.enter();
-    const bounds = trendBounds(this.today, days, this.midnight());
-    const byClient = new Map<string, string[]>();
-    const push = (id: string | null, ts: string) => {
-      if (id == null) return;
-      const list = byClient.get(id) ?? [];
-      list.push(ts);
-      byClient.set(id, list);
-    };
-    for (const n of this.t.notes) push(n.client_id, n.timestamp);
-    for (const a of this.t.audit_events) {
-      if (a.object_type === 'server_upgrade' || SYSTEM_AUDIT_ACTIONS[a.object_type]?.includes(a.action)) push(a.client_id, a.timestamp);
-    }
-    for (const b of this.bamsEvents()) push(b.client_id, b.ts);
-    const series: Record<string, number[]> = {};
-    for (const c of this.t.clients) {
-      if (c.status !== 'Active') continue;
-      series[c.id] = bucketCounts(byClient.get(c.id) ?? [], bounds);
-    }
-    return { today: this.today, days, series };
-  }
-
   private recentChanges(limit: number): RecentChange[] {
     const clients = new Map<string, string>(this.t.clients.map((c) => [c.id, c.name]));
     const rows: RecentChange[] = [];
@@ -370,26 +342,6 @@ export class MockDataSource implements DataSource {
       if (n.client_id !== clientId || !wantNote(n.note_type)) continue;
       if (!has(n.subject, n.body, n.action_items)) continue;
       entries.push({ entry_kind: 'note', entry_key: `n:${n.id}`, ts: n.timestamp, note: toNote(n) });
-    }
-    if (q.filter === 'all' || q.filter === 'system') {
-      for (const a of this.t.audit_events) {
-        if (a.client_id !== clientId) continue;
-        const ok = a.object_type === 'server_upgrade' || SYSTEM_AUDIT_ACTIONS[a.object_type]?.includes(a.action);
-        if (!ok) continue;
-        if (!has(a.object_label, a.old_value, a.new_value)) continue;
-        entries.push({
-          entry_kind: 'system', entry_key: `a:${String(a.id).padStart(12, '0')}`, ts: a.timestamp,
-          object_type: a.object_type, object_id: a.object_id, sentence: auditSentence(a, this.today),
-          source: a.source, severity: null, server_name: a.object_type === 'server_upgrade' ? a.object_label : null,
-        });
-      }
-      for (const b of this.bamsEvents()) {
-        if (b.client_id !== clientId || !has(b.message, b.server)) continue;
-        entries.push({
-          entry_kind: 'system', entry_key: b.entry_key, ts: b.ts, object_type: 'bams_alert_event', object_id: b.event_id,
-          sentence: bamsSentence(b.what, b.subject, b.severity), source: 'System', severity: b.severity, server_name: b.server,
-        });
-      }
     }
     entries.sort((a, b) => (a.ts === b.ts ? (a.entry_key < b.entry_key ? 1 : -1) : a.ts < b.ts ? 1 : -1));
     let start = 0;
@@ -450,7 +402,7 @@ export class MockDataSource implements DataSource {
 
   async createBackup(): Promise<BackupInfo> {
     await this.enter();
-    const b: BackupInfo = { name: `tam_manual_${Date.now()}.db`, reason: 'manual', size_bytes: 1_048_576, created_at: this.now() };
+    const b: BackupInfo = { name: `tam_manual_${Date.now()}.db`, reason: 'manual', kind: 'manual', size_bytes: 1_048_576, created_at: this.now() };
     this.backups.unshift(b);
     this.audit({ client_id: null, category: 'data', object_type: 'backup', object_id: b.name, object_label: b.name, action: 'created', new: { reason: 'manual' } });
     this.log('INFO', `Manual backup ${b.name}`);
@@ -459,7 +411,7 @@ export class MockDataSource implements DataSource {
 
   async listBackups(): Promise<BackupInfo[]> {
     await this.enter();
-    return this.backups.slice(0, 20);
+    return this.backups.slice(0, 20).map((b) => ({ ...b, kind: b.kind ?? (b.reason === 'weekly' ? 'weekly' : b.reason === 'manual' ? 'manual' : 'safety') }));
   }
 
   // ------------------------------------------------------------------ accounts
@@ -965,4 +917,53 @@ export class MockDataSource implements DataSource {
   async previewBackupRestore(name: string): Promise<DbRestorePreview> { await this.enter(); return this.port.fromBackup(name); }
   async cancelDatabaseRestore(id: string): Promise<void> { await this.enter(); this.port.cancelDb(id); }
   async applyDatabaseRestore(input: { restore_id: string; confirm: string }): Promise<DbRestoreResult> { await this.enter(); return this.port.applyDb(input); }
+
+  // ------------------------------------------------------------------ Audit log (contract 18.2)
+
+  private auditRows(q: AuditQuery) {
+    const clients = new Map<string, string>(this.t.clients.map((c) => [c.id, c.name]));
+    const needle = q.q?.trim().toLowerCase();
+    const from = q.from ? (q.from.length === 10 ? `${q.from}T00:00:00.000Z` : q.from) : null;
+    const to = q.to ? (q.to.length === 10 ? `${q.to}T23:59:59.999Z` : q.to) : null;
+    return [...this.t.audit_events]
+      .sort((a, b) => (a.timestamp === b.timestamp ? b.id - a.id : a.timestamp < b.timestamp ? 1 : -1))
+      .filter((a) =>
+        (!from || a.timestamp >= from) && (!to || a.timestamp <= to) && (!q.category || a.category === q.category) && (!q.object_type || a.object_type === q.object_type) &&
+        (!q.action || a.action === q.action) && (!q.source || a.source === q.source) && (!q.client_id || a.client_id === q.client_id) &&
+        (!needle || [a.object_label, a.reason, a.action, a.object_type, a.client_id ? clients.get(a.client_id) : null].some((v) => v && String(v).toLowerCase().includes(needle))))
+      .map((a) => ({
+        id: a.id, timestamp: a.timestamp, category: a.category, client_id: a.client_id ?? null, client_name: a.client_id ? clients.get(a.client_id) ?? null : null,
+        object_type: a.object_type, object_id: a.object_id, object_label: a.object_label ?? null, action: a.action, source: a.source, reason: a.reason ?? null,
+        summary: auditSentence(a, this.today), old_value: a.old_value ? (JSON.parse(a.old_value) as Record<string, unknown>) : null, new_value: a.new_value ? (JSON.parse(a.new_value) as Record<string, unknown>) : null,
+      }));
+  }
+  private retention() {
+    return { retention_days: 14, interval_days: 14, last_pruned_at: null, next_due_at: new Date(Date.parse(this.now()) + 10 * 86_400_000).toISOString() };
+  }
+  async downloadLogs(file: 'zip' | 'current'): Promise<DownloadedFile> {
+    await this.enter();
+    return file === 'zip'
+      ? { blob: new Blob(['PK mock zip'], { type: 'application/zip' }), filename: 'tam_logs_mock.zip' }
+      : { blob: new Blob([this.logs.join('\n')], { type: 'text/plain' }), filename: 'tam_command_center_mock.log' };
+  }
+  async getAudit(q: AuditQuery): Promise<AuditPage> {
+    await this.enter();
+    const all = this.auditRows(q);
+    const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
+    const offset = q.offset ?? 0;
+    return { total: all.length, limit, offset, has_more: offset + limit < all.length, items: all.slice(offset, offset + limit), retention: this.retention() };
+  }
+  async getAuditFacets(): Promise<AuditFacets> {
+    await this.enter();
+    const d = (k: string) => [...new Set(this.t.audit_events.map((a) => a[k] as string).filter(Boolean))].sort();
+    return { categories: d('category'), object_types: d('object_type'), actions: d('action'), sources: d('source'), retention: this.retention() };
+  }
+  async exportAudit(q: AuditQuery): Promise<DownloadedFile> {
+    await this.enter();
+    const rows = this.auditRows(q);
+    if (rows.length > 50_000) throw new DataSourceError('payload_too_large', 'More than 50,000 rows match. Narrow the filters.', undefined, 413);
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = ['id,timestamp,category,account,object_type,object_label,action,source,reason,summary', ...rows.map((r) => [r.id, r.timestamp, r.category, r.client_name, r.object_type, r.object_label, r.action, r.source, r.reason, r.summary].map(esc).join(','))].join('\n');
+    return { blob: new Blob([csv], { type: 'text/csv' }), filename: 'tam_audit_mock.csv' };
+  }
 }

@@ -11,6 +11,7 @@ import { Tooltip } from '../../components/ui/Tooltip';
 import { RowStatus, SimulatedBadge, Spark, Value } from '../../components/bams/BamsBits';
 import { useApp, useData, useQuery } from '../../store/DataContext';
 import { useDebounced, useDocumentTitle } from '../../lib/hooks';
+import { groupSummary, hasActiveAlert, loadGroupState, saveGroupState } from '../../lib/bamsGroups';
 import { formatAge, formatSeconds, formatTime } from '../../lib/bams';
 import { cx } from '../../lib/cx';
 import { BAMS_VIEWS, type BamsRow, type BamsSortKey, type BamsState, type BamsStateQuery, type BamsStatusFilter, type BamsView } from '../../bamsTypes';
@@ -51,6 +52,8 @@ export function DashboardPage() {
   const [dialog, setDialog] = useState<null | { objectId?: string }>(null);
   const [busy, setBusy] = useState(false);
   const openId = sp.get('open');
+  const [manual, setManual] = useState<Record<string, boolean>>(loadGroupState);
+  const [collapsedWhileFiltered, setCollapsedWhileFiltered] = useState<Set<string>>(new Set());
 
   const patch = (changes: Record<string, string | null>, opts: { keepOpen?: boolean } = {}) => {
     const next = new URLSearchParams(sp);
@@ -90,6 +93,31 @@ export function DashboardPage() {
     { key: 'status', header: 'Status', sort: () => 0, className: 'bm-c-wide', cell: (r) => <RowStatus row={r} /> },
   ];
   const sort = { key: query.sort ?? 'status', dir: query.dir ?? 'asc' } as const;
+
+  const rows = data?.rows ?? [];
+  const byAccount = useMemo(() => {
+    const m = new Map<string, BamsRow[]>();
+    for (const r of rows) { const l = m.get(r.object.client_id); if (l) l.push(r); else m.set(r.object.client_id, [r]); }
+    return m;
+  }, [rows]);
+  const active = !!(query.view && query.view !== 'all') || filtered;
+  const isOpen = (id: string) => (active ? !collapsedWhileFiltered.has(id) : id in manual ? manual[id] : hasActiveAlert(byAccount.get(id) ?? []));
+  const setOpen = (id: string, open: boolean) => {
+    if (active) setCollapsedWhileFiltered((c) => { const n = new Set(c); if (open) n.delete(id); else n.add(id); return n; });
+    else setManual((m) => { const n = { ...m, [id]: open }; saveGroupState(n); return n; });
+  };
+  const toggleAll = () => {
+    const ids = [...byAccount.keys()];
+    const allOpen = ids.every(isOpen);
+    if (active) setCollapsedWhileFiltered(allOpen ? new Set(ids) : new Set());
+    else setManual((m) => { const n = { ...m, ...Object.fromEntries(ids.map((i) => [i, !allOpen])) }; saveGroupState(n); return n; });
+  };
+  const grouping = {
+    groupKey: (r: BamsRow) => r.object.client_id,
+    groupName: (_k: string, g: BamsRow[]) => g[0].object.client_name,
+    summary: (_k: string, g: BamsRow[]) => groupSummary(g),
+    isOpen, onToggle: (k: string) => setOpen(k, !isOpen(k)), onToggleAll: toggleAll, noun: 'accounts',
+  };
 
   const accountOpts: SelectOption[] = data ? data.filters.accounts.map((a) => ({ value: a.id, label: a.name })) : [];
   if (query.account && query.account.includes(',')) accountOpts.push({ value: query.account, label: `${query.account.split(',').length} accounts` });
@@ -173,6 +201,7 @@ export function DashboardPage() {
                 caption="Monitored metrics"
                 columns={cols}
                 rows={data.rows}
+                grouping={grouping}
                 rowKey={(r) => r.id}
                 onRowOpen={(r) => patch({ open: r.id }, { keepOpen: true })}
                 rowClassName={(r) => cx(r.display_status === 'open' && 'bm-row--open', r.display_status === 'recovered' && 'bm-row--recovered', r.id === openId && 'is-highlight')}

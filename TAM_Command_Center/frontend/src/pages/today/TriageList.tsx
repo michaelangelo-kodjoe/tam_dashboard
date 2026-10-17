@@ -4,6 +4,8 @@ import type { QueueItem } from '../../types';
 import type { TimeDisplay } from '../../lib/dates';
 import { TIER_TONE, groupByTier, itemKey, rowWhen, type Show } from '../../lib/triage';
 import { cx } from '../../lib/cx';
+import { useApp } from '../../store/DataContext';
+import { TerminalLinkText } from '../../components/ui/TerminalLinkText';
 
 export const optionId = (i: number) => `triage-opt-${i}`;
 
@@ -21,6 +23,13 @@ export function TriageList({ items, total, show, selected, onSelect, onOpen, onV
   today: string;
   tz: TimeDisplay;
 }) {
+  const { state } = useApp();
+  /** One-line task notes preview (first non-empty line); null for other kinds. */
+  const rowNotes = (i: QueueItem): string | null => {
+    if (i.kind !== 'task') return null;
+    const n = state.tasks.find((t) => t.id === i.id)?.notes;
+    return n ? n.split('\n').find((l) => l.trim())?.trim() ?? null : null;
+  };
   const ref = useRef<HTMLDivElement>(null);
 
   const handle = (key: string): boolean => {
@@ -78,6 +87,7 @@ export function TriageList({ items, total, show, selected, onSelect, onOpen, onV
         <span className="trow__text">
           <b className="truncate" title={i.title}>{i.title}</b>
           <small className="truncate">{i.client_name ?? 'No account'}</small>
+          {rowNotes(i) && <small className="truncate trow__note"><TerminalLinkText text={rowNotes(i)} /></small>}
         </span>
         <span className={cx('trow__when num', `when--${when.tone}`)}>{when.text}</span>
       </div>

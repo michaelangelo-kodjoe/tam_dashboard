@@ -64,4 +64,13 @@ describe('portability adapter', () => {
     expect(e).toMatchObject({ code: 'payload_too_large' });
     expect(calls).toHaveLength(0);
   });
+  it('logs download uses ?file=, reads X-Log-Files-Omitted; audit pages carry retention', async () => {
+    const calls = stub((url) => (url.startsWith('/api/logs') ? { body: {}, headers: { 'Content-Disposition': 'attachment; filename="tam_logs_20261016.zip"', 'X-Log-Files-Omitted': '3' } } : { body: { ok: true, total: 0, limit: 50, offset: 0, has_more: false, items: [], retention: { retention_days: 14, interval_days: 14, last_pruned_at: null, next_due_at: '2026-10-30T00:00:00.000Z' } } }));
+    const ds = new ApiDataSource();
+    const f = await ds.downloadLogs('zip');
+    await ds.downloadLogs('current');
+    expect(calls.map((c) => c.url).slice(0, 2)).toEqual(['/api/logs/download?file=zip', '/api/logs/download?file=current']);
+    expect(f).toMatchObject({ filename: 'tam_logs_20261016.zip', omitted: 3 });
+    expect((await ds.getAudit({})).retention).toMatchObject({ retention_days: 14 });
+  });
 });

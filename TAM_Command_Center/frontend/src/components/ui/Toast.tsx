@@ -11,6 +11,8 @@ export interface ToastInput {
   detail?: string;
   /** One optional action, e.g. "View" */
   action?: { label: string; to: string };
+  /** One optional button action (e.g. Undo); dismisses the toast. Stays longer than a plain toast. */
+  onAction?: { label: string; run: () => void };
 }
 interface ToastItem extends ToastInput { id: number; kind: ToastKind }
 
@@ -20,6 +22,7 @@ export const useToast = () => useContext(ToastCtx);
 
 const MAX = 3;
 const TTL = 4000;
+const UNDO_TTL = 10000;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
@@ -51,7 +54,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 function ToastView({ t, onDismiss }: { t: ToastItem; onDismiss: (id: number) => void }) {
   useEffect(() => {
     if (t.kind === 'error') return; // errors stay until dismissed
-    const h = setTimeout(() => onDismiss(t.id), TTL);
+    const h = setTimeout(() => onDismiss(t.id), t.onAction ? UNDO_TTL : TTL);
     return () => clearTimeout(h);
   }, [t.id, t.kind, onDismiss]);
   const Icon = t.kind === 'success' ? CheckCircle2 : t.kind === 'error' ? AlertTriangle : Info;
@@ -67,6 +70,7 @@ function ToastView({ t, onDismiss }: { t: ToastItem; onDismiss: (id: number) => 
           {t.action.label}
         </Link>
       )}
+      {t.onAction && <Button size="sm" variant="ghost" onClick={() => { onDismiss(t.id); t.onAction!.run(); }}>{t.onAction.label}</Button>}
       <Button variant="icon" size="sm" aria-label="Dismiss notification" onClick={() => onDismiss(t.id)} icon={<X size={14} strokeWidth={1.5} />} />
     </div>
   );

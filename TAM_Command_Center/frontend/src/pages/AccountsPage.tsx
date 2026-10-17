@@ -8,7 +8,7 @@ import { StatusBadge } from '../components/ui/Badges';
 import { EmptyState } from '../components/ui/Feedback';
 import { Button } from '../components/ui/Button';
 import { ImportWizard } from '../components/import/ImportWizard';
-import { DatePill, DotRow, Sparkline, StackBar, type InstrumentTone } from '../components/ui/Instruments';
+import { DatePill, DotRow, type InstrumentTone } from '../components/ui/Instruments';
 import { useApp, useQuery } from '../store/DataContext';
 import type { AccountSummary } from '../types';
 import { accountPath } from '../lib/links';
@@ -32,7 +32,6 @@ export function AccountsPage() {
   const [importing, setImporting] = useState(false);
   const [sort, setSort] = useState<SortState | null>({ key: 'overdue', dir: 'desc' });
   const todayQ = useQuery('today', (ds) => ds.getToday());
-  const trendQ = useQuery('activity-trend', (ds) => ds.getActivityTrend(14));
 
   const meters = useMemo(() => meterByClient(state.tasks, today), [state.tasks, today]);
   const queue = todayQ.data?.queue ?? null;
@@ -76,7 +75,6 @@ export function AccountsPage() {
         return (
           <span className="loadcell" title={meterLabel(m)}>
             <span className={cx('num sm', m.open === 0 && 'subtle')}>{m.open} open</span>
-            <StackBar meter={m} thin />
           </span>
         );
       },
@@ -96,15 +94,6 @@ export function AccountsPage() {
     },
     { key: 'upgrade', header: 'Next upgrade', sort: (a, b) => cmpStr(a.next_upgrade, b.next_upgrade), cell: (a) => <DatePill pill={pillOf(a.next_upgrade, today)} /> },
     { key: 'contact', header: 'Next contact', sort: (a, b) => cmpStr(a.next_contact, b.next_contact), cell: (a) => <DatePill pill={pillOf(a.next_contact, today)} /> },
-    {
-      key: 'activity', header: 'Activity',
-      cell: (a) => {
-        const series = trendQ.data?.series[a.id];
-        if (!series) return <span className="subtle">{trendQ.loading ? '' : '-'}</span>;
-        const total = series.reduce((s, n) => s + n, 0);
-        return <Sparkline className="spark--cell" values={series} width={64} height={20} label={`Activity, last ${series.length} days: ${total} ${total === 1 ? 'entry' : 'entries'}`} />;
-      },
-    },
   ];
 
   const rowCount = rows.length;
@@ -148,11 +137,9 @@ export function AccountsPage() {
           <ul className="hbars">
             {leaders.map((a) => {
               const m = meters.get(a.id) ?? NO_METER;
-              const max = Math.max(1, ...leaders.map((l) => (meters.get(l.id) ?? NO_METER).open));
               return (
                 <li key={a.id} className="hbar">
                   <Link to={accountPath(a.id)} className="hbar__name truncate" title={a.name}>{a.name}</Link>
-                  <span className="hbar__track" style={{ width: `${(m.open / max) * 100}%` }}><StackBar meter={m} /></span>
                   <span className="num sm hbar__n">{m.open}</span>
                 </li>
               );

@@ -20,16 +20,6 @@
 .spark--info polyline { stroke: var(--info); }
 .spark--cell { width: 64px; height: 20px; }
 
-/* ---- due histogram ---- */
-.duehist { padding: var(--sp-3) var(--sp-4) var(--sp-2); }
-.duehist__bars { display: flex; align-items: flex-end; gap: 3px; height: 48px; }
-.duehist__bar { display: block; flex: 1; min-width: 0; background: var(--surface-3); border-radius: 1px 1px 0 0; }
-.duehist__bar--overdue { background: var(--danger); }
-.duehist__bar--today { background: var(--accent); }
-.duehist__bar--future { background: var(--border-strong); }
-.duehist__bar--zero { background: var(--surface-3); }
-.duehist__axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: var(--fs-label); line-height: var(--lh-label); color: var(--subtle); }
-
 /* ---- timeline track ---- */
 .timeline-track { padding: var(--sp-3) var(--sp-5) var(--sp-3); }
 .timeline-track__line { position: relative; margin: 0 var(--sp-5); }

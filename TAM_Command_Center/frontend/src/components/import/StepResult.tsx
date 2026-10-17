@@ -1,3 +1,4 @@
+import { formatTimestamp, parseInstant } from '../../lib/dates';
 import { useEffect, useRef } from 'react';
 import { Download } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -18,7 +19,7 @@ export function StepResult({ r, onDownload, busy, error }: { r: ImportResult; on
   const c = r.counts;
   const bd = r.breakdown;
   const n = (k: string) => bd[k] ?? 0;
-  const when = new Date(r.applied_at);
+  const when = parseInstant(r.applied_at);
   const fmt: ImportFormat = r.file.format ?? 'xlsx';
   const head = useRef<HTMLHeadingElement>(null);
   useEffect(() => head.current?.focus(), []);
@@ -26,7 +27,7 @@ export function StepResult({ r, onDownload, busy, error }: { r: ImportResult; on
   return (
     <div className="imp-result">
       <h3 ref={head} tabIndex={-1} className="imp-h">{nothing ? 'Import applied: nothing needed to change' : 'Import applied'}</h3>
-      <p className="muted">{Number.isNaN(when.getTime()) ? '' : `${when.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · `}{r.file.name} · {r.file.rows_found} rows</p>
+      <p className="muted">{Number.isNaN(when.getTime()) ? '' : `${formatTimestamp(r.applied_at, 'local', '1970-01-01')} · `}{r.file.name} · {r.file.rows_found} rows</p>
       <div className="imp-tiles imp-tiles--5" role="group" aria-label="Result counts">
         <Tile label="Created" value={c.created} sub={`${n('created_new')} new + ${n('created_marked_different')} marked Different`} />
         <Tile label="Updated" value={c.updated} sub={n('updated_exact') + n('updated_marked_same') === c.updated ? `${n('updated_exact')} exact + ${n('updated_marked_same')} marked Same` : `from ${n('updated_exact') + n('updated_marked_same')} rows`} />

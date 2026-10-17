@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AccountSummary, QueueItem, ServerUpgrade, Task } from '../types';
 import {
-  dueHistogram, initials, loadLeaders, meterOf, needsAttention, nextDays, portfolio, proximityPct, serverSummary, shortMetric, signalsFromQueue,
+  initials, loadLeaders, meterOf, needsAttention, nextDays, portfolio, proximityPct, serverSummary, shortMetric, signalsFromQueue,
   sparkWindowLabel, stackRows, timelineMarkers, topItemFor, upgradeDatesFromQueue, worstAlert, type AccountSignals,
 } from './instruments';
 
@@ -27,21 +27,6 @@ describe('meterOf (exclusive segments, §10.4 #1)', () => {
   });
   it('a task due today is not overdue', () => {
     expect(meterOf([task({ due: T })], T)).toMatchObject({ overdue: 0, other: 1 });
-  });
-});
-
-describe('dueHistogram (20 bins T-6..T+13)', () => {
-  it('bins by due date; older overdue fall into the first bin; later and undated are not drawn', () => {
-    const bins = dueHistogram([
-      task({ due: '2026-09-01' }), task({ due: '2026-10-07' }), task({ due: T }), task({ due: T }), task({ due: '2026-10-26' }),
-      task({ due: '2026-10-27' }), task({ due: null }), task({ status: 'Complete', due: T }),
-    ], T);
-    expect(bins).toHaveLength(20);
-    expect(bins[0]).toMatchObject({ date: '2026-10-07', count: 2, kind: 'overdue' });
-    expect(bins[6]).toMatchObject({ date: T, count: 2, kind: 'today' });
-    expect(bins[19]).toMatchObject({ date: '2026-10-26', count: 1, kind: 'future' });
-    expect(bins.reduce((s, b) => s + b.count, 0)).toBe(5);
-    expect(bins.filter((b) => b.kind === 'overdue')).toHaveLength(6);
   });
 });
 

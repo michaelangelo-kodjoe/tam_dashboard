@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { BellInbox } from '../bams/BellInbox';
 import { useApp } from '../../store/DataContext';
 import { useUI } from '../../store/UIContext';
-import { useNow } from '../../lib/hooks';
+import { useNow, useTimeFormat } from '../../lib/hooks';
 import { formatClock } from '../../lib/dates';
 import { accountPath } from '../../lib/links';
 
@@ -16,6 +16,7 @@ export function TopBar() {
   // QA-E2-3 / US-10.1 AC2: same account prefill as the N key (AppShell).
   const accountMatch = useMatch('/accounts/:clientId/*');
   const now = useNow();
+  useTimeFormat(); // re-render when the 12/24-hour choice changes
   return (
     <header className="topbar">
       <div className="topbar__jump">

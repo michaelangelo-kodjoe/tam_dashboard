@@ -1,3 +1,4 @@
+import { TerminalLinkText } from './TerminalLinkText';
 import { useEffect, useState, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { Button } from './Button';
@@ -62,8 +63,8 @@ export function SkeletonRows({ rows = 5, label = 'Loading' }: { rows?: number; l
   );
 }
 
-/** The single render path for user text (D-16): escaped plain text, line breaks preserved. */
+/** The single render path for user text (D-16): escaped plain text, line breaks preserved, {commands} become Bloomberg Terminal links. */
 export function RichText({ text, className }: { text: string | null | undefined; className?: string }) {
   if (!text) return null;
-  return <div className={cx('richtext', className)}>{text}</div>;
+  return <div className={cx('richtext', className)}><TerminalLinkText text={text} /></div>;
 }

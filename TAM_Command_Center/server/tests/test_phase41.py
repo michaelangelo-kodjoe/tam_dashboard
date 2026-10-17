@@ -50,12 +50,9 @@ def test_system_events_carry_server_name(api):
              " VALUES ('operations', ?, 'server_upgrade', ?, 'srv-upg-9', 'created', 'GUI')", (cid, str(uuid.uuid4())))
     t = api.mk_task(cid, "x")
     api.ok("/api/task/archive", {"id": t["id"], "archived": True, "expected_row_version": t["row_version"]})
-    items = api.get(f"/api/client/{cid}/activity", filter="system").json()["items"]
-    by_type = {i["event_type"]: i for i in items}
-    assert by_type["bams_alert.opened"]["server_name"] == "bxa-ny-01"
-    assert by_type["server_upgrade.created"]["server_name"] == "srv-upg-9"
-    assert by_type["task.archived"]["server_name"] is None
-    assert all("server_name" in i for i in items)
+    # 2026-10-16: Activity holds manual notes only; system events are in the Audit log and Today "Recently changed"
+    assert api.get(f"/api/client/{cid}/activity", filter="system").json()["items"] == []
+    assert api.get(f"/api/client/{cid}/activity").json()["items"] == []
     # Today recent_changes
     rc = api.get("/api/today").json()["recent_changes"]
     assert all("server_name" in r for r in rc)

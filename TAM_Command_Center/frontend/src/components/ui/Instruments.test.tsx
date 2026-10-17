@@ -2,10 +2,10 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Avatar, DatePill, DotRow, DueHistogram, ProgressRing, Sparkline, StackBar, SummaryChips, TimelineTrack } from './Instruments';
-import { dueHistogram, timelineMarkers } from '../../lib/instruments';
+import { Avatar, DatePill, DotRow, ProgressRing, Sparkline, StackBar, SummaryChips, TimelineTrack } from './Instruments';
+import { timelineMarkers } from '../../lib/instruments';
 import { buildChips, type Show } from '../../lib/triage';
-import type { QueueItem, Task } from '../../types';
+import type { QueueItem } from '../../types';
 
 afterEach(() => cleanup());
 const T = '2026-10-13';
@@ -31,16 +31,6 @@ describe('instruments carry text equivalents and no inline colours', () => {
     render(<Sparkline values={[5]} label="x" />);
     expect(screen.getByText('No trend data')).toBeInTheDocument();
     expect(screen.queryByRole('img')).toBeNull();
-  });
-
-  it('DueHistogram has 20 bars, per-bar titles, a text summary and a hidden table', () => {
-    const t = (due: string): Task => ({ id: due + Math.random(), task: 'x', client_id: 'a', category: 'Other', priority: 'Low', due, next_update: null, status: 'Not Started', waiting: null, notes: null, archived: false, created_at: '', updated_at: '', row_version: 1 });
-    const bins = dueHistogram([t('2026-10-10'), t(T), t(T)], T);
-    const { container } = render(<DueHistogram bins={bins} today={T} />);
-    expect(container.querySelectorAll('.duehist__bar')).toHaveLength(20);
-    expect(container.querySelector('[title="13 Oct: 2 tasks"]')).not.toBeNull();
-    expect(screen.getByRole('img', { name: /3 open tasks over 20 days: 1 overdue, 2 due today, 0 due in the next 13 days/ })).toBeInTheDocument();
-    expect(screen.getByRole('table', { name: 'Open tasks by due date' })).toBeInTheDocument();
   });
 
   it('TimelineTrack lists every marker in a hidden table and prints the date of pinned markers', () => {

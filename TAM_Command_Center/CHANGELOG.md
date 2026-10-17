@@ -32,6 +32,50 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 ## Unreleased - Run 5 Operations DEV seed (T-166)
 - Changed: DEV mock seed (`db/seed_mock.py`, `db/mock_data.json`): PROD appliances now carry Region East/West (3 left on EMEA = "Set East or West"); 2 DEV appliances (NWH, KMC) added on an isolated RNG/id stream so no other seeded value moved; next quarter (2027 Q1) has no PROD West date; server_upgrades gain one date override (kmc-bpipe-hk-01, 2026 Q4) and one version override (brs-sapi-ny-01, 7.2.0-rc2). Existing quarters/status mix/overdue (BRS DEV In Progress) already covered. No schema change. 636 tests pass.
 
+## Unreleased - Audit log: Excel download removed (frontend)
+- Removed: the "Download Excel" button in Settings > Audit log; "Download CSV" stays. `exportAudit(query)` is CSV-only in the DataSource, Api and Mock adapters; tests updated (Vitest 489). The server's xlsx format is untouched.
+
+## Unreleased - Log downloads and audit retention line (frontend, contract 18.4/18.5)
+- Added: Settings > Logging: "Download logs" (zip) and "Download current log" with a toast, a quiet "Older log files were omitted (size limit)" note when `X-Log-Files-Omitted` > 0, and "Log files older than 7 days are removed every week." `DownloadedFile.omitted`; DataSource `downloadLogs` (Api + Mock).
+- Added: Settings > Audit log: "Entries older than 14 days are removed every 2 weeks. Last cleaned: <local time or Never>. Next: <local time>" from `retention` on `/api/audit` and facets (hidden when absent). Vitest 489. Verified live on a reseeded dev DB (schema 2): zip 200 `application/zip`, retention line, toast, no console errors.
+
+## Unreleased - Workspace Overview: due-date histogram removed (frontend)
+- Removed: the due-date histogram above Open tasks on the Account Workspace Overview tab, with `DueHistogram`, `dueHistogram`/`histogramSummary`/`HistBin`, its CSS and tests. The open-tasks table and counts are unchanged. The header load stack-bar, Next 15 days cells and servers dots stay. Vitest 486.
+
+## Unreleased - Accounts page without bars; no "collapsed" hints (frontend)
+- Removed: Accounts table "Notes" column and its sparkline (and the `getActivityTrend` adapter method, `ActivityTrend` type, mock trend buckets and tests; the backend route is untouched); the load stack-bar in the Load column (number kept) and the horizontal bars in the "Open load by account" tile (now name and count only).
+- Removed: "Collapsed to keep this screen calm" (Today later tabs) and the hint text on the Settings Data / Audit log / Logging headers.
+- Not removed (not bars, listed for review): the "Next 15 days" mini calendar cells with marks, the servers dot row, the Workspace header load stack-bar and due histogram (Account Workspace, not the Accounts page). Vitest 488.
+
+## Unreleased - Audit log, notes-only Activity, backup kinds (frontend, contract section 18)
+- Added: Settings > Audit log (collapsible, collapsed by default, loads only when opened; `?section=audit` opens it): read-only newest-first table (local am/pm time, account, category, object, action, source, summary), row expands to reason and before/after values, filters (search, category, object, action, source, account, date range) from `/api/audit/facets`, 50 per page with total and Previous/Next, Download CSV / Excel with the current filters (413 shows the narrow-filters message). `components/portability/AuditLog.tsx`; DataSource `getAudit`, `getAuditFacets`, `exportAudit` (Api + Mock).
+- Changed: Account Activity is notes only: System filter, system rows and their CSS removed; empty text says notes; footer pointer "System changes are in Settings > Audit log" (`/settings?section=audit`). Accounts table column "Activity" is now "Notes" (counts notes). Mock matches (notes only, trend counts notes).
+- Added: Settings > Data > Backups shows a Weekly / Safety / Manual badge per row and the retention note.
+- Tests: `components/portability/AuditLog.test.tsx` (+5), Activity/mock tests updated; trend parity fixtures regenerated; 490 total. Verified live (fresh dev DB): Audit log, Activity, Backups, no console errors. Server left running.
+
+## Unreleased - Local time, 12-hour default (frontend)
+- Changed: every timestamp goes through one formatter in `lib/dates.ts` (`parseInstant`, `timeOfDay`, `formatTimestamp`, `formatClock`; `lib/bams.ts` `formatTime`/`formatStamp` delegate to it): server UTC instants (a zone-less string is treated as UTC) shown in the browser's LOCAL zone, 12-hour am/pm by default (`16 Oct 9:30 AM`), never GMT/UTC (the legacy `gmt` setting is ignored). Date-only values (due dates) are not converted. Also routed: top-bar clock, BAMS last poll/update/alerts, bell, trend chart ticks/tooltip, import result, backups list, note editor.
+- Added: Settings > General "Time display": Local 12-hour (am/pm) default, Local 24-hour. Stored in the browser (`localStorage`) because the server `time_display` only accepts `local` | `gmt` (contract section 0, `server/constants.py`); persisting it server-side needs a backend change (e.g. allow `local12`/`local24`).
+- Tests: `lib/time.test.ts` (+12, fixed TZs); 485 total.
+
+## Unreleased - Confirm before completing a task (frontend)
+- Added: "Mark complete" (Tasks page and Workspace Tasks tab) now asks "Complete this task?" with the task title and account; buttons "Yes, complete" and "No" (No has focus, Escape = No); only Yes saves. Editing Status in the Edit drawer is unchanged (deliberate Save). Today's detail pane and the read-only popup have no completion control, so nothing to confirm there.
+- Added: the success toast has an Undo button (10 s) that reopens the task to its previous status with the new row_version (same save path as an edit; toast gains an optional `onAction`).
+- Tests: the Mark complete test now covers No, Escape, Yes and Undo; 472 total.
+
+## Unreleased - Read-only task popup and Today Notes (frontend)
+- Changed: every place a task opens (Tasks page, Workspace Tasks tab, Today "Open task", Operations/others via `?task=<id>`) now shows a read-only popup first (`components/editors/TaskViewDialog.tsx`, existing Dialog: focus trap, Escape, focus return): title, account link, category, priority, status, due, next update, waiting on, created/updated and the full Notes with Terminal links and line breaks; buttons Edit and Close. Edit switches (replace) to `?task=<id>&edit=1`, the unchanged edit drawer; `?task=new` (and `edit=1`) open the form directly. Links inside rows still do not open the popup.
+- Changed: Today detail pane section "Why it is here" is now "Notes": the task's notes (clickable links) or a quiet "No notes"; non-task items keep their reason text under Notes.
+- Tests: `components/editors/TaskView.test.tsx` (+3), terminal-link tests adjusted; 471 total. Verified live: Tasks row -> popup -> Edit -> drawer, Today pane, no console errors.
+
+## Unreleased - BAMS table grouped by account (frontend)
+- Added: the BAMS metrics table collapses by account the same way as Operations: shared `components/ui/GroupToggle.tsx` (header chevron toggle-all, group row with chevron/aria-expanded, whole row toggles, Enter/Space) now used by both; `DataTable` gains an optional `grouping` prop; summary per account "12 appliances · 2 stale · 1 no data" (`lib/bamsGroups.ts`, no percentages). Default: only accounts with an active alert open; any quick view, search or filter auto-expands matches; choices remembered per session. Server sort order, KPI tiles, tabs, filters and row -> metric drawer unchanged. Appliance column and Current/Trend left as they were (user: screenshot arrows were not a request). Vitest 468.
+
+## Unreleased - Bloomberg Terminal links and task notes on Today (frontend)
+- Added: `{command}` text becomes a `bbg://screens/<encoded command>` link (visible braces and `<GO>` kept, `<GO>` stripped from the URI). Pure parser `lib/terminalLinks.ts`, `components/ui/TerminalLinkText.tsx` (React nodes only; stopPropagation on click, double-click and keys, navigation not prevented; focusable, visible focus, accessible name). Wired into `RichText` (account notes, Workspace/Activity note bodies and action items), Operations notes, the global/Workspace Tasks list (new Notes column), and Today. Edit controls keep raw text. Task titles stay plain (they sit inside links; nested links are not allowed).
+- Added: Today detail pane shows the selected task's Notes; queue rows show a one-line notes preview (both with working links). The full edit stays in the drawer.
+- Tests: `lib/terminalLinks.test.tsx` (+13); Vitest `testTimeout` raised to 20 s (slow machine under concurrent builds); 467 total.
+
 ## Unreleased - Active database name (frontend)
 - Added: Settings > Runtime shows `Database: <name>` (from `runtime.db_name` / `/api/health` `db_name`; Api and Mock adapters; mock returns `tam_dev`) above the database file path. Not shown in the top bar (user decision). Vitest 454.
 
@@ -63,6 +107,20 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - Added: `DataSource` methods `getOperations`, `saveOperationsQuarter`, `deleteOperationsQuarter`, `saveOperationsAppliance`, `resetOperationsAppliance`, `setOperationsVersion` (Api + Mock; `data/mock/mockOperations.ts`), `src/opsTypes.ts`, `src/lib/operations.ts`.
 - Added: BAMS import preview and result show the `operations_note` line ("N appliances need East or West set for Operations"), informational only.
 - Tests: +30 Vitest (lib, mock adapter, API adapter, page). Verified live on tam-app-dev: grouped table, select + Set version, edit + East save, no console errors. Known: `today.test.ts` parity fails after the data architect's in-progress `db/mock_data.json` extension (passes on the committed data).
+
+## Unreleased - Audit log retention (schema 2)
+- Added: migration `0002_audit_prune.sql` (+ `db/schema.sql`): audit DELETE is refused only for rows newer than 14 days; UPDATE and id re-use stay refused. `server/auditprune.py`: every 14 days delete entries older than 14 days (first start only sets the cycle anchor; persisted in app_meta; one `pruned` audit event when N > 0; no safety backup, user accepted). `retention` meta in `GET /api/audit` and `/facets`. Schema version is now 2: DB tests, startup tests and the DB-restore older-schema test updated (real 0001 -> 0002 upgrade on the staged copy). Contract 18.5; `server/tests/test_audit_prune.py` (6) and `Schema2_AuditPrune` (5).
+
+## Unreleased - Application log download and weekly cleanup
+- Added: `GET /api/logs/download?file=zip|current` (current + rotated logs of the ACTIVE database's log folder only, no path parameters, 50 MiB cap, symlinks/sub-folders/other files ignored). Weekly log cleanup on the existing hourly scheduler: rotated logs older than 7 days deleted, folder cap 50 MiB oldest first, current file never deleted (rotated first when over 5 MiB), one summary log line. Audit log (`audit_events`) untouched by it. Contract 18.4; `server/tests/test_logs.py` (14).
+
+## Unreleased - Activity notes-only, Audit log, weekly backups
+- Changed: account Activity (and the Accounts activity-trend sparkline, PM-AC-2 parity) now hold manual notes only; `filter=system` returns nothing. `activity_timeline.sql` and `activity_trend.sql` lost their audit/alert branches. Today "Recently changed" is untouched.
+- Added: `GET /api/audit` (filters, paging, summaries, account name), `/api/audit/facets`, `/api/audit/export` (csv/xlsx, formula-guarded, 50,000 cap). Read-only.
+- Backups: one weekly automatic backup (start + hourly check, skipped for an empty DB), keep 8; safety backups keep 5 per reason and 30 days; manual and `pre-restore` never pruned; newest never pruned; `kind` on every backup item, list newest first. Replaces the old "keep 30 automatic" rule (D-22). Contract section 18; tests in `server/tests/test_audit_backups.py` (14), DA trend tests adjusted.
+
+## Unreleased - BAMS freshness from last_received
+- Fixed: Live/Delayed/Stale (and `age_seconds`, the dashboard "Last update" sort) now use `last_received` (last successful valid receipt) instead of the value-change time, so a stable metric no longer turns Stale while polls succeed. The monitor refreshes `last_received` on every successful observation, evaluates alert rules on unchanged values (consecutive-observation rules work), and writes `last_source_update`, `current_value` and the history sample only when the value changed. Failed polls never advance `last_received`. No schema change. 9 tests in `server/tests/test_bams_freshness.py`. Contract section 17.
 
 ## Unreleased - Database name (TAM_DB_NAME)
 - Added: optional `TAM_DB_NAME` (validated bare name) chooses or creates the active database in PROD and DEV; default unchanged. Per-database lock, backups (`TAM_Backups/<name>/`), logs and restore staging for named databases; early plain port-in-use check (exit 5); `db_name` in `/api/state`, `/api/health` and the startup log. Contract section 16; `server/tests/test_dbname.py` (36). No frontend change needed (the name is in `runtime.db_name`; the Runtime panel may show it).

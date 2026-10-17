@@ -33,34 +33,6 @@ export function meterByClient(tasks: Task[], today: string): Map<string, Meter> 
   return new Map([...by].map(([id, l]) => [id, meterOf(l, today)]));
 }
 
-// ------------------------------------------------------------------ due histogram (#5)
-
-export interface HistBin { date: string; count: number; kind: 'overdue' | 'today' | 'future' }
-export const HIST_BINS = 20;
-export const HIST_PAST = 6;
-
-/** 20 bins T-6 .. T+13. Older overdue tasks fall into the first bin; later or undated tasks are not drawn. */
-export function dueHistogram(tasks: Task[], today: string): HistBin[] {
-  const bins: HistBin[] = Array.from({ length: HIST_BINS }, (_, i) => {
-    const date = addDays(today, i - HIST_PAST);
-    return { date, count: 0, kind: i < HIST_PAST ? 'overdue' : i === HIST_PAST ? 'today' : 'future' };
-  });
-  for (const t of tasks) {
-    if (!isOpen(t) || t.due == null) continue;
-    const d = diffDays(t.due, today);
-    if (d > HIST_BINS - HIST_PAST - 1) continue;
-    bins[Math.max(0, d + HIST_PAST)].count++;
-  }
-  return bins;
-}
-
-export function histogramSummary(bins: HistBin[], today: string): string {
-  const n = (k: HistBin['kind']) => bins.filter((b) => b.kind === k).reduce((s, b) => s + b.count, 0);
-  const total = n('overdue') + n('today') + n('future');
-  void today;
-  return `${total} open tasks over 20 days: ${n('overdue')} overdue, ${n('today')} due today, ${n('future')} due in the next 13 days`;
-}
-
 // ------------------------------------------------------------------ upgrade timeline (#8)
 
 export const TIMELINE_DAYS = 30;

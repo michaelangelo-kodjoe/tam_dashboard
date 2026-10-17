@@ -2,11 +2,9 @@
 -- Accounts "Activity trend" sparkline (D-31, 01_PM_SPEC section 10.4 #18): 14 daily points per account.
 -- Reference query; owner data-architect-agent. Served by GET /api/accounts/activity-trend (PM-AC-2).
 --
--- A point = the number of Activity-timeline entries (D-03) for that account on that LOCAL day. The
--- entry set is exactly the union in activity_timeline.sql (manual notes + the listed system events
--- from audit_events + BAMS alert opened/recovered/closed), with no filter and no search. Deleted notes
--- and deleted BAMS objects are gone from the union exactly as they are in Activity (their audit
--- 'deleted' rows, where the timeline lists them, still count).
+-- A point = the number of Activity-timeline entries for that account on that LOCAL day. Since 2026-10-16
+-- the Activity timeline holds manual notes only (system events moved to the Audit log), so the entry set
+-- is exactly the notes of activity_timeline.sql, with no filter and no search; a deleted note is gone.
 --
 -- Params (15 UTC instants, YYYY-MM-DDTHH:MM:SS.mmmZ; the backend converts each LOCAL midnight to UTC
 -- separately, so 23h/25h DST days are exact; every day is the half-open window [b_i, b_i+1)):
@@ -17,9 +15,7 @@
 -- Result: one row per (account, day), 14 rows per account, zeros included:
 --   client_id, client_name, day_index (0..13, oldest first), day ('YYYY-MM-DD'), n
 -- Order: client_name, day_index. The backend folds the rows into {client_id: [14 ints]}.
--- Index use (confirmed with EXPLAIN QUERY PLAN, see 03_DATA_MODEL): notes -> ix_notes_client_ts and
--- audit_events -> ix_audit_client_ts, each searched per account with the 14-day timestamp range; BAMS
--- events are reached through bams_objects/bams_metrics (ix_bams_alert_events_metric) and are few per metric.
+-- Index use: notes -> ix_notes_client_ts, searched per account with the 14-day timestamp range.
 -- No JSON1 functions.
 -- =============================================================================
 WITH buckets(day_index, lo, hi) AS (
@@ -36,28 +32,6 @@ entries AS (
     FROM sel s
     CROSS JOIN notes n INDEXED BY ix_notes_client_ts ON n.client_id = s.id AND n.timestamp >= :b0 AND n.timestamp < :b14
 
-    UNION ALL
-
-    SELECT s.id, a.timestamp
-    FROM sel s
-    CROSS JOIN audit_events a INDEXED BY ix_audit_client_ts ON a.client_id = s.id AND a.timestamp >= :b0 AND a.timestamp < :b14
-    WHERE (   (a.object_type = 'task'    AND a.action IN ('created','completed','reopened','archived','deleted'))
-           OR (a.object_type = 'contact' AND a.action IN ('created','updated','deleted','primary_changed'))
-           OR (a.object_type = 'note'    AND a.action = 'deleted')
-           OR (a.object_type = 'client'  AND a.action IN ('next_contact_changed','status_changed'))
-           OR  a.object_type = 'server_upgrade')
-
-    UNION ALL
-
-    SELECT s.id,
-           CASE w.what WHEN 'opened' THEN e.opened_at WHEN 'recovered' THEN e.recovered_at ELSE e.closed_at END
-    FROM sel s
-    JOIN bams_objects o ON o.client_id = s.id
-    JOIN bams_metrics m ON m.object_id = o.id
-    JOIN bams_alert_events e ON e.metric_id = m.id
-    JOIN (SELECT 'opened' AS what UNION ALL SELECT 'recovered' UNION ALL SELECT 'closed') w
-      ON (w.what = 'opened') OR (w.what = 'recovered' AND e.recovered_at IS NOT NULL)
-                             OR (w.what = 'closed' AND e.closed_at IS NOT NULL)
 )
 SELECT s.id AS client_id, s.name AS client_name, b.day_index,
        date(:today, printf('%+d day', b.day_index - 13)) AS day,

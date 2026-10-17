@@ -112,7 +112,6 @@ export function LaterTabs({ upcoming, recent, load, activeAccounts, today, tz }:
             );
           })}
         </div>
-        {open === null && <span className="later__hint muted sm">Collapsed to keep this screen calm</span>}
       </div>
       {open && (
         <div id="later-panel" role="tabpanel" aria-labelledby={`later-tab-${open}`} className="later__body">

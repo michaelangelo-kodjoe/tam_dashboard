@@ -166,3 +166,13 @@ Real Bloomberg provider is built and fake-session tested only. Left for later, t
 - QA-7-2 (frontend side) and QA-7-4 fixed (2026-10-16).
 - ChatGPT Bridge dropped by the user (2026-10-16): nav item, placeholder page and route removed; spec D-21 superseded for it; backend stubs unchanged.
 - Settings runtime panel shows the active database name (2026-10-16); top bar intentionally unchanged.
+- Bloomberg Terminal `{command}` links built in React source (replaces the temporary web/terminal-links.js approach); task notes visible on Today (2026-10-16).
+- BAMS dashboard table is collapsible by account, sharing the Operations group-row component (2026-10-16).
+- Task open sequence: read-only popup first, Edit opens the drawer (?task=&edit=1); Today pane section renamed Notes (2026-10-16).
+- Mark complete asks for confirmation; toast has Undo (2026-10-16).
+- Time display: all timestamps local, 12-hour default via one shared formatter; 12/24 choice kept in the browser until the server setting supports it (2026-10-16).
+- Audit log UI, notes-only Activity and backup kinds built against contract section 18 (2026-10-16).
+- Accounts page: Notes column, load bars and collapsed-hint copy removed (2026-10-16).
+- Workspace Overview due-date histogram removed (2026-10-16).
+- Log download buttons and audit retention line built (2026-10-16); dev server restarted on a fresh schema-2 DB.
+- Audit log keeps only Download CSV in the UI (2026-10-16).

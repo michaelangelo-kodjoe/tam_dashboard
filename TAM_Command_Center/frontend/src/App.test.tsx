@@ -53,7 +53,7 @@ describe('app shell and Today: Triage Split (D-26..D-30, US-3.6..US-3.9)', () =>
     // detail pane for the first item
     const detail = screen.getByRole('region', { name: 'Selected item' });
     expect(within(detail).getByRole('heading', { level: 2 })).toHaveTextContent(full.queue[0].title);
-    expect(within(detail).getByText('Why it is here')).toBeInTheDocument();
+    expect(within(detail).getByText('Notes')).toBeInTheDocument();
     expect(within(detail).getByText('Key facts')).toBeInTheDocument();
     expect(within(detail).getByRole('link', { name: /^Open (task|account|alert|infrastructure)/ })).toBeInTheDocument();
     // Later: tab bar visible, collapsed (D-30)
@@ -274,7 +274,7 @@ describe('Accounts and Workspace', () => {
   it('Accounts refresh: tile strip, needs-attention list (max 4, no score), instruments in the table (US-4.2)', async () => {
     await boot('/accounts');
     const table = await screen.findByRole('table', { name: 'Accounts' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent?.trim()).filter((h) => h && h !== 'Open')).toEqual(['Account', 'Load', 'Overdue', 'Waiting', 'Alerts', 'Servers', 'Next upgrade', 'Next contact', 'Activity']);
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent?.trim()).filter((h) => h && h !== 'Open')).toEqual(['Account', 'Load', 'Overdue', 'Waiting', 'Alerts', 'Servers', 'Next upgrade', 'Next contact']);
     const portfolio = screen.getByRole('region', { name: 'Portfolio' });
     expect(portfolio).toHaveTextContent(/10\s*active accounts/);
     expect(screen.getByRole('region', { name: 'Open load by account' })).toBeInTheDocument();
@@ -283,11 +283,11 @@ describe('Accounts and Workspace', () => {
     await waitFor(() => expect(within(attn).getAllByRole('link').length).toBeGreaterThan(0));
     expect(within(attn).getAllByRole('link').length).toBeLessThanOrEqual(4);
     expect(attn.textContent).not.toMatch(/\b(score|health|grade)\b/i);
-    // every row has a load bar with a text equivalent and a servers dot row; activity sparkline once the trend loads
+    // no load bars or trend sparkline: counts only; each row keeps its servers dot row
     const row = within(table).getAllByRole('row')[1];
-    expect(within(row).getByRole('img', { name: /open: \d+ overdue, \d+ waiting, \d+ other/ })).toBeInTheDocument();
+    expect(row.querySelector('.stackbar, .spark, .hbar__track')).toBeNull();
+    expect(within(row).queryByRole('img', { name: /open: \d+ overdue/ })).toBeNull();
     expect(within(row).getByRole('img', { name: /\d+ servers?, \d+ with an alert/ })).toBeInTheDocument();
-    await waitFor(() => expect(within(row).getByRole('img', { name: /^Activity, last 14 days: \d+ entr/ })).toBeInTheDocument());
   });
 
   it('Accounts: Inactive filter lists the 2 inactive accounts; columns have no health score', async () => {
@@ -322,7 +322,7 @@ describe('Accounts and Workspace', () => {
     await waitFor(() => expect(loc()).toBe(`/accounts/${id}/contacts`));
   });
 
-  it('Workspace refresh: header band cells, Top item, due histogram, server tiles and the upgrade timeline (US-5.6)', async () => {
+  it('Workspace refresh: header band cells, Top item, server tiles and the upgrade timeline (US-5.6)', async () => {
     await openHalvorsen();
     const band = screen.getByRole('group', { name: 'Account counts' });
     for (const cap of ['Open tasks', 'Servers', 'Alerts', 'Next upgrade', 'Next client touch']) expect(within(band).getByText(cap)).toBeInTheDocument();
@@ -332,7 +332,8 @@ describe('Accounts and Workspace', () => {
     expect(n[1] + n[2] + n[3]).toBe(n[0]);
     expect(await screen.findByRole('article', { name: 'Top item for this account' })).toBeInTheDocument();
     expect(screen.getByRole('article', { name: 'Top item for this account' }).textContent).not.toMatch(/Mark complete|What to do/);
-    expect(screen.getByRole('img', { name: /open tasks over 20 days/ })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /open tasks over 20 days/ })).toBeNull(); // no due-date histogram
+    expect(document.querySelector('.duehist')).toBeNull();
     const tiles = await screen.findByRole('list', { name: 'Servers' });
     expect(within(tiles).getAllByRole('listitem')).toHaveLength(3);
     expect(within(tiles).getAllByText('No trend data').length).toBeGreaterThan(0); // a server with no samples: no sparkline
@@ -372,26 +373,43 @@ describe('Accounts and Workspace', () => {
     const table = await screen.findByRole('table', { name: /tasks/ });
     const before = within(table).getAllByRole('row').length;
     await user.click(within(table).getAllByRole('button', { name: /Mark complete/ })[0]);
+    // a confirmation comes first; No (the default focus) and Escape change nothing
+    let dlg = await screen.findByRole('alertdialog', { name: 'Complete this task?' });
+    expect(within(dlg).getByRole('button', { name: 'No' })).toHaveFocus();
+    await user.click(within(dlg).getByRole('button', { name: 'No' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(within(screen.getByRole('table', { name: /tasks/ })).getAllByRole('row').length).toBe(before);
+    await user.click(within(table).getAllByRole('button', { name: /Mark complete/ })[0]);
+    await screen.findByRole('alertdialog');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(within(screen.getByRole('table', { name: /tasks/ })).getAllByRole('row').length).toBe(before);
+    expect(screen.queryByText('Task completed')).toBeNull();
+    // Yes completes
+    await user.click(within(table).getAllByRole('button', { name: /Mark complete/ })[0]);
+    dlg = await screen.findByRole('alertdialog', { name: 'Complete this task?' });
+    await user.click(within(dlg).getByRole('button', { name: 'Yes, complete' }));
     await waitFor(() => expect(within(screen.getByRole('table', { name: /tasks/ })).getAllByRole('row').length).toBe(before - 1));
     expect(await screen.findByText('Task completed')).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Account counts' })).toHaveTextContent(/Open tasks\s*11/);
+    // Undo reopens it to its previous status
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(await screen.findByText('Task reopened')).toBeInTheDocument();
+    await waitFor(() => expect(within(screen.getByRole('table', { name: /tasks/ })).getAllByRole('row').length).toBe(before));
   });
 
-  it('Activity tab: filters, system events have no edit/delete controls, notes do (US-7.4)', async () => {
+  it('Activity tab: notes only, no System filter, notes have edit/delete, a pointer to the Audit log (contract 18.1)', async () => {
     const { user } = await openHalvorsen('activity');
-    await screen.findByText('SYSTEM', { selector: '.sysevent__label' }).catch(() => null);
-    await waitFor(() => expect(document.querySelector('.sysevent')).not.toBeNull());
-    const sys = document.querySelector('.sysevent')!;
-    expect(within(sys as HTMLElement).queryByRole('button')).toBeNull();
-    expect(sys.closest('article')).toBeNull();
+    await waitFor(() => expect(document.querySelector('article.note')).not.toBeNull());
+    expect(document.querySelector('.sysevent')).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'System events' })).toBeNull();
     const note = document.querySelector('article.note')!;
     expect(within(note as HTMLElement).getByRole('button', { name: /Delete note/ })).toBeInTheDocument();
     expect(within(note as HTMLElement).getByRole('link', { name: /Edit note/ })).toBeInTheDocument();
-    await user.click(screen.getByRole('radio', { name: 'System events' }));
-    await waitFor(() => expect(document.querySelector('article.note')).toBeNull());
+    expect(screen.getByRole('link', { name: /Audit log/ })).toHaveAttribute('href', '/settings?section=audit');
     await user.click(screen.getByRole('radio', { name: 'Call notes' }));
-    await waitFor(() => expect(document.querySelector('.sysevent')).toBeNull());
-    expect(document.querySelectorAll('article.note').length).toBeGreaterThan(0);
+    await waitFor(() => expect(document.querySelectorAll('article.note').length).toBeGreaterThan(0));
+    expect([...document.querySelectorAll('article.note')].every((n) => /Call Note/i.test(n.getAttribute('aria-label') ?? ''))).toBe(true);
   });
 
   it('Activity: "+ Note" menu opens a new note drawer; saving it adds the note; delete uses a confirm dialog', async () => {
@@ -576,7 +594,7 @@ describe('overlays, Quick Capture and account jump', () => {
     sessionStorage.clear();
     const { user } = await boot('/settings');
     await screen.findByRole('heading', { level: 1, name: 'Settings' });
-    await user.click(screen.getByRole('radio', { name: 'GMT' }));
+    await user.click(screen.getByRole('radio', { name: 'Local 24-hour' }));
     expect(await screen.findByText('Time display saved')).toBeInTheDocument();
     expect(screen.getByText('DEV', { selector: 'dd' })).toBeInTheDocument();
     // Data and Logging are collapsed by default; nothing inside is rendered or reachable

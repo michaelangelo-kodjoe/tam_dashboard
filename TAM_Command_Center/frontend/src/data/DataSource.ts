@@ -1,3 +1,4 @@
+import type { AuditFacets, AuditPage, AuditQuery } from '../types';
 import type { DbRestorePreview, DbRestoreResult, RestoreIssueQuery, RestorePlan, RestoreResult } from '../portTypes';
 import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../opsTypes';
 import type {
@@ -5,7 +6,7 @@ import type {
   Account,
   ActivityFilter,
   ActivityPage,
-  ActivityTrend,
+ 
   AppState,
   BackupInfo,
   Contact,
@@ -95,8 +96,6 @@ export interface DataSource {
   getActivity(clientId: string, query: ActivityQuery): Promise<ActivityPage>;
   getTasks(query: TaskQuery): Promise<Task[]>;
   getInfrastructure(clientId: string): Promise<Infrastructure>;
-  /** Accounts activity-trend column (PM-AC-2). Active accounts only; 14 daily points by default. */
-  getActivityTrend(days?: number): Promise<ActivityTrend>;
 
   getSettings(): Promise<Settings>;
   saveSettings(patch: Partial<Settings>): Promise<MutationResult<Settings>>;
@@ -186,4 +185,13 @@ export interface DataSource {
   previewBackupRestore(name: string): Promise<DbRestorePreview>;
   cancelDatabaseRestore(id: string): Promise<void>;
   applyDatabaseRestore(input: { restore_id: string; confirm: string }): Promise<DbRestoreResult>;
+
+  // ---- Audit log (contract 18.2), read-only --------------------------------------------------
+  getAudit(q: AuditQuery): Promise<AuditPage>;
+  getAuditFacets(): Promise<AuditFacets>;
+  /** CSV of the matching rows, no paging; 413 payload_too_large when more than 50,000 rows match. */
+  exportAudit(q: AuditQuery): Promise<DownloadedFile>;
+
+  /** Application log files (contract 18.4): zip of all (default) or the current file. `omitted` counts older files left out by the size cap. */
+  downloadLogs(file: 'zip' | 'current'): Promise<DownloadedFile>;
 }

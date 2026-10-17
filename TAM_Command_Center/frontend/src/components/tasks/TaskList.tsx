@@ -1,7 +1,9 @@
+import { TerminalLinkText } from '../ui/TerminalLinkText';
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle2, Plus, Search } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Select } from '../ui/Select';
 import { Checkbox } from '../ui/Checkbox';
 import { DataTable, cmpNum, cmpStr, type Column } from '../ui/DataTable';
@@ -53,14 +55,31 @@ export function TaskList({ clientId, caption }: { clientId?: string; caption: st
     });
   }, [all, status, priority, category, account, text, global]);
 
+  const [confirming, setConfirming] = useState<Task | null>(null);
+  const [completing, setCompleting] = useState(false);
   const complete = async (t: Task) => {
+    setCompleting(true);
     try {
-      await ds.saveTask({ ...taskToInput(t), status: 'Complete' });
+      const saved = await ds.saveTask({ ...taskToInput(t), status: 'Complete' });
+      setConfirming(null);
       bump();
-      toast.push({ kind: 'success', message: 'Task completed', detail: t.task });
+      toast.push({
+        kind: 'success', message: 'Task completed', detail: t.task,
+        onAction: {
+          label: 'Undo',
+          run: () => {
+            // reopen to the previous status; same save path as an edit, guarded by the new row_version
+            void ds.saveTask({ ...taskToInput(t), status: t.status, expected_row_version: saved.item.row_version }).then(
+              () => { bump(); toast.push({ kind: 'info', message: 'Task reopened', detail: t.task }); },
+              (e) => toast.push({ kind: 'error', message: 'Could not undo.', detail: e instanceof Error ? e.message : undefined }),
+            );
+          },
+        },
+      });
     } catch (e) {
+      setConfirming(null);
       toast.push({ kind: 'error', message: e instanceof DataSourceError && e.code === 'stale_write' ? 'This task changed elsewhere. Reload and try again.' : 'Could not complete the task.', detail: e instanceof Error ? e.message : undefined });
-    }
+    } finally { setCompleting(false); }
   };
 
   const newLink = taskDrawerLink(loc.pathname, loc.search, 'new');
@@ -85,6 +104,7 @@ export function TaskList({ clientId, caption }: { clientId?: string; caption: st
     { key: 'due', header: 'Due', align: 'right', sort: (a, b) => cmpStr(a.due, b.due), cell: (t) => <DateCell date={t.due} today={today} kind={t.status === 'Complete' ? 'plain' : 'due'} /> },
     { key: 'next_update', header: 'Next update', align: 'right', sort: (a, b) => cmpStr(a.next_update, b.next_update), cell: (t) => <DateCell date={t.next_update} today={today} kind="plain" showRelative={false} /> },
     { key: 'status', header: 'Status', sort: (a, b) => cmpNum(STAT[a.status], STAT[b.status]), cell: (t) => <StatusBadge value={t.status} /> },
+    { key: 'notes', header: 'Notes', className: 'col-narrow', cell: (t) => (t.notes ? <span className="truncate tasknotes" title={t.notes}><TerminalLinkText text={t.notes} /></span> : <span className="subtle">-</span>) },
     { key: 'waiting', header: 'Waiting on', className: 'col-narrow', sort: (a, b) => cmpStr(a.waiting, b.waiting), cell: (t) => (t.waiting ? <span className="truncate" title={t.waiting}>{t.waiting}</span> : <span className="subtle">-</span>) },
     { key: 'updated', header: 'Updated', align: 'right', sort: (a, b) => cmpStr(a.updated_at, b.updated_at), cell: (t) => <span className="muted num">{formatDate(t.updated_at.slice(0, 10), today)}</span> },
     {
@@ -92,7 +112,7 @@ export function TaskList({ clientId, caption }: { clientId?: string; caption: st
       cell: (t) =>
         t.status !== 'Complete' ? (
           <span className="rowaction">
-            <Button variant="icon" size="sm" aria-label={`Mark complete: ${t.task}`} title="Mark complete" onClick={() => void complete(t)} icon={<CheckCircle2 size={16} strokeWidth={1.5} />} />
+            <Button variant="icon" size="sm" aria-label={`Mark complete: ${t.task}`} title="Mark complete" onClick={() => setConfirming(t)} icon={<CheckCircle2 size={16} strokeWidth={1.5} />} />
           </span>
         ) : null,
     },
@@ -137,6 +157,14 @@ export function TaskList({ clientId, caption }: { clientId?: string; caption: st
           )
         }
       />
+      {confirming && (
+        <ConfirmDialog
+          title="Complete this task?" objectName={confirming.task}
+          description={confirming.client_id ? `Account: ${accountById(confirming.client_id)?.name ?? 'Unknown'}` : 'No account'}
+          confirmLabel="Yes, complete" cancelLabel="No" tone="neutral" busy={completing}
+          onConfirm={() => void complete(confirming)} onCancel={() => setConfirming(null)}
+        />
+      )}
     </div>
   );
 }

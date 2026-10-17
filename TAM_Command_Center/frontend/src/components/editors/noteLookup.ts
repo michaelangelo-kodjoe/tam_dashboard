@@ -1,3 +1,4 @@
+import { parseInstant } from '../../lib/dates';
 import type { DataSource } from '../../data/DataSource';
 import type { Note } from '../../types';
 
@@ -9,7 +10,7 @@ export async function findNote(ds: DataSource, clientId: string, noteId: string)
 
 /** datetime-local value (local time) <-> ISO instant */
 export function instantToLocalInput(iso: string): string {
-  const d = new Date(iso);
+  const d = parseInstant(iso);
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }

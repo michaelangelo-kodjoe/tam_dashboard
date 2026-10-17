@@ -241,11 +241,11 @@ BEGIN
     SELECT RAISE(ABORT, 'audit_events is append-only');
 END;
 
--- Deletes are always refused. The only purge path (DEV reseed, a future
--- retention job) is migrate.purge_audit_events(), which DROPs this trigger,
--- deletes and re-CREATEs it inside ONE transaction (DDL is transactional), so
--- no persistent flag can leave audit deletes enabled. migrate.assert_guards()
--- refuses to open a DB where any guard trigger is missing.
+-- Deletes: refused for rows newer than 14 days (schema 2, user decision 2026-10-16; the 14-day prune job is the only
+-- caller that can delete, and only past the window). UPDATE stays refused. The other purge path (DEV reseed) is
+-- migrate.purge_audit_events(), which DROPs this trigger, deletes and re-CREATEs it inside ONE transaction (DDL is
+-- transactional), so no persistent flag can leave audit deletes enabled. migrate.assert_guards() refuses to open a
+-- DB where any guard trigger is missing or altered.
 -- REPLACE / INSERT OR REPLACE resolve a PK conflict by deleting the old row
 -- WITHOUT firing delete triggers (recursive_triggers is off by default), so
 -- an insert that reuses an existing id is refused outright.
@@ -258,8 +258,9 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_delete
 BEFORE DELETE ON audit_events
+WHEN OLD.timestamp >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-14 days')
 BEGIN
-    SELECT RAISE(ABORT, 'audit_events is append-only');
+    SELECT RAISE(ABORT, 'audit_events rows newer than 14 days cannot be deleted');
 END;
 
 -- -----------------------------------------------------------------------------
@@ -862,6 +863,6 @@ END;
 -- -----------------------------------------------------------------------------
 -- Schema version (forward-only; never lowered).
 -- -----------------------------------------------------------------------------
-INSERT INTO app_meta (key, value) VALUES ('schema_version', '1')
+INSERT INTO app_meta (key, value) VALUES ('schema_version', '2')
     ON CONFLICT (key) DO UPDATE SET value = excluded.value
-    WHERE CAST(app_meta.value AS INTEGER) < 1;
+    WHERE CAST(app_meta.value AS INTEGER) < 2;

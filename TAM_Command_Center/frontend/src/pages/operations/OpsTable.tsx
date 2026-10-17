@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Pencil } from 'lucide-react';
+import { Pencil } from 'lucide-react';
+import { GroupHeaderRow, ToggleAllButton } from '../../components/ui/GroupToggle';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
 import { StatusBadge, type Tone } from '../../components/ui/Badges';
+import { TerminalLinkText } from '../../components/ui/TerminalLinkText';
 import { accountPath } from '../../lib/links';
 import { groupIds, summaryText, triState, type Tri } from '../../lib/operations';
 import type { OpsGroup, OpsRow } from '../../opsTypes';
@@ -61,9 +63,7 @@ export function OpsTable({ groups, selecting, allOpen, onToggleAll, selected, is
         <thead>
           <tr>
             <th className="ops-col-cb" scope="col">
-              <button type="button" className="ops-chev" aria-expanded={allOpen} aria-label={allOpen ? 'Collapse all accounts' : 'Expand all accounts'} title={allOpen ? 'Collapse all accounts' : 'Expand all accounts'} onClick={onToggleAll}>
-                {allOpen ? <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" /> : <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />}
-              </button>
+              <ToggleAllButton allOpen={allOpen} onToggle={onToggleAll} />
             </th>
             <th scope="col">Date</th><th scope="col">Appliance</th><th scope="col">Env / Polarity</th><th scope="col">Target version</th><th scope="col">Status</th><th scope="col">Note</th>
             <th scope="col"><span className="sr-only">Edit</span></th>
@@ -89,18 +89,11 @@ function GroupRows({ selecting, g, open, tri, selected, onToggleOpen, onToggleGr
 }) {
   return (
     <>
-      <tr className="ops-acct" onClick={() => onToggleOpen(g.client_id)}>
-        <td colSpan={8}>
-          <div className="ops-ah">
-            <button type="button" className="ops-chev" aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${g.client_name}`} onClick={(e) => { e.stopPropagation(); onToggleOpen(g.client_id); }}>
-              {open ? <ChevronDown size={16} strokeWidth={1.5} aria-hidden="true" /> : <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />}
-            </button>
-            {selecting && <TriCheck state={tri} label={`Select all ${g.client_name}`} onChange={() => onToggleGroup(g)} />}
-            <Link to={accountPath(g.client_id)} className="ops-acctlink" onClick={(e) => e.stopPropagation()}>{g.client_name}</Link>
-            <span className="muted sm">{summaryText(g.count, g.summary)}</span>
-          </div>
-        </td>
-      </tr>
+      <GroupHeaderRow
+        colSpan={8} open={open} onToggle={() => onToggleOpen(g.client_id)} name={g.client_name} summary={summaryText(g.count, g.summary)}
+        lead={selecting && <TriCheck state={tri} label={`Select all ${g.client_name}`} onChange={() => onToggleGroup(g)} />}
+        nameNode={<Link to={accountPath(g.client_id)} className="ops-acctlink" onClick={(e) => e.stopPropagation()}>{g.client_name}</Link>}
+      />
       {open && g.rows.map((r) => (
         <tr key={r.object_id} className={selected.has(r.object_id) ? 'ops-row is-sel' : 'ops-row'}>
           <td className="ops-col-cb">{selecting && <TriCheck state={selected.has(r.object_id) ? 'all' : 'none'} label={`Select ${r.appliance}`} onChange={() => onToggleRow(r.object_id)} />}</td>
@@ -114,7 +107,7 @@ function GroupRows({ selecting, g, open, tri, selected, onToggleOpen, onToggleGr
               {r.status_is_default && <span className="sr-only"> (default)</span>}
             </span>
           </td>
-          <td className="muted ops-note" title={r.notes ?? undefined}>{r.notes ? <span className="truncate">{r.notes}</span> : ''}</td>
+          <td className="muted ops-note" title={r.notes ?? undefined}>{r.notes ? <span className="truncate"><TerminalLinkText text={r.notes} /></span> : ''}</td>
           <td><Button size="sm" variant="icon" aria-label={`Edit ${r.appliance}`} title="Edit" onClick={() => onEdit(r)} icon={<Pencil size={14} strokeWidth={1.5} />} /></td>
         </tr>
       ))}

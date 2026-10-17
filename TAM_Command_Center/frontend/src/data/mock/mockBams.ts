@@ -65,7 +65,7 @@ export class MockBams {
   // ---------------------------------------------------------------- rows
   private freshnessOf(m: Row): { f: BamsFreshness; age: number | null } {
     if (this.c.unavailable || m.last_received == null) return { f: 'No Data', age: m.last_received == null ? null : Math.round((this.c.clock.getTime() - Date.parse(m.last_received)) / 1000) };
-    const age = Math.round((this.c.clock.getTime() - Date.parse(m.last_source_update ?? m.last_received)) / 1000);
+    const age = Math.round((this.c.clock.getTime() - Date.parse(m.last_received)) / 1000);
     return { f: age <= this.liveSeconds ? 'Live' : age <= (m.stale_after_seconds ?? 120) ? 'Delayed' : 'Stale', age };
   }
 

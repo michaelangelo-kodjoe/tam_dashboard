@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FileText, Phone, Plus, Search, UsersRound } from 'lucide-react';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
 import { SplitButton } from '../../components/ui/Menu';
@@ -16,7 +16,6 @@ const FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: 'meeting', label: 'Meeting notes' },
   { value: 'call', label: 'Call notes' },
   { value: 'general', label: 'General' },
-  { value: 'system', label: 'System events' },
 ];
 const NOTE_MENU: { id: NoteType; label: string; icon: JSX.Element }[] = [
   { id: 'Meeting Note', label: 'Meeting note', icon: <UsersRound size={16} strokeWidth={1.5} /> },
@@ -80,11 +79,12 @@ export function ActivityTab({ account }: { account: AccountSummary }) {
       {first.loading && <SkeletonRows rows={6} label="Loading activity" />}
       {first.data && entries.length === 0 && (
         <EmptyState action={<Button size="sm" variant="primary" onClick={() => newNote('Meeting Note')}>+ Note</Button>}>
-          {q || filter !== 'all' ? 'No activity matches these filters.' : 'No activity for this account yet.'}
+          {q || filter !== 'all' ? 'No notes match these filters.' : 'No notes for this account yet.'}
         </EmptyState>
       )}
       {entries.length > 0 && <Timeline entries={entries} clientId={account.id} tz={settings.time_display} today={today} />}
       {moreError ? <ErrorBanner error={moreError} onRetry={() => void loadMore()} title="Could not load more" /> : null}
+      <p className="muted sm activity__audit">System changes are in <Link to="/settings?section=audit">Settings &gt; Audit log</Link>.</p>
       {cursor && (
         <div className="activity__more">
           <Button onClick={() => void loadMore()} busy={loadingMore} busyLabel="Loading…">Load more</Button>

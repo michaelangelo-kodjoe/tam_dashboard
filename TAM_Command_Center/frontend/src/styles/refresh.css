@@ -70,10 +70,9 @@
 .tile__big { font-size: 28px; line-height: 34px; font-weight: 600; }
 .tile__legend { margin-top: var(--sp-2); }
 .hbars { list-style: none; margin: 0; padding: 0; }
-.hbar { display: grid; grid-template-columns: 150px minmax(0, 1fr) 24px; gap: var(--sp-2); align-items: center; height: 22px; }
+.hbar { display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: var(--sp-2); align-items: center; height: 22px; }
 .hbar__name { color: var(--muted); font-size: var(--fs-sm); }
 .hbar__name:hover { color: var(--text); }
-.hbar__track { display: block; min-width: 4px; }
 .hbar__n { text-align: right; }
 .cal { display: grid; grid-template-columns: repeat(15, 1fr); gap: 3px; margin-top: 10px; }
 .cal__cell { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; height: 26px; border-radius: var(--r-sm); background: var(--surface-3); }

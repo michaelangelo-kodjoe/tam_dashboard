@@ -77,12 +77,6 @@
 .note__subject { margin: 0; font-size: var(--fs-md); line-height: var(--lh-md); font-weight: 600; }
 .note__body.is-clamped { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .note__actionitems { border-top: 1px solid var(--border); padding-top: 6px; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); }
-.sysevent { display: flex; align-items: center; gap: var(--sp-2); height: 28px; padding: 0 var(--sp-3); font-size: var(--fs-sm); min-width: 0; }
-.sysevent__icon { color: var(--subtle); flex: none; }
-.sysevent__label { flex: none; }
-.sysevent__time { flex: none; }
-.sysevent__text { color: var(--muted); min-width: 0; }
-a.sysevent__text:hover { color: var(--text); }
 
 /* Settings / placeholder / sandbox */
 .settings__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); align-items: start; }
@@ -106,3 +100,4 @@ a.sysevent__text:hover { color: var(--text); }
   .brief .rail-ctx__sec:nth-child(2) { border-top: 0; }
   .brief .rail-ctx__sec:nth-child(even) { border-left: 1px solid var(--border); }
 }
+.activity__audit { margin: var(--sp-3) 0 0; }

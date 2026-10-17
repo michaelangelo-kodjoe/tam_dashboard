@@ -4,12 +4,13 @@ import { AlertCircle, Bell, CheckCircle2, Info } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useApp, useData, useQuery } from '../../store/DataContext';
 import { formatStamp, formatTime } from '../../lib/bams';
+import { parseInstant } from '../../lib/dates';
 import { cx } from '../../lib/cx';
 
 const POLL_MS = 15_000;
 /** Time of day for today, otherwise "12 Oct". */
 function when(instant: string, tz: 'local' | 'gmt'): string {
-  return new Date(instant).toDateString() === new Date().toDateString() ? formatTime(instant, tz) : formatStamp(instant, tz).replace(/ \d\d:\d\d$/, '');
+  return parseInstant(instant).toDateString() === new Date().toDateString() ? formatTime(instant, tz) : formatStamp(instant, tz).replace(/ \d{1,2}:\d\d( [AP]M)?$/, '');
 }
 
 /** Bell with an unread count and the in-app inbox popover (mockup 07). Hidden quietly when BAMS notifications are unavailable. */

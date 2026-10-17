@@ -6,7 +6,7 @@
 // calls fetch. NOT yet exercised against the live backend (Phase 4.1); contract-shaped
 // payloads are covered by ApiDataSource.test.ts.
 import type {
-  Account, AccountInput, AccountSummary, ActivityEntry, ActivityPage, ActivityTrend, AppState, BackupInfo, BamsObject, Contact,
+  Account, AccountInput, AccountSummary, ActivityEntry, ActivityPage, AppState, BackupInfo, BamsObject, Contact,
   ContactInput, Freshness, Infrastructure, InfrastructureSummary, MutationResult, Note, NoteInput, QueueItem, RecentChange,
   Runtime, ServerTile, ServerUpgrade, Settings, Task, TaskInput, TaskQuery, TodayData, TodayProgress,
 } from '../types';
@@ -18,6 +18,7 @@ import type {
   BamsImportPlan, BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRow, BamsRule,
   BamsRuleInput, BamsSettings, BamsState, BamsStateQuery, BamsTrend, TrendRange,
 } from '../bamsTypes';
+import type { AuditFacets, AuditPage, AuditQuery } from '../types';
 import type { DbRestorePreview, DbRestoreResult, RestoreIssueQuery, RestorePlan, RestoreResult } from '../portTypes';
 import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../opsTypes';
 import { FileRefusal, MAX_BYTES, readBytes, sniff } from './importFile';
@@ -50,7 +51,6 @@ type WireSideEffect = { type: string; name?: string; contact_id?: string };
 interface WireMutation<T> { ok: true; item: T; side_effects?: WireSideEffect[] }
 type WireActivity =
   | { kind: 'note'; entry_key: string; ts: string; id: string; client_id: string; created_at: string; note_type: Note['note_type']; subject: string | null; body: string | null; action_items: string | null; source: string; row_version: number; updated_at: string }
-  | { kind: 'system'; entry_key: string; ts: string; event_type: string; object_type: string; object_id: string; label: string | null; severity: string | null; source: string; sentence: string; server_name: string | null };
 
 // ---- mappers (exported for tests) -------------------------------------------------------
 export function mapAccount(a: WireAccount): AccountSummary {
@@ -104,18 +104,12 @@ export function mapInfra(w: WireInfra & { client_id: string }): Infrastructure {
 }
 
 export function mapActivity(e: WireActivity): ActivityEntry {
-  if (e.kind === 'note') {
-    return {
+  return {
       entry_kind: 'note', entry_key: e.entry_key, ts: e.ts,
       note: {
         id: e.id, client_id: e.client_id, note_type: e.note_type, timestamp: e.ts, subject: e.subject, body: e.body, action_items: e.action_items,
         source: e.source, created_at: e.created_at, updated_at: e.updated_at, row_version: e.row_version,
       },
-    };
-  }
-  return {
-    entry_kind: 'system', entry_key: e.entry_key, ts: e.ts, object_type: e.object_type, object_id: e.object_id,
-    sentence: e.sentence, source: e.source, severity: e.severity, server_name: e.server_name ?? null,
   };
 }
 
@@ -173,7 +167,8 @@ export class ApiDataSource implements DataSource {
     const res = await this.rawRequest('GET', path);
     const cd = res.headers.get('Content-Disposition') ?? '';
     const filename = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1];
-    return { blob: await res.blob(), filename: filename ? decodeURIComponent(filename) : fallback };
+    const omitted = Number(res.headers.get('X-Log-Files-Omitted') ?? 0);
+    return { blob: await res.blob(), filename: filename ? decodeURIComponent(filename) : fallback, ...(omitted > 0 ? { omitted } : {}) };
   }
 
   private qs(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -216,17 +211,13 @@ export class ApiDataSource implements DataSource {
     };
   }
 
-  async getActivityTrend(days = 14): Promise<ActivityTrend> {
-    const r = await this.request<{ today: string; days: number; series: Record<string, number[]> }>('GET', `/api/accounts/activity-trend${this.qs({ days })}`);
-    return { today: r.today, days: r.days, series: r.series };
-  }
 
   async getActivity(clientId: string, q: ActivityQuery): Promise<ActivityPage> {
     const r = await this.request<{ items: WireActivity[]; next_cursor: string | null }>(
       'GET',
       `/api/client/${encodeURIComponent(clientId)}/activity${this.qs({ filter: q.filter, q: q.q, before: q.cursor, limit: q.limit })}`,
     );
-    return { items: r.items.map(mapActivity), next_cursor: r.next_cursor };
+    return { items: r.items.filter((e) => e.kind === 'note').map(mapActivity), next_cursor: r.next_cursor };
   }
 
   async getTasks(query: TaskQuery): Promise<Task[]> {
@@ -486,6 +477,26 @@ export class ApiDataSource implements DataSource {
   }
   async applyDatabaseRestore(input: { restore_id: string; confirm: string }): Promise<DbRestoreResult> {
     return (await this.request<{ item: DbRestoreResult }>('POST', '/api/restore/database/apply', input)).item;
+  }
+
+  async downloadLogs(file: 'zip' | 'current'): Promise<DownloadedFile> {
+    return this.download(`/api/logs/download${this.qs({ file })}`, file === 'zip' ? 'tam_logs.zip' : 'tam_command_center.log');
+  }
+
+  // ---- Audit log (contract 18.2) -------------------------------------------------------------
+  private auditQs(q: AuditQuery, extra: Record<string, string | number | undefined> = {}): string {
+    return this.qs({ ...extra, from: q.from, to: q.to, category: q.category, object_type: q.object_type, action: q.action, source: q.source, client_id: q.client_id, q: q.q?.trim(), limit: q.limit, offset: q.offset });
+  }
+  async getAudit(q: AuditQuery): Promise<AuditPage> {
+    const r = await this.request<AuditPage & { ok: true }>('GET', `/api/audit${this.auditQs(q)}`);
+    return { total: r.total, limit: r.limit, offset: r.offset, has_more: r.has_more, items: r.items ?? [], retention: r.retention ?? null };
+  }
+  async getAuditFacets(): Promise<AuditFacets> {
+    const r = await this.request<AuditFacets & { ok: true }>('GET', '/api/audit/facets');
+    return { categories: r.categories ?? [], object_types: r.object_types ?? [], actions: r.actions ?? [], sources: r.sources ?? [], retention: r.retention ?? null };
+  }
+  async exportAudit(q: AuditQuery): Promise<DownloadedFile> {
+    return this.download(`/api/audit/export${this.auditQs({ ...q, limit: undefined, offset: undefined }, { format: 'csv' })}`, 'tam_audit.csv');
   }
 
   // ---- Operations (contract section 13) -----------------------------------------------------

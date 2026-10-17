@@ -5,6 +5,7 @@ import { Select } from '../components/ui/Select';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { Checkbox } from '../components/ui/Checkbox';
 import { CollapsiblePanel } from '../components/ui/CollapsiblePanel';
+import { AuditLog } from '../components/portability/AuditLog';
 import { RestoreFileDialog } from '../components/portability/RestoreFileDialog';
 import { RestoreDatabaseDialog } from '../components/portability/RestoreDatabaseDialog';
 import { saveFile } from '../lib/download';
@@ -14,9 +15,12 @@ import { EmptyState, ErrorBanner, SkeletonRows } from '../components/ui/Feedback
 import { Field } from '../components/ui/Fields';
 import { useToast } from '../components/ui/Toast';
 import { useApp, useData, useQuery } from '../store/DataContext';
-import type { BackupInfo, Settings } from '../types';
-import { formatTimestamp } from '../lib/dates';
-import { useDocumentTitle } from '../lib/hooks';
+import { backupKind, type BackupInfo, type Settings } from '../types';
+
+const KIND_LABEL = { weekly: 'Weekly', safety: 'Safety', manual: 'Manual' } as const;
+import { formatTimestamp, setTimeFormat, type TimeFormat } from '../lib/dates';
+import { useLocation } from 'react-router-dom';
+import { useDocumentTitle, useTimeFormat } from '../lib/hooks';
 
 function sizeText(n: number): string {
   return n >= 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
@@ -27,6 +31,8 @@ export function SettingsPage() {
   const { settings, state } = useApp();
   const { ds, bump } = useData();
   const toast = useToast();
+  const fmt = useTimeFormat();
+  const section = new URLSearchParams(useLocation().search).get('section');
 
   const save = async (patch: Partial<Settings>, label: string) => {
     try {
@@ -51,7 +57,7 @@ export function SettingsPage() {
             </Field>
             <div className="field">
               <span className="field__label">Time display</span>
-              <SegmentedControl<Settings['time_display']> label="Time display" value={settings.time_display} onChange={(v) => void save({ time_display: v }, 'Time display')} options={[{ value: 'local', label: 'Local' }, { value: 'gmt', label: 'GMT' }]} />
+              <SegmentedControl<TimeFormat> label="Time display" value={fmt} onChange={(v) => { setTimeFormat(v); toast.push({ kind: 'success', message: 'Time display saved' }); }} options={[{ value: '12h', label: 'Local 12-hour (am/pm)' }, { value: '24h', label: 'Local 24-hour' }]} />
             </div>
             <Field label="Dashboard auto-refresh">
               {(p) => <Select id={p.id} value={settings.auto_refresh_minutes} onChange={(v) => v && void save({ auto_refresh_minutes: v as Settings['auto_refresh_minutes'] }, 'Auto-refresh')} options={[{ value: 'off', label: 'Off' }, { value: '1', label: 'Every 1 minute' }, { value: '5', label: 'Every 5 minutes' }, { value: '15', label: 'Every 15 minutes' }]} />}
@@ -73,11 +79,15 @@ export function SettingsPage() {
           </dl>
         </Panel>
 
-        <CollapsiblePanel id="settings-data" title="Data" hint="Backups" className="settings__wide">
+        <CollapsiblePanel id="settings-data" title="Data" className="settings__wide">
           {() => <DataSection />}
         </CollapsiblePanel>
 
-        <CollapsiblePanel id="settings-logging" title="Logging" hint="Log level and recent log" className="settings__wide">
+        <CollapsiblePanel id="settings-audit" title="Audit log" className="settings__wide" forceOpen={section === 'audit'}>
+          {() => <AuditLog />}
+        </CollapsiblePanel>
+
+        <CollapsiblePanel id="settings-logging" title="Logging" className="settings__wide">
           {() => <LoggingSection />}
         </CollapsiblePanel>
       </div>
@@ -120,7 +130,7 @@ function DataSection() {
 
   const bcols: Column<BackupInfo>[] = [
     { key: 'name', header: 'Name', mono: true, cell: (b) => b.name },
-    { key: 'reason', header: 'Reason', cell: (b) => b.reason },
+    { key: 'kind', header: 'Kind', cell: (b) => { const k = backupKind(b); return <span className={`badge ${k === 'weekly' ? 'badge--info' : k === 'manual' ? 'badge--neutral' : 'badge--warning'}`} title={b.reason}>{KIND_LABEL[k]}</span>; } },
     { key: 'size', header: 'Size', align: 'right', cell: (b) => sizeText(b.size_bytes) },
     { key: 'time', header: 'Created', align: 'right', cell: (b) => formatTimestamp(b.created_at, settings.time_display, today) },
     { key: 'act', header: 'Restore', align: 'right', cell: (b) => <Button size="sm" variant="ghost" icon={<RotateCcw size={14} strokeWidth={1.5} />} aria-label={`Restore this backup: ${b.name}`} onClick={() => setDlg({ kind: 'db', backup: b.name })}>Restore this backup</Button> },
@@ -150,6 +160,7 @@ function DataSection() {
         <span className="ops-spacer" style={{ flex: 1 }} />
         <Button size="sm" variant="primary" busy={busy} busyLabel="Backing up…" onClick={() => void backupNow()} icon={<DatabaseBackup size={16} strokeWidth={1.5} />}>Create backup now</Button>
       </div>
+      <p className="muted sm pt-backupnote">A backup is created automatically once a week; safety backups are made before imports and deletes. Older ones are removed automatically.</p>
       {backups.loading && <SkeletonRows rows={3} label="Loading backups" />}
       {backups.error ? <ErrorBanner error={backups.error} onRetry={backups.reload} title="Could not load backups" /> : null}
       {backups.data && <DataTable caption="Most recent backups" columns={bcols} rows={backups.data} rowKey={(b) => b.name} empty={<EmptyState>No backups yet.</EmptyState>} />}
@@ -173,6 +184,19 @@ function LoggingSection() {
       toast.push({ kind: 'error', message: `Could not save ${label.toLowerCase()}.`, detail: e instanceof Error ? e.message : undefined });
     }
   };
+  const [dl, setDl] = useState<string | null>(null);
+  const [omitted, setOmitted] = useState(false);
+  const download = async (file: 'zip' | 'current') => {
+    setDl(file);
+    try {
+      const f = await ds.downloadLogs(file);
+      saveFile(f);
+      setOmitted(!!f.omitted);
+      toast.push({ kind: 'success', message: file === 'zip' ? 'Logs downloaded' : 'Current log downloaded', detail: f.filename });
+    } catch (e) {
+      toast.push({ kind: 'error', message: 'Could not download the logs.', detail: e instanceof Error ? e.message : undefined });
+    } finally { setDl(null); }
+  };
   return (
     <>
       <div className="form form--inline">
@@ -180,6 +204,12 @@ function LoggingSection() {
           {(p) => <Select id={p.id} value={settings.log_level} onChange={(v) => v && void save({ log_level: v as Settings['log_level'] }, 'Log level')} options={[{ value: 'INFO', label: 'INFO' }, { value: 'DEBUG', label: 'DEBUG' }]} />}
         </Field>
       </div>
+      <div className="lg-actions">
+        <Button size="sm" icon={<Download size={14} strokeWidth={1.5} />} busy={dl === 'zip'} busyLabel="Preparing…" onClick={() => void download('zip')}>Download logs</Button>
+        <Button size="sm" variant="secondary" icon={<Download size={14} strokeWidth={1.5} />} busy={dl === 'current'} busyLabel="Preparing…" onClick={() => void download('current')}>Download current log</Button>
+      </div>
+      {omitted && <p className="muted sm lg-note">Older log files were omitted (size limit).</p>}
+      <p className="muted sm lg-note">Log files older than 7 days are removed every week.</p>
       <h3 className="label logs__title">Recent log</h3>
       {logs.loading && <SkeletonRows rows={3} label="Loading log" />}
       {logs.error ? <ErrorBanner error={logs.error} onRetry={logs.reload} title="Could not load the log" /> : null}

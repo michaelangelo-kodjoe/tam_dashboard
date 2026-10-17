@@ -4,6 +4,8 @@ import type { QueueItem } from '../../types';
 import type { TimeDisplay } from '../../lib/dates';
 import { TIER_TONE, keyFacts, openLabel, whySentence } from '../../lib/triage';
 import { accountPath, queueTarget } from '../../lib/links';
+import { useApp } from '../../store/DataContext';
+import { RichText } from '../../components/ui/Feedback';
 import { PriorityLabel, SeverityBadge, StatusBadge } from '../../components/ui/Badges';
 
 const KIND_ICON: Record<QueueItem['kind'], LucideIcon> = {
@@ -20,6 +22,8 @@ function HeaderBadge({ item }: { item: QueueItem }) {
 
 /** Why it is here, key facts, one Open link. Nothing here completes or edits the item (D-28). */
 export function TriageDetail({ item, today, tz }: { item: QueueItem; today: string; tz: TimeDisplay }) {
+  const { state } = useApp();
+  const notes = item.kind === 'task' ? state.tasks.find((t) => t.id === item.id)?.notes ?? null : null;
   const tone = item.tier != null ? TIER_TONE[item.tier] : 'neutral';
   const Icon = item.urgency === 'overdue' && item.kind === 'task' ? AlarmClock : KIND_ICON[item.kind];
   const facts = keyFacts(item, today, tz);
@@ -39,8 +43,10 @@ export function TriageDetail({ item, today, tz }: { item: QueueItem; today: stri
       </header>
       <div className="detail__cols">
         <div className="detail__col">
-          <h3 className="label">Why it is here</h3>
-          <p className="detail__why">{whySentence(item, today)}</p>
+          <h3 className="label">Notes</h3>
+          {item.kind === 'task'
+            ? (notes ? <RichText text={notes} className="detail__notes-body" /> : <p className="subtle detail__why">No notes</p>)
+            : <p className="detail__why">{whySentence(item, today)}</p>}
         </div>
         <div className="detail__col">
           <h3 className="label">Key facts</h3>

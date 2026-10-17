@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bucketCounts, dayProgress, trendBounds, type LocalMidnight } from './progress';
+import { dayProgress, type LocalMidnight } from './progress';
 import type { Tables } from './rebase';
 import { newMock } from './testFile';
 import { downsampleMax, serverTiles } from './derive';
@@ -12,15 +12,12 @@ const utcMidnight: LocalMidnight = (day) => `${day}T00:00:00.000Z`;
 const dates = ['2026-10-12', '2026-10-20', '2026-11-03'];
 const fixture = (d: string) => JSON.parse(readFileSync(resolve(__dirname, `__fixtures__/run2_parity_${d}.json`), 'utf8')) as { progress: Record<string, unknown>; trend: Record<string, number[]> };
 
-describe('parity with the reference SQL (db/queries/day_progress.sql, activity_trend.sql)', () => {
+describe('parity with the reference SQL (db/queries/day_progress.sql)', () => {
   for (const d of dates) {
-    it(`progress and activity trend match the SQL output for ${d}`, async () => {
+    it(`progress matches the SQL output for ${d}`, async () => {
       const ds = newMock({ today: d, localMidnight: utcMidnight });
       const today = await ds.getToday();
       expect(today.progress).toEqual(fixture(d).progress);
-      const trend = await ds.getActivityTrend(14);
-      expect(trend.days).toBe(14);
-      expect(trend.series).toEqual(fixture(d).trend);
     });
   }
 });
@@ -95,19 +92,6 @@ describe('dayProgress (PM §10.2 edge cases)', () => {
     const p = dayProgress(t, T, utcMidnight);
     expect(p.done).toBeLessThanOrEqual(p.total);
     expect(p.total).toBe(p.done + p.open);
-  });
-});
-
-describe('trend buckets', () => {
-  it('has days+1 bounds and half-open buckets', () => {
-    const b = trendBounds('2026-10-13', 14, utcMidnight);
-    expect(b).toHaveLength(15);
-    expect(b[0]).toBe('2026-09-30T00:00:00.000Z');
-    expect(b[14]).toBe('2026-10-14T00:00:00.000Z');
-    const c = bucketCounts(['2026-09-30T00:00:00.000Z', '2026-09-29T23:59:59.999Z', '2026-10-14T00:00:00.000Z', '2026-10-13T23:59:59.999Z', '2026-10-13T00:00:00.000Z'], b);
-    expect(c[0]).toBe(1);
-    expect(c[13]).toBe(2);
-    expect(c.reduce((s, n) => s + n, 0)).toBe(3);
   });
 });
 

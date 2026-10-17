@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { getTimeFormat, subscribeTimeFormat, type TimeFormat } from './dates';
 
 export function useMediaQuery(query: string): boolean {
   const get = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false);
@@ -35,4 +36,9 @@ export function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title ? `${title} · TAM Command Center` : 'TAM Command Center';
   }, [title]);
+}
+
+/** Re-render when the 12/24-hour preference changes. */
+export function useTimeFormat(): TimeFormat {
+  return useSyncExternalStore(subscribeTimeFormat, getTimeFormat);
 }

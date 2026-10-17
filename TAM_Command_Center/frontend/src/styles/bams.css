@@ -232,6 +232,7 @@ td.bm-why { color: var(--danger); min-width: 260px; padding: 6px 10px; height: a
 .bm-tbl .table td.bm-c-wide { max-width: none; overflow: visible; }
 .bm-tbl .table td.bm-c-loc { max-width: 130px; }
 .bm-appl__client { max-width: 150px; display: inline-block; vertical-align: bottom; }
+.bm-tbl .table td.ops-col-cb { width: 36px; padding: 0; }
 .bm-tbl .table td.bm-c-metric { max-width: 190px; }
 .bm-tbl--wrap .table td { white-space: normal; max-width: 420px; height: auto; padding-top: 6px; padding-bottom: 6px; overflow: visible; }
 .bm-tbl--wrap .table td.is-right { white-space: nowrap; }

@@ -220,24 +220,15 @@ def test_fe_ac_2_note_entries_shape(c):
 
 
 def test_fe_ac_3_server_name(c):
+    """Activity no longer carries system events (2026-10-16); server_name remains on Today recent_changes rows."""
     st = c.get("/api/state").json()
-    found_alert = found_up = False
     for cid in [a["id"] for a in st["accounts"]]:
-        for e in c.get(f"/api/client/{cid}/activity?filter=system&limit=100").json()["items"]:
-            assert "server_name" in e, e
-            if e["event_type"].startswith(("bams_alert.", "server_upgrade.")):
-                assert e["server_name"], e
-                if e["event_type"].startswith("bams_alert."):
-                    assert " · " not in (e["server_name"] or "") or True
-                    found_alert = True
-                else:
-                    found_up = True
-            else:
-                assert e["server_name"] is None, e
+        assert c.get(f"/api/client/{cid}/activity?filter=system&limit=100").json()["items"] == []
     today = c.get("/api/today").json()
-    for row in today.get("recent_changes", []):
+    rows = today.get("recent_changes", [])
+    assert rows
+    for row in rows:
         assert "server_name" in row, row
-    assert found_alert or found_up
 
 
 def test_fe_ac_4_next_upgrade(c):

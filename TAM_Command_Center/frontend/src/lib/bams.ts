@@ -1,7 +1,7 @@
 // Pure BAMS helpers shared by the pages and the mock adapter. All metric values are
 // percentages (user decision, contract §11.12 0e): they are always shown with a % sign.
 import type { BamsRow, BamsHigh, DisplayStatus, Operator, ReferencePeriod, RuleType, Severity } from '../bamsTypes';
-import { pad2, type TimeDisplay } from './dates';
+import { pad2, parseInstant, timeOfDay, type TimeDisplay } from './dates';
 
 export function formatValue(n: number | null | undefined): string {
   if (n == null) return '';
@@ -27,24 +27,20 @@ export function formatSeconds(s: number): string {
   return `${s} s`;
 }
 
-/** HH:MM (local or GMT per the app setting). */
-export function formatTime(instant: string | null | undefined, tz: TimeDisplay = 'local', seconds = false): string {
+/** Time of day in the user's local time zone, 12-hour am/pm by default (setting only decides 12/24 hour). */
+export function formatTime(instant: string | null | undefined, _tz: TimeDisplay = 'local', seconds = false): string {
   if (!instant) return 'never';
-  const d = new Date(instant);
+  const d = parseInstant(instant);
   if (Number.isNaN(d.getTime())) return 'never';
-  const h = tz === 'gmt' ? d.getUTCHours() : d.getHours();
-  const m = tz === 'gmt' ? d.getUTCMinutes() : d.getMinutes();
-  const s = tz === 'gmt' ? d.getUTCSeconds() : d.getSeconds();
-  return `${pad2(h)}:${pad2(m)}${seconds ? `:${pad2(s)}` : ''}`;
+  return timeOfDay(d, seconds);
 }
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** "14 Oct 14:02" */
-export function formatStamp(instant: string | null | undefined, tz: TimeDisplay = 'local'): string {
+/** "14 Oct 2:02 PM" (local) */
+export function formatStamp(instant: string | null | undefined, _tz: TimeDisplay = 'local'): string {
   if (!instant) return '';
-  const d = new Date(instant);
-  const day = tz === 'gmt' ? d.getUTCDate() : d.getDate();
-  const mon = tz === 'gmt' ? d.getUTCMonth() : d.getMonth();
-  return `${day} ${MONTHS[mon]} ${formatTime(instant, tz)}`;
+  const d = parseInstant(instant);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${timeOfDay(d)}`;
 }
 /** "3 Oct" from a YYYY-MM-DD date. */
 export function formatHighDate(date: string | null | undefined): string {

@@ -49,10 +49,11 @@ def spark(conn: sqlite3.Connection, metric_id: str, now: _dt.datetime) -> List[f
 
 def build_row(m: Dict[str, Any], ctx: Ctx, events: List[Dict[str, Any]], with_spark: Optional[sqlite3.Connection] = None
               ) -> Dict[str, Any]:
-    has_val = ctx.available and m["current_value"] is not None and m["last_source_update"] is not None
+    # Freshness is communication freshness: the age of the last successful receipt, NOT of the last value change.
+    has_val = ctx.available and m["current_value"] is not None and m["last_received"] is not None
     age = None
-    if m["last_source_update"]:
-        age = max(0, int((ctx.now - parse(m["last_source_update"])).total_seconds()))
+    if m["last_received"]:
+        age = max(0, int((ctx.now - parse(m["last_received"])).total_seconds()))
     fresh = L.freshness(age, has_val, ctx.live_s, m["stale_after_seconds"], ctx.available)
     disabled = not (m["m_enabled"] and m["o_enabled"])
     alert = pick_alert(events)
@@ -105,7 +106,7 @@ def _sort_value(r: Dict[str, Any], key: str) -> Any:
     return {"appliance": (o["name"] or "").casefold(), "location": (o["location"] or "").casefold(),
             "metric": r["metric_name"].casefold(), "current": r["current_value"], "high30": r["highs"]["d30"]["value"],
             "high60": r["highs"]["d60"]["value"], "high90": r["highs"]["d90"]["value"],
-            "last_update": r["last_source_update"]}[key]
+            "last_update": r["last_received"]}[key]
 
 
 def build_state(conn: sqlite3.Connection, ctx: Ctx, monitor: Dict[str, Any], provider: Dict[str, Any], banner: Optional[Dict[str, Any]],
