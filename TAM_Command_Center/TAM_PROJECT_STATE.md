@@ -176,3 +176,4 @@ Real Bloomberg provider is built and fake-session tested only. Left for later, t
 - Workspace Overview due-date histogram removed (2026-10-16).
 - Log download buttons and audit retention line built (2026-10-16); dev server restarted on a fresh schema-2 DB.
 - Audit log keeps only Download CSV in the UI (2026-10-16).
+- Note action items offer new tasks one by one after save (2026-10-17).

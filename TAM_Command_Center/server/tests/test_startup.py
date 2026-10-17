@@ -383,3 +383,51 @@ def test_log_level_setting_applied(api):
     assert logging.getLogger().level == logging.DEBUG
     api.ok("/api/settings/save", {"settings": {"log_level": "INFO"}})
     assert logging.getLogger().level == logging.INFO
+
+
+# ------------------------------------------------------------------ QA-8-1: a failing migration is a clean refusal
+def _bad_migration_dir(tmp_path, monkeypatch, sql="INSERT INTO nonexistent_table VALUES (1);\n"):
+    from server.dbkit import migrate
+    mdir = tmp_path / "migrations_bad"
+    shutil.copytree(migrate.MIGRATIONS_DIR, mdir)
+    (mdir / "0003_bad.sql").write_text(sql + "INSERT INTO app_meta(key, value) VALUES ('schema_version', '3') "
+                                       "ON CONFLICT(key) DO UPDATE SET value = excluded.value;\n")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
+
+
+def test_failing_migration_with_raw_sqlite_error_is_a_clean_refusal(tmp_path, monkeypatch):
+    import sqlite3
+    from server.app import create_app
+    from server.errors import StartupRefused
+    from server.runtime import Runtime
+    cfg = make_config(tmp_path)
+    create_app(cfg).state.runtime.close()                              # DB at the current version
+    _bad_migration_dir(tmp_path, monkeypatch)
+    with pytest.raises(StartupRefused) as e:
+        Runtime(cfg)
+    assert e.value.exit_code == 4 and "Database refused" in str(e.value) and "0003_bad.sql" in str(e.value)
+    assert "rolled back" in str(e.value)
+    assert list(cfg.backup_dir.glob("tam_*_pre-migration_v2.db"))      # the safety backup is kept
+    c = sqlite3.connect(cfg.db_path)
+    assert c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "2"
+    c.close()
+
+
+def test_real_entry_point_exits_with_code_4_and_plain_message(tmp_path, monkeypatch, capsys):
+    from server import __main__ as entry
+    from server import config as config_mod
+    from server.app import create_app
+    cfg = make_config(tmp_path)
+    create_app(cfg).state.runtime.close()
+    monkeypatch.setattr(config_mod, "APP_ROOT", cfg.app_root)
+    import socket
+    with socket.socket() as sk:
+        sk.bind(("127.0.0.1", 0))
+        free = sk.getsockname()[1]
+    for k, v in {"LOCALAPPDATA": str(tmp_path / "localappdata"), "TAM_PORT": str(free), "TAM_DEV_MODE": "1",
+                 "TAM_DEV_SEED": "0"}.items():
+        monkeypatch.setenv(k, v)
+    _bad_migration_dir(tmp_path, monkeypatch)
+    rc = entry.main()
+    err = capsys.readouterr().err
+    assert rc == 4 and "cannot start" in err and "Database refused" in err and "Traceback" not in err

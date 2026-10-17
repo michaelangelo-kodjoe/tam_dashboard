@@ -270,9 +270,13 @@ def migrate(conn: sqlite3.Connection, backup_hook: Optional[BackupHook] = None, 
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (f"migration.{num:04d}.applied_at", utc_now()))
             conn.execute("COMMIT")
-        except Exception:
+        except Exception as exc:
             if conn.in_transaction:
                 conn.execute("ROLLBACK")
+            if isinstance(exc, sqlite3.Error):
+                # QA-8-1: bad SQL / disk full in a migration is a refused database, not a crash. Everything is rolled
+                # back and the pre-migration backup is kept; the app turns this into a clean exit code 4.
+                raise MigrationError(f"{path.name} failed and was rolled back ({type(exc).__name__}: {str(exc)[:200]})") from exc
             raise
         result["applied"].append(path.name)  # type: ignore[union-attr]
         result["to"] = num

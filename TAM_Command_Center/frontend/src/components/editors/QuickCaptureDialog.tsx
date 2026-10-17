@@ -11,6 +11,7 @@ import { useToast } from '../ui/Toast';
 import { FormError, focusFirstInvalid, useSaveFlow } from './shared';
 import { instantToLocalInput, localInputToInstant } from './noteLookup';
 import { useApp, useData } from '../../store/DataContext';
+import { noteLabelOf } from '../../lib/actionItems';
 import { useUI, type CaptureType } from '../../store/UIContext';
 import { TASK_CATEGORIES, TASK_PRIORITIES, type MutationResult, type Note, type Task, type TaskInput } from '../../types';
 import { accountPath } from '../../lib/links';
@@ -35,6 +36,7 @@ function CaptureForm({ prefill, onClose }: { prefill: { type?: CaptureType; clie
   const { ds, bump } = useData();
   const { accounts, state, today } = useApp();
   const toast = useToast();
+  const { offerActionItems } = useUI();
   const flow = useSaveFlow();
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -119,6 +121,7 @@ function CaptureForm({ prefill, onClose }: { prefill: { type?: CaptureType; clie
     const ok = await flow.run(async () => { saved = (await ds.saveNote(input)).item; });
     if (!ok || !saved) { setTimeout(() => focusFirstInvalid(bodyRef.current), 0); return; }
     bump();
+    if (input.action_items) offerActionItems({ clientId: input.client_id, noteLabel: noteLabelOf(input.subject, input.note_type, input.timestamp), actionItems: input.action_items });
     toast.push({ kind: 'success', message: `${type} saved`, action: { label: 'View', to: accountPath(input.client_id, 'activity') } });
     onClose();
   };

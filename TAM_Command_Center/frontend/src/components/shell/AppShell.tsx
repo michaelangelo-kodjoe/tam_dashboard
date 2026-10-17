@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useMatch } from 'react-router-dom
 import { NavRail } from './NavRail';
 import { TopBar } from './TopBar';
 import { EditorHost } from '../editors/EditorHost';
+import { ActionItemPrompt } from '../editors/ActionItemPrompt';
 import { QuickCaptureDialog } from '../editors/QuickCaptureDialog';
 import { ErrorBanner, SkeletonRows } from '../ui/Feedback';
 import { AppStateProvider, useApp, useQuery } from '../../store/DataContext';
@@ -70,6 +71,7 @@ function Shell() {
         </main>
       </div>
       <EditorHost />
+      <ActionItemPrompt />
       <QuickCaptureDialog />
     </div>
   );

@@ -261,7 +261,7 @@ class MigrationContract(unittest.TestCase):
             migrate.MIGRATIONS_DIR = self._with_extra_migration(
                 "CREATE TABLE half_done(x);\nINSERT INTO nope VALUES (1);\n"
                 "UPDATE app_meta SET value='2' WHERE key='schema_version';\n")
-            with self.assertRaises(sqlite3.OperationalError):
+            with self.assertRaisesRegex(migrate.MigrationError, "rolled back"):       # QA-8-1: not a raw sqlite3 error
                 migrate.migrate(conn, lambda c, why: self.tmp / "unused", channel=None)
             self.assertEqual(migrate.current_version(conn), 2)
             self.assertIsNone(conn.execute("SELECT 1 FROM sqlite_master WHERE name='half_done'").fetchone())

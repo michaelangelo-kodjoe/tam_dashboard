@@ -32,6 +32,9 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 ## Unreleased - Run 5 Operations DEV seed (T-166)
 - Changed: DEV mock seed (`db/seed_mock.py`, `db/mock_data.json`): PROD appliances now carry Region East/West (3 left on EMEA = "Set East or West"); 2 DEV appliances (NWH, KMC) added on an isolated RNG/id stream so no other seeded value moved; next quarter (2027 Q1) has no PROD West date; server_upgrades gain one date override (kmc-bpipe-hk-01, 2026 Q4) and one version override (brs-sapi-ny-01, 7.2.0-rc2). Existing quarters/status mix/overdue (BRS DEV In Progress) already covered. No schema change. 636 tests pass.
 
+## Unreleased - Create a task from a note's action items (frontend)
+- Added: after a note with Action items is saved (Note drawer or Quick Capture; new notes, or edits that changed the action items) a popup asks "Create a task from this action item?" with the item text and account; "Yes, create task" / "No" (No has focus, Escape = No). The note is already saved either way. Yes opens the normal new-task drawer for that account prefilled (title = the item, truncated at 500 with the full text in Notes; Notes "From note: <subject or type>, <date>"; usual defaults). Multi-line or bulleted action items are asked one by one ("Action item N of M", next prompt after the task drawer closes or No). Files: `lib/actionItems.ts`, `components/editors/ActionItemPrompt.tsx`, queue state in `store/UIContext.tsx`; `TaskDrawer` takes a `prefill`. Vitest 496.
+
 ## Unreleased - Audit log: Excel download removed (frontend)
 - Removed: the "Download Excel" button in Settings > Audit log; "Download CSV" stays. `exportAudit(query)` is CSV-only in the DataSource, Api and Mock adapters; tests updated (Vitest 489). The server's xlsx format is untouched.
 
@@ -107,6 +110,9 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - Added: `DataSource` methods `getOperations`, `saveOperationsQuarter`, `deleteOperationsQuarter`, `saveOperationsAppliance`, `resetOperationsAppliance`, `setOperationsVersion` (Api + Mock; `data/mock/mockOperations.ts`), `src/opsTypes.ts`, `src/lib/operations.ts`.
 - Added: BAMS import preview and result show the `operations_note` line ("N appliances need East or West set for Operations"), informational only.
 - Tests: +30 Vitest (lib, mock adapter, API adapter, page). Verified live on tam-app-dev: grouped table, select + Set version, edit + East save, no console errors. Known: `today.test.ts` parity fails after the data architect's in-progress `db/mock_data.json` extension (passes on the committed data).
+
+## Unreleased - QA-8-1 migration failure is a clean refusal
+- Fixed: `db/migrate.py` converts a raw `sqlite3.Error` during a migration into `MigrationError` (transaction rolled back, backup kept); `server/runtime.py` also catches `sqlite3.Error`; startup exits with code 4 and the plain "Database refused" message instead of a traceback with exit 1. Staged restore with a failing migration gives 422 `migration_failed`. Tests: `test_startup.py` (2), `test_dbrestore.py` (1), db migration test updated.
 
 ## Unreleased - Audit log retention (schema 2)
 - Added: migration `0002_audit_prune.sql` (+ `db/schema.sql`): audit DELETE is refused only for rows newer than 14 days; UPDATE and id re-use stay refused. `server/auditprune.py`: every 14 days delete entries older than 14 days (first start only sets the cycle anchor; persisted in app_meta; one `pruned` audit event when N > 0; no safety backup, user accepted). `retention` meta in `GET /api/audit` and `/facets`. Schema version is now 2: DB tests, startup tests and the DB-restore older-schema test updated (real 0001 -> 0002 upgrade on the staged copy). Contract 18.5; `server/tests/test_audit_prune.py` (6) and `Schema2_AuditPrune` (5).

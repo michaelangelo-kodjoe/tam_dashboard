@@ -70,7 +70,7 @@ class Runtime:
         try:
             try:
                 result = migrate.migrate(conn, self.backups.hook, channel=cfg.channel)
-            except migrate.MigrationError as exc:
+            except (migrate.MigrationError, sqlite3.Error) as exc:       # QA-8-1: never a raw traceback
                 raise StartupRefused(f"Database refused: {exc}", exit_code=4) from exc
             fresh = not existed and result["from"] == 0
             if cfg.dev_seed and fresh and cfg.mode == "DEV":

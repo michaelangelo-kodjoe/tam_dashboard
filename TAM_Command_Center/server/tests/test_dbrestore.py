@@ -461,3 +461,16 @@ def test_from_backup_writes_nothing_beside_the_backup(ra):
     go(ra, item)
     assert sorted(p.name for p in d.iterdir() if "-wal" in p.name or "-shm" in p.name) == []
     assert not [n for n in before if n.endswith(("-wal", "-shm"))]
+
+
+def test_raw_sqlite_error_in_a_staged_migration_is_a_clean_refusal(ra, tmp_path, monkeypatch):
+    """QA-8-1: bad SQL in a migration must give migration_failed (422), never a 500, and leave the live DB alone."""
+    good = copy_bytes(ra)
+    bad = tmp_path / "0003_bad.sql"
+    bad.write_text("INSERT INTO nonexistent_table VALUES (1);\n")
+    real = DR.migrate.discover
+    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(3, bad)])
+    before = live_sha(ra)
+    err = stage(ra, good, status=422)
+    assert err["code"] == "migration_failed" and "nothing was changed" in err["message"]
+    assert live_sha(ra) == before and leftovers(ra) == []

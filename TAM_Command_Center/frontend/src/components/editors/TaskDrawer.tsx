@@ -11,6 +11,7 @@ import { useToast } from '../ui/Toast';
 import { ConflictBanner, FormError, ReadOnlyRow, focusFirstInvalid, useSaveFlow } from './shared';
 import { useApp, useData } from '../../store/DataContext';
 import { TASK_CATEGORIES, TASK_PRIORITIES, TASK_STATUSES, type Task, type TaskInput } from '../../types';
+import type { TaskPrefill } from '../../lib/actionItems';
 import { clean, validateTask } from '../../lib/validate';
 import { formatTimestamp } from '../../lib/dates';
 
@@ -26,7 +27,7 @@ const fromTask = (t: Task | null, clientId: string | null): FormState => ({
 });
 
 /** Task create/edit drawer; `taskId` is a task id or "new". */
-export function TaskDrawer({ taskId, defaultClientId, onClose }: { taskId: string; defaultClientId: string | null; onClose: () => void }) {
+export function TaskDrawer({ taskId, defaultClientId, prefill, onClose }: { taskId: string; defaultClientId: string | null; prefill?: TaskPrefill | null; onClose: () => void }) {
   const { ds, bump } = useData();
   const { accounts, state, today, settings } = useApp();
   const toast = useToast();
@@ -34,7 +35,7 @@ export function TaskDrawer({ taskId, defaultClientId, onClose }: { taskId: strin
   const [loading, setLoading] = useState(!isNew);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [task, setTask] = useState<Task | null>(null);
-  const [form, setForm] = useState<FormState>(() => fromTask(null, defaultClientId));
+  const [form, setForm] = useState<FormState>(() => (prefill ? { ...fromTask(null, prefill.client_id), task: prefill.task, notes: prefill.notes } : fromTask(null, defaultClientId)));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const flow = useSaveFlow();
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -141,7 +142,7 @@ export function TaskDrawer({ taskId, defaultClientId, onClose }: { taskId: strin
     <>
       <Drawer
         kind="Task"
-        title={isNew ? 'New task' : task?.task}
+        title={isNew ? (prefill?.label ? `New task · ${prefill.label}` : 'New task') : task?.task}
         onClose={onClose}
         dirty={dirty}
         busy={flow.busy}

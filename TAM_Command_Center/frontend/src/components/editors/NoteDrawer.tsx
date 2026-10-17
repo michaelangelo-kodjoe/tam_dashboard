@@ -12,6 +12,8 @@ import { findNote, instantToLocalInput, localInputToInstant } from './noteLookup
 import { useApp, useData } from '../../store/DataContext';
 import { NOTE_TYPES, type Note, type NoteInput, type NoteType } from '../../types';
 import { clean, validateNote } from '../../lib/validate';
+import { useUI } from '../../store/UIContext';
+import { noteLabelOf } from '../../lib/actionItems';
 import { formatTimestamp } from '../../lib/dates';
 
 interface FormState { note_type: NoteType; timestamp: string; subject: string; body: string; action_items: string }
@@ -22,6 +24,7 @@ export function NoteDrawer({ noteId, clientId, newType, onClose }: { noteId: str
   const { ds, bump } = useData();
   const { accountById, settings } = useApp();
   const toast = useToast();
+  const { offerActionItems } = useUI();
   const isNew = noteId === 'new';
   const [loading, setLoading] = useState(!isNew);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -66,11 +69,14 @@ export function NoteDrawer({ noteId, clientId, newType, onClose }: { noteId: str
     if (Object.keys(errs).length) { setTimeout(() => focusFirstInvalid(bodyRef.current), 0); return; }
     let version = note?.row_version;
     if (overwrite && note) version = (await findNote(ds, clientId, note.id))?.row_version ?? version;
+    const input = build(version);
+    const changed = isNew || (input.action_items ?? '') !== (clean(initial.current.action_items) ?? '');
     const ok = await flow.run(async () => {
-      await ds.saveNote(build(version));
+      await ds.saveNote(input);
       bump();
       toast.push({ kind: 'success', message: isNew ? 'Note saved' : 'Note updated' });
     });
+    if (ok && changed && input.action_items) offerActionItems({ clientId, noteLabel: noteLabelOf(input.subject, input.note_type, input.timestamp), actionItems: input.action_items });
     if (ok) onClose();
     else setTimeout(() => focusFirstInvalid(bodyRef.current), 0);
   };

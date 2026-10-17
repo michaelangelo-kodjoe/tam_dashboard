@@ -5,6 +5,7 @@ import { NoteDrawer } from './NoteDrawer';
 import { ContactDrawer } from './ContactDrawer';
 import { AccountDrawer } from './AccountDrawer';
 import { useApp } from '../../store/DataContext';
+import { useUI } from '../../store/UIContext';
 import { NOTE_TYPES, type NoteType } from '../../types';
 import { withoutParam } from '../../lib/links';
 
@@ -18,6 +19,7 @@ export function EditorHost() {
   const match = useMatch('/accounts/:clientId/*');
   const routeClient = match?.params.clientId ?? null;
   const { state } = useApp();
+  const { taskPrefill, finishActionItem } = useUI();
   const q = new URLSearchParams(loc.search);
 
   const closeParam = (key: string) => () => {
@@ -30,7 +32,10 @@ export function EditorHost() {
   const task = q.get('task');
   if (task) {
     // opening an existing task shows the read-only popup first; Edit (or ?edit=1) opens the drawer; "new" goes straight to the form
-    if (task === 'new' || q.get('edit')) return <TaskDrawer key={task} taskId={task} defaultClientId={routeClient} onClose={closeParam('task')} />;
+    if (task === 'new' || q.get('edit')) {
+      const close = closeParam('task');
+      return <TaskDrawer key={task + (taskPrefill?.label ?? '')} taskId={task} defaultClientId={taskPrefill?.client_id ?? routeClient} prefill={task === 'new' ? taskPrefill : null} onClose={() => { close(); if (task === 'new' && taskPrefill) finishActionItem(); }} />;
+    }
     const edit = () => { const p = new URLSearchParams(loc.search); p.set('edit', '1'); navigate({ pathname: loc.pathname, search: `?${p.toString()}`, hash: loc.hash }, { replace: true }); };
     return <TaskViewDialog key={task} taskId={task} onClose={closeParam('task')} onEdit={edit} />;
   }
