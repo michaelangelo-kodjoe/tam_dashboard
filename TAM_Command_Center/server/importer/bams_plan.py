@@ -283,7 +283,6 @@ def build_plan(parsed: List[ParsedRow], snap: Dict[str, Any]) -> BPlan:
                    f"on row {first.row} with a different ticker. This row will be skipped.")
             continue
         seen_metric[r.key] = r
-    obj_lookup: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for r in rows:                                                    # C: database
         if r.state == "invalid":
             continue

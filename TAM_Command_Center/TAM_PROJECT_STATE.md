@@ -177,3 +177,4 @@ Real Bloomberg provider is built and fake-session tested only. Left for later, t
 - Log download buttons and audit retention line built (2026-10-16); dev server restarted on a fresh schema-2 DB.
 - Audit log keeps only Download CSV in the UI (2026-10-16).
 - Note action items offer new tasks one by one after save (2026-10-17).
+- Post-rc6 dead-code cleanup, no behavior change (2026-10-17); see CHANGELOG.

@@ -100,10 +100,6 @@ def rule_summary(rule: Dict[str, Any]) -> str:
     return f"{condition_text(rule)} for {_updates(rule['consecutive_updates'])}"
 
 
-def preview_sentence(rule: Dict[str, Any], metric_name: str, highs: Dict[str, Optional[float]]) -> str:
-    return preview_for(rule, metric_name, highs)
-
-
 def preview_for(rule: Dict[str, Any], subject: str, highs: Optional[Dict[str, Optional[float]]]) -> str:
     """`subject` is a metric name or 'a matching metric'. highs None = template (no numbers)."""
     n, sev = _updates(rule["consecutive_updates"]), rule["severity"]

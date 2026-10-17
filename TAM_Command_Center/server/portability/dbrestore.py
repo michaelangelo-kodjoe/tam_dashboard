@@ -13,9 +13,9 @@ import sqlite3
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 from ..audit import write_audit
 from ..dbkit import atomic_replace, migrate, raw_connect, transaction

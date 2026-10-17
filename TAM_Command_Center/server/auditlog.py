@@ -7,7 +7,7 @@ import io
 import json
 import re
 import sqlite3
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from . import auditprune
 from .dbkit import like_pattern

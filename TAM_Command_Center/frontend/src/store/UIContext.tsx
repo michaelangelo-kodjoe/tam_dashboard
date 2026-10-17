@@ -1,5 +1,4 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import type { NoteType } from '../types';
 import { parseActionItems, prefillFor, type TaskPrefill } from '../lib/actionItems';
 
 export type CaptureType = 'task' | 'follow_up' | 'Meeting Note' | 'Call Note' | 'General Note';
@@ -52,6 +51,3 @@ export function useUI(): UICtx {
   return v;
 }
 
-export function isNoteType(t: CaptureType): t is NoteType {
-  return t === 'Meeting Note' || t === 'Call Note' || t === 'General Note';
-}

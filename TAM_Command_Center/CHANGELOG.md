@@ -2,6 +2,9 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased - Cleanup (post rc6, no behavior change)
+- Removed only provably dead code (vulture/pyflakes/tsc --noUnused*, plus whole-repo grep): unused imports and locals in server/, unused functions `bams.lifecycle.preview_sentence` and `dupes.order_key`, unused frontend exports (CountStat, FieldRow, applianceLabel, isNoteType, nowInstant, types ImportField and SimilarChoice), and the stray backup docs/qa/OPEN_ITEMS.md-E. CSS, mockups, docs, migrations, web/ untouched. Rollback tag: rc6-working.
+
 ## Unreleased - Release 0.1.0-rc6 packaged (deployment-agent)
 - Built from HEAD 1586b58 after QA gate 8 PASS and the QA-8-1 fix: 831 pytest + 496 Vitest passed, tsc clean; build:api left web/ unchanged. Schema 2 (db/migrations/0002_audit_prune.sql) shipped; first start migrates schema 1 to 2 (automatic pre-migration backup); older builds cannot open the upgraded database. Docs (START_HERE, README, USER_GUIDE, VALIDATION) describe the new features and the migration warning. UNVALIDATED on Windows/Bloomberg; zip not committed; rc1-rc5 untouched.
 

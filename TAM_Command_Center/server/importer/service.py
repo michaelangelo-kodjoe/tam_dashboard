@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
-import sqlite3
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote
@@ -226,7 +225,6 @@ def skipped_file(rt: Any, import_id: str, fmt: str) -> Dict[str, Any]:
         raise NotFound("The skipped-rows file is available in the same format as the upload "
                        f"(.{s.parsed.format}).", )
     by_row = {r.row: r for r in s.rows}
-    full = {}
     # rebuild "Possible duplicate of" from the stored result text
     out: List[List[str]] = []
     for x in s.applied["skipped"]:

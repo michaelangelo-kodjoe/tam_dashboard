@@ -102,5 +102,3 @@ export function globMatch(pattern: string, text: string): boolean {
   return re.test(text);
 }
 
-/** Display name of one metric row: "Castellan Peak / BPOD-NY-01". */
-export const applianceLabel = (r: BamsRow) => `${r.object.client_name} / ${r.object.name}`;

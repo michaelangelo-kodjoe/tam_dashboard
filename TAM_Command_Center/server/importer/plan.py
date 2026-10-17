@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .. import constants as C
 from .. import dupes
 from ..errors import ValidationFailed
-from .reader import FIELDS, ParsedRow
+from .reader import ParsedRow
 
 FILL_FIELDS = ("bpid", "products", "next_contact", "notes")     # status is never filled (never blank on an account)
 INACTIVE_NOTE = "Existing account is Inactive and stays Inactive"

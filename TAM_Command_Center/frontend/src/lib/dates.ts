@@ -128,6 +128,3 @@ export function dayHeading(iso: string, today: string): string {
   return formatDateLong(iso).toUpperCase();
 }
 
-export function nowInstant(): string {
-  return new Date().toISOString();
-}

@@ -356,10 +356,6 @@ def compare(a: Profile, b: Profile) -> Optional[Dict[str, Any]]:
     return {"strength": strength, "reasons": reasons, "differences": diffs}
 
 
-def order_key(c: Dict[str, Any]) -> Tuple[Any, ...]:
-    return (STRENGTH_RANK[c["strength"]], -len(c["reasons"]), c["name"].casefold(), c["_sort_id"])
-
-
 # ---------------------------------------------------------------- indexed pool
 
 

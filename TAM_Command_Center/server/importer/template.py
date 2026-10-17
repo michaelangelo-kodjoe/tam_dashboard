@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Optional, Sequence
 
 from .. import constants as C
 from .reader import FIELDS, LABELS, _load_openpyxl

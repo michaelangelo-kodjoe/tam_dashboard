@@ -384,7 +384,6 @@ export interface TaskQuery {
 export type MatchStrength = 'High' | 'Medium' | 'Low';
 export interface ReasonText { code: string; text: string }
 export type CandidateRef = { type: 'account'; id: string } | { type: 'row'; row: number };
-export type ImportField = 'name' | 'bpid' | 'products' | 'status' | 'next_contact' | 'notes';
 export interface ImportValues {
   name: string | null; bpid: string | null; products: string | null; status: string | null; next_contact: string | null; notes: string | null;
 }

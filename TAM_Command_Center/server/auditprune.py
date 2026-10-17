@@ -10,7 +10,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from .audit import write_audit
-from .dbkit import migrate, transaction
+from .dbkit import transaction
 
 log = logging.getLogger("tam.audit")
 RETENTION_DAYS = 14

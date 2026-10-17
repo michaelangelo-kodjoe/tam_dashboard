@@ -5,8 +5,6 @@ import { Button } from '../ui/Button';
 import { Facts, Reasons, StrengthBadge, RadioList } from '../import/ImportParts';
 import type { ExactMatch, SimilarCandidate } from '../../types';
 
-export type SimilarChoice = 'same' | 'different';
-
 interface Props {
   typedName: string;
   exact: ExactMatch | null;

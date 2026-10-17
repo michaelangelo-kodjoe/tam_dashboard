@@ -3,7 +3,7 @@ D-135), kinds, limits and parent links. One definition drives the exporter, the 
 planner. Table and column names here are fixed strings, never request input."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 STATUS_CLIENT = ("Active", "Inactive")

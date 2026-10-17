@@ -70,11 +70,3 @@ export function Count({ value }: { value: number }) {
   return <span className={cx('num', value === 0 && 'subtle')}>{value}</span>;
 }
 
-export function CountStat({ label, value, tone }: { label: string; value: number; tone?: 'danger' | 'warning' }) {
-  return (
-    <span className="countstat">
-      <span className="label">{label}</span>{' '}
-      <span className={cx('countstat__v num', value > 0 && tone === 'danger' && 'danger-text', value > 0 && tone === 'warning' && 'warning-text', value === 0 && 'subtle')}>{value}</span>
-    </span>
-  );
-}

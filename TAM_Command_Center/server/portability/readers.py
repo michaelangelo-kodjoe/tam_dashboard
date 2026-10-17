@@ -9,8 +9,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from .. import constants as C
-from ..errors import InvalidFile, PayloadTooLarge
 from ..importer import reader as R
 from ..importer.reader import CellError, Formula, _bad, _cell_value, _is_blank
 from . import tables as T

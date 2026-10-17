@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from ..audit import write_audit
 from ..dbkit import migrate, transaction
-from ..errors import Conflict, ConfirmationRequired, NotFound, PreviewStale, StaleWrite, ValidationFailed
+from ..errors import Conflict, ConfirmationRequired, NotFound, PreviewStale, ValidationFailed
 from ..services import _apply_update, _check_version, _map_integrity, _ok
 from . import lifecycle as L
 from . import reads, repo
@@ -168,7 +168,6 @@ def _name_conflict(conn: sqlite3.Connection, client_id: str, name: str, exclude:
 def _check_batch(items: List[MetricIn], existing_names: Dict[str, str]) -> None:
     """Conflicts inside one request: repeated tickers and repeated metric names."""
     seen_t: Dict[str, int] = {}
-    seen_n: Dict[str, int] = dict(existing_names)
     for i, m in enumerate(items):
         p = m.provided("id", "expected_row_version")
         t = p.get("ticker")

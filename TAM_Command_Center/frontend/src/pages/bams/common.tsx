@@ -23,11 +23,3 @@ export function Kpi({ label, value, tone, sub }: { label: string; value: ReactNo
   );
 }
 
-export function FieldRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </>
-  );
-}
