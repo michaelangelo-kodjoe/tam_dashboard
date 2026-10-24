@@ -147,7 +147,7 @@ def main() -> int:
             check(not any(banned in "/" + n for n in names), f"archive has no {banned.strip('/')}")
         check(all(not n.startswith(("/", "..")) and ".." not in n.split("/") for n in names), "no absolute or traversal paths")
         for req in ("db/schema.sql", "db/migrate.py", "db/migrations/0001_initial.sql", "db/queries/today_queue.sql",
-                    "web/index.html", "requirements.txt", "VERSION.txt", "BUILD_MANIFEST.txt", "README.txt", "VALIDATION.txt",
+                    "web/index.html", "requirements.txt", "VERSION.txt", "BUILD_MANIFEST.txt",
                     "Launch_TAM_Command_Center.bat", "Launch_DEV_Preview.bat", "Install_Dependency.bat",
                     "Check_PROD_Environment.bat", "Check_DEV_Environment.bat", "tools/env_check.py",
                     "Install_and_Launch.bat", "START_HERE.txt", "tools/install_stamp.py", "tools/choose_db.py"):

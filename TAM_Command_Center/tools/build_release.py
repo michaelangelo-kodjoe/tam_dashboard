@@ -32,13 +32,12 @@ TEST_ONLY_PINS = {"pytest", "httpx", "httpcore", "certifi", "iniconfig", "pluggy
 # uvicorn[standard] extras: optional, not needed for a loopback HTTP app, and websockets>=17 needs Python 3.11
 # while the product supports 3.10 (found by the smoke test on 3.10). uvloop has no Windows wheels.
 OPTIONAL_EXTRAS = {"uvloop", "httptools", "watchfiles", "websockets", "python-dotenv", "pyyaml"}
-CRLF_FILES = (".bat", "README.txt", "VALIDATION.txt", "START_HERE.txt")
+CRLF_FILES = (".bat", "START_HERE.txt")
 
 ROOT_FILES = [
     "Install_and_Launch.bat", "START_HERE.txt",
     "Launch_TAM_Command_Center.bat", "Launch_DEV_Preview.bat", "Install_Dependency.bat",
     "Check_PROD_Environment.bat", "Check_DEV_Environment.bat",
-    "README.txt", "VALIDATION.txt", "CHANGELOG.md", "TAM_PROJECT_STATE.md",
 ]
 TOOLS_SHIPPED = ["tools/_resolve_python.bat", "tools/env_check.py", "tools/open_when_ready.py", "tools/install_stamp.py", "tools/choose_db.py"]
 
@@ -91,9 +90,6 @@ def collect(channel: str) -> list[str]:
         if p.is_file():
             files.append(p.relative_to(APP).as_posix())
     files += ROOT_FILES + TOOLS_SHIPPED
-    guides = APP / "docs" / "guides"
-    if guides.is_dir():
-        files += sorted(p.relative_to(APP).as_posix() for p in guides.rglob("*") if p.is_file())
     return files
 
 
@@ -147,7 +143,7 @@ def main() -> int:
         "TAM Command Center - BUILD_MANIFEST.txt",
         f"version={version}  channel={args.channel}  built_utc={ts}",
         "Format: SHA-256  bytes  path   (every shipped file except this manifest; sha256sum -c compatible after removing the header)",
-        "NOT production-ready until validated on the target Bloomberg Windows environment (see VALIDATION.txt).",
+        "NOT production-ready until validated on the target Bloomberg Windows environment (see the validation line in VERSION.txt).",
         "",
     ]
     for rel in all_rel:

@@ -4,7 +4,7 @@ rem  TAM Command Center - first-time SETUP (installs only if needed). Daily use:
 rem  Reuses tools\_resolve_python.bat, Install_Dependency.bat, tools\env_check.py and
 rem  Launch_TAM_Command_Center.bat. Never touches the database (it lives in
 rem  %LOCALAPPDATA%\TAM_Command_Center, outside this folder).
-rem  NOT validated on Windows or on the Bloomberg workstation (see VALIDATION.txt).
+rem  NOT validated on Windows or on the Bloomberg workstation (see VERSION.txt).
 rem ============================================================================
 setlocal EnableExtensions
 title TAM Command Center - first-time setup

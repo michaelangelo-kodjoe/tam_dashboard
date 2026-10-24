@@ -4,7 +4,7 @@ rem  TAM Command Center - DAILY launcher (PRODUCTION, 127.0.0.1:8765)
 rem  Never installs anything. First time on a machine: run Install_and_Launch.bat once.
 rem  Databases live in %LOCALAPPDATA%\TAM_Command_Center (outside this folder); this file
 rem  never deletes or renames one. Test flags are cleared; a prod-channel server ignores them.
-rem  NOT validated on the target Bloomberg Windows environment (see VALIDATION.txt).
+rem  NOT validated on the target Bloomberg Windows environment (see VERSION.txt).
 rem ============================================================================
 setlocal EnableExtensions
 title TAM Command Center
