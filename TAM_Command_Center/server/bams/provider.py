@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import logging
 import math
 import threading
 import time
@@ -47,7 +48,8 @@ class BlpapiProvider(Provider):
     BATCH_SIZE = 500               # [U] max securities per request; lower this if the Terminal rejects big requests
     REQUEST_TIMEOUT_S = 30.0       # hard deadline for one request (all its events)
     EVENT_WAIT_MS = 1000
-    PROBE_TIMEOUT_S = 1.0
+    PROBE_TIMEOUT_S = 0.5
+    PROBE_TTL_S = 10.0                       # cache of the real reachability probe
     NOT_INSTALLED = "BLPAPI is not installed (python -m pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi)"
 
     def __init__(self, host: Optional[str] = None, port: Optional[int] = None, field: Optional[str] = None,
@@ -60,6 +62,9 @@ class BlpapiProvider(Provider):
         self._probe = probe                      # tests may inject a reachability probe
         self._session: Any = None
         self._lock = threading.Lock()
+        self._probe_lock = threading.Lock()
+        self._probe_at: Optional[float] = None
+        self._probe_ok = False
         self._last: Dict[str, float] = {}        # ticker -> last value seen
         self._changed: Dict[str, _dt.datetime] = {}   # ticker -> when the value last changed (our source_update)
         self.last_problems: Dict[str, str] = {}  # ticker -> reason, for the latest poll (no values logged)
@@ -77,12 +82,24 @@ class BlpapiProvider(Provider):
     def _reachable(self) -> bool:
         if self._probe is not None:
             return bool(self._probe(self.host, self.port))
-        import socket
-        try:
-            with socket.create_connection((self.host, self.port), timeout=self.PROBE_TIMEOUT_S):
-                return True
-        except OSError:
-            return False
+        # A closed Desktop API port can cost up to PROBE_TIMEOUT_S per resolved address (localhost = IPv6 then IPv4),
+        # and several requests ask per call, so the real socket probe is cached briefly and shared by concurrent callers.
+        with self._probe_lock:
+            now = time.monotonic()
+            if self._probe_at is not None and now - self._probe_at < self.PROBE_TTL_S:
+                return self._probe_ok
+            import socket
+            t0 = time.monotonic()
+            try:
+                with socket.create_connection((self.host, self.port), timeout=self.PROBE_TIMEOUT_S):
+                    ok = True
+            except OSError:
+                ok = False
+            logging.getLogger("tam.bams.provider").info(
+                "Bloomberg reachability probe %s:%s -> %s (%d ms, cached for %ds)", self.host, self.port,
+                "reachable" if ok else "unreachable", int((time.monotonic() - t0) * 1000), int(self.PROBE_TTL_S))
+            self._probe_ok, self._probe_at = ok, time.monotonic()
+            return ok
 
     def environment(self) -> Dict[str, Any]:
         """Installed/version/reachability facts (never raises, opens no Bloomberg session)."""

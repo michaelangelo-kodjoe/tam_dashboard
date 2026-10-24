@@ -2,7 +2,8 @@
 
 Last updated: 2026-10-24. Read this first, then `docs/TEAM_LOOP.md`. Start a session as the lead with `claude --agent team-lead-agent` (agents live in `.claude/agents/`).
 
-## Current state (2026-10-24): release 0.2.0-rc4 (lean package) packaged, UNVALIDATED
+## Current state (2026-10-24): release 0.2.0-rc5 (lean package) packaged, UNVALIDATED
+- rc5 = rc4 + cached Bloomberg reachability probe (10 s TTL, 0.5 s timeout; fixes 2 s /api/state and 8 s /api/bams/state with the Terminal off) + INFO log line per real probe. Archive `TAM_Command_Center_0.2.0-rc5_win.zip` committed separately. Previous state follows.
 - rc4 = rc3 + the account Infrastructure tab no longer lists server upgrades (still in Operations and Overview 30-day panel). Archive `TAM_Command_Center_0.2.0-rc4_win.zip` committed separately.
 - rc3 = same app code as rc2; the archive omits CHANGELOG.md, TAM_PROJECT_STATE.md, README.txt, VALIDATION.txt and docs/guides (repo copies stay). `TAM_Command_Center_0.2.0-rc3_win.zip` not committed; rc1/rc2 zips untouched. Details below are for rc2.
 - `TAM_Command_Center_0.2.0-rc2_win.zip` (+ `.sha256`) built by `tools/build_release.py` (channel prod, schema 3, blpapi in requirements); not committed (rc6/rc1 precedent; the rc1 zip is kept untouched). Gates QA-W1..W4 PASS, 0 open Blocker/High. Tests at build: 739 pytest (`.venv/bin/python -m pytest server db -q`), 580 Vitest, tsc clean, sql_safety_scan 0.

@@ -136,3 +136,26 @@ def test_prod_never_simulated():
     with pytest.raises(RuntimeError):
         P.SimulatedProvider("PROD")
     assert not hasattr(prov, "value_at")
+
+
+def test_real_reachability_probe_is_cached_between_requests(monkeypatch, caplog):
+    """A closed Desktop API port is slow to refuse on Windows; /api/bams/state asks availability several times per request."""
+    import socket
+    calls = []
+
+    def refuse(addr, timeout=None):
+        calls.append(timeout)
+        raise OSError("refused")
+
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    caplog.set_level("INFO", logger="tam.bams.provider")
+    p = BlpapiProvider(blpapi_module=object())
+    for _ in range(5):
+        assert p.availability()[0] is False
+    assert len(calls) == 1 and calls[0] <= 0.5
+    logs = [r for r in caplog.records if "reachability probe" in r.getMessage()]
+    assert len(logs) == 1 and "unreachable" in logs[0].getMessage() and "cached for 10s" in logs[0].getMessage()
+    p._probe_at -= p.PROBE_TTL_S + 1                    # TTL elapsed -> probe again
+    p.availability()
+    assert len(calls) == 2
+    assert len([r for r in caplog.records if "reachability probe" in r.getMessage()]) == 2

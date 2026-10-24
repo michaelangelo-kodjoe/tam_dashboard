@@ -124,3 +124,6 @@ New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `t
 
 - QA-W3-1 (Low, frontend): one non-reproducible keyboard palette Enter did not apply colour (see ERROR_LOG_W1 W3).
 - QA-W4-1 (Low, frontend): Overview marker tooltips are native title attributes only; no styled tooltip.
+
+## OI (2026-10-24): slow /api/state and /api/bams/state with the Terminal off
+- rc5 caches the Bloomberg reachability probe (10 s) and logs each real probe. Root cause of why the slowness was perceived as new in rc4 is UNPROVEN: the probe code and call sites are identical to the workstation zip; suspected cause is more frequent frontend polling. Verify on the workstation using the new `tam.bams.provider` log line ("Bloomberg reachability probe ... ms") and /api request timings.

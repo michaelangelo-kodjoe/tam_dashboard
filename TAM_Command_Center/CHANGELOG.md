@@ -2,6 +2,9 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## 0.2.0-rc5 (2026-10-24) - Cached Bloomberg reachability probe (deployment-agent, task D-5)
+- rc5 = rc4 + `BlpapiProvider._reachable` caches the real socket probe for 10 s behind a lock and the probe timeout drops 1.0 s to 0.5 s. Fixes slow `/api/state` (about 2 s) and `/api/bams/state` (about 8 s, four availability calls) on the Windows workstation with the Terminal off. New INFO log line (logger `tam.bams.provider`) after each real probe: host:port, reachable|unreachable, ms, cache seconds. Test extended (caplog). Frontend unchanged (web/ not rebuilt). UNVALIDATED on Windows/Bloomberg. rc1-rc4 archives untouched.
+
 ## 0.2.0-rc4 (2026-10-24) - Infrastructure tab without server upgrades (deployment-agent, task D-4)
 - rc4 = rc3 + the account Infrastructure tab no longer lists the "Server upgrades" table (InfrastructureTab.tsx, WorkspacePage.tsx; tests updated: 579 Vitest). Upgrades remain in Operations and the Overview 30-day panel. web/ rebuilt. Lean package layout as rc3. UNVALIDATED on Windows/Bloomberg. rc1-rc3 archives untouched.
 
