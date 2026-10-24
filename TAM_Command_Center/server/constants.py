@@ -5,7 +5,7 @@ upgrade upcoming) are literal offsets inside db/queries/today_queue.sql, which i
 the single source of truth and is executed unmodified. The values below document
 them and are asserted against the SQL behaviour in tests/test_today.py.
 """
-DEFAULT_VERSION = "0.1.0-dev"
+DEFAULT_VERSION = "0.2.0-rc1"
 HOST = "127.0.0.1"          # never configurable (spec section 46)
 PROD_PORT = 8765
 DEV_PORT = 8766

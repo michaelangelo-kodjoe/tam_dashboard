@@ -2,7 +2,11 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
-## Unreleased - 0.2.0-rc1 backend backport (backend-dev-agent, task B-2; no version bump, no commit, no packaging)
+## 0.2.0-rc1 (2026-10-23) - Release packaged (deployment-agent, task D-1)
+- Version bump to 0.2.0-rc1 (VERSION.txt, server DEFAULT_VERSION so /api/health reports it; QA-W1-5 closed). Schema 3. Channel prod in the archive. UNVALIDATED on Windows/Bloomberg.
+- Gate before build: 734 pytest (server db), 575 Vitest; build:api left web/ unchanged. blpapi stays in the release requirements. Archive TAM_Command_Center_0.2.0-rc1_win.zip not committed.
+
+## 0.2.0-rc1 (2026-10-23) - backend backport (backend-dev-agent, task B-2)
 - Ported the workstation-zip backend: migration 0003 + schema.sql (schema_version stamp fixed to 3; `migrate.py --verify-schema` IDENTICAL), persistent BAMS alert policies (`sync_auto_policies`, `auto_apply`, `config_id`), `GET /api/bams/metrics/catalog`, `POST /api/bams/notifications/test`, Windows NotifyIcon notifier with async queue and truthful delivery log, monitor sync each poll, provider field `LAST_PRICE`, BAMS import changes (Polarity column K, only `Account` header required, metadata-only rows, explicit Region/Environment/Location overwrite, conflict detection, `policy_sync`), new template. Dropped as agreed: stray `server/portability/app.py` and `services.py`. Fixed a zip bug on the way: `configs_delete` crashed (`sqlite3.Row.get`) on every delete.
 - Bloomberg Terminal BAMS workbooks (Client, Ticker, Region, Metric, DC Location) are now auto-detected and converted on `/api/import/bams/inspect` (`bams_terminal_adapter` wired in `bams_service._read`); template imports unchanged.
 - BAMS state sparklines: one set-based statement per request instead of 24 queries per row (`reads.spark_many`), same output; parity test against the old algorithm.
@@ -10,7 +14,7 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - `blpapi>=3.25.10.1,<4` added to `server/requirements-release.txt` (shipped requirements.txt); header comments in `server/requirements.txt` and `tools/build_release.py` corrected.
 - Contract: `docs/04_API_CONTRACT.md` section 17. Tests updated for schema v3, LAST_PRICE, Polarity, header rules; 80+ new tests (rich notes, policies, notifier, Terminal import, spark parity, migration 0003). Pre-existing failure, not from this port: `test_qa_e5_3_seeded_alert_mix_survives_polls` (DEV seed uses the wall clock while the test pins the BAMS clock to 2026-10-14; fails on the untouched tree too).
 
-## Unreleased - 0.2.0-rc1 frontend (frontend-dev-agent, task F-1; no version bump, no commit, no packaging)
+## 0.2.0-rc1 (2026-10-23) - frontend (frontend-dev-agent, task F-1)
 - BAMS metric chart: drag-to-zoom (minimum 3 minutes, Esc cancels, double-click or Reset zoom restores, window label, finer ticks as you zoom); line colour by severity (normal below Warning, amber at Warning, red at Critical, from the metric's rule lines); 30/60/90d high lines and threshold lines removed (figures stay as text). Pure maths in `lib/chartZoom.ts`.
 - Warning amber / Critical red everywhere in BAMS (status badges, row edges, KPI tile, bell, close-alert dialog); words always shown.
 - Alert configuration: metric list grouped by account > appliance > metric with one master arrow (collapsed by default, remembered in localStorage) and the filter in the same row; metric-first persistent alert policies ported from the workstation build as React components (custom Metric combobox, no injected JS); starter templates sit behind "Show advanced templates".
@@ -21,14 +25,14 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 - Dialogs and drawers: one sizing rule via `--overlay-w` (cap min(W, 100vw - 32px), height 100vh - 48px, body scrolls, full-screen under 640px); task popup 880, capture 760, drawers 720, BAMS metric drawer 1100.
 - Tests: 543 passing in 46 files, `tsc --noEmit` clean; build:api output refreshed in `web/`.
 
-## Unreleased - 0.2.0-rc1 frontend F-2/F-3 (frontend-dev-agent)
+## 0.2.0-rc1 (2026-10-23) - frontend F-2/F-3 (frontend-dev-agent)
 - F-2: chart drag-zoom fetches the window (`GET /bams/metric/{id}/trend?from&to`), cached per window, instant client zoom meanwhile; 7-day cap, minimum about 2 sample intervals; 422, empty and thinned states.
 - F-3: starter templates restored exactly as before (no "Show advanced templates" gate). List markers, indentation and nesting visible in the note editor and rendered notes (base.css reset had removed them). Text colour palette (Amber, Red, Green, Blue, Purple, Gray, White; Default clears) in the note toolbar; renderer shows palette colours via React elements only. QA-W1-1: toolbar Btn hoisted (no remount; focus persists; Enter/Space/arrows work). QA-W1-3: react-router-dom 7.18.4 (advisories cleared; remaining npm audit findings are dev tooling: vitest/vite/esbuild). QA-W1-4: account page children constrained (min-width/max-width) so the tab bar scrolls inside its own container.
 
-## Unreleased - 0.2.0-rc1 frontend F-4 (frontend-dev-agent)
+## 0.2.0-rc1 (2026-10-23) - frontend F-4 (frontend-dev-agent)
 - Note editor text colour now behaves like Word: with nothing selected, a chosen colour (or Default) applies only to text typed next (pending colour); with a selection only the selection changes. The toolbar shows an "A" with a colour bar that follows the colour of the character before the caret (aria-label "Text colour: <name>"). Default inside a coloured span splits it, so text is really uncoloured. Live normalisation of browser colour markup (font tags, rgb spans) to palette spans in `lib/richText.ts` (`normaliseColours`, `colourAt`, `selectionColour`); only palette colours are ever saved.
 
-## Unreleased - 0.2.0-rc1 frontend F-5 (frontend-dev-agent)
+## 0.2.0-rc1 (2026-10-23) - frontend F-5 (frontend-dev-agent)
 - Note editor A- / A+ now work like Word and like the colour palette: with a selection only the selection is resized; at a bare caret a pending size (stepped from the current value, 11..20 px) applies to the text typed next, and the px readout shows it immediately, then follows the caret or selection. No whole-body fallback for size or Clear formatting (Clear at a caret makes the next text plain). Size and colour combine on one span ("font-size: Npx; color:#HEX"); Default colour keeps a pending size.
 
 ## Unreleased - Cleanup (post rc6, no behavior change)

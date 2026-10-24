@@ -1,6 +1,12 @@
 # TAM Command Center: Handoff
 
-Last updated: 2026-10-15. Read this first, then `docs/TEAM_LOOP.md`. Start a session as the lead with `claude --agent team-lead-agent` (agents live in `.claude/agents/`).
+Last updated: 2026-10-23. Read this first, then `docs/TEAM_LOOP.md`. Start a session as the lead with `claude --agent team-lead-agent` (agents live in `.claude/agents/`).
+
+## Current state (2026-10-23): release 0.2.0-rc1 packaged, UNVALIDATED
+- `TAM_Command_Center_0.2.0-rc1_win.zip` built by `tools/build_release.py` (channel prod, schema 3, blpapi in requirements); not committed (rc6 precedent). Gates QA-W1/W2/W3 PASS, 0 open Blocker/High. Tests at build: 734 pytest (`.venv/bin/python -m pytest server db -q`), 575 Vitest.
+- Resume: user validates the zip on the Bloomberg Windows workstation. Unverified there: NotifyIcon notifications, real blpapi LAST_PRICE polling, PROD mode on Windows, Terminal-workbook import via file picker, Cmd-Z/undo and external paste in the rich-text editor, all .bat files. Fix defects they report; do not call it production-ready.
+- Pending user decision: BAMS Warning colour is still the app-wide gold `--warning #E8C547`; user asked earlier for amber, undecided.
+- Known Lows (docs/qa/OPEN_ITEMS.md): QA-W1-2 failing seeded-alert test on untouched tree, W1-3/W2-1 npm audit, W1-4 390px horizontal scroll, W1-6 simulator >100%, W2-2 no list-nesting control, W2-3 nested list HTML, W2-4 simulator percent-only, W3-1 one non-reproducible palette Enter. QA-W1-1 (Medium, RichTextEditor `Btn` remount/focus) - check OPEN_ITEMS for status.
 
 ## State
 Runs 1-6 are built, QA-passed, and committed (latest gates: `docs/qa/ERROR_LOG_6.md` Operations, `docs/qa/ERROR_LOG_7.md` portability, both PASS, 0 open Blocker/High). Run 7 (legacy database import, Settings > Data only) is in PLANNING: `docs/01_PM_SPEC.md` section 15 (D-143..D-153, T-186..T-192), mockups waived, build directly. Tests at the last gate: 711 backend/db/e2e, 451 frontend. The ChatGPT Bridge was DROPPED by the user on 2026-10-15 (not planned, not built).

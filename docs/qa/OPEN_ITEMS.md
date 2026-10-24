@@ -121,3 +121,5 @@ New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `t
 | QA-W2-2 | Low | frontend-dev | No UI control to nest list items (Tab moves focus) | Next UI pass |
 | QA-W2-3 | Low | backend-dev | Sanitised HTML keeps list-in-list as direct child (browser indent output); cosmetic | Optional |
 | QA-W2-4 | Low | backend-dev | Simulator limitation: percent-only simulator vs seeded Mbps NET metrics; test narrowed to percent metrics | Extend simulator or seed |
+
+- QA-W3-1 (Low, frontend): one non-reproducible keyboard palette Enter did not apply colour (see ERROR_LOG_W1 W3).

@@ -67,4 +67,23 @@ Build: current source; `web/` and `RichTextEditor.tsx` were rebuilt by the owner
 ### Not verified
 Bell inbox row-level severity colours (panel opened, only count/badge measured); Windows rendering/Edge; PROD route absence (unit tests only); visual pixel review (the browser pane screenshots rendered at a fraction of the viewport, so layout and colour checks used DOM computed styles via headless Chrome/CDP). My test notes (34) were deleted from the DEV database via the API; each delete created a safety backup and an audit row in Activity.
 
+## W3: rich-text colour/size re-check (post QA-W2)
+
+Gates: pytest 734 passed; tsc --noEmit exit 0; vitest 575 passed (47 files). Served bundle index-ktf_UG8Q.js matches web/index.html.
+
+Verified with real mouse/keyboard (Quick Capture Meeting note, note drawer reopened from Activity):
+- Pending colour at bare caret colours only later text; selection colours only the selection; Default and repeated switching work; aria-label "Text colour: <name>" and .rte-a-bar follow caret (Default/Red/Blue/Green).
+- A+/A- at bare caret apply to later text; readout follows caret; clamped 11 (A- x4 from 13) and 20 (A+ x8). Selection resize affects only the selection (14px).
+- Colour+size combined (19px #FA9A28); Clear at caret gave 13px default for later text.
+- Partial selection inside a coloured span splits correctly (HTML checked: re/d t/wo, o/ne).
+- Keyboard: Shift+Tab to toolbar, arrows, Enter/Space, palette arrows, Esc closes only the palette; focus returns to colour button.
+- Saved body reopened from timeline renders identically. No #000001 or font tags saved. API sanitiser strips #123456, background/position, font-size:99px, font, script, img onerror, javascript: links, #000001. Paste handler is plain-text only (code review).
+
+Items
+- QA-W3-1 (Low, owner frontend): one keyboard attempt (palette Blue + Enter on a fresh drawer selection) did not apply colour; four later identical attempts worked. Not reproducible.
+
+Not verified: Cmd/Ctrl+Z (tool key events do not trigger native undo); real external formatted paste (clipboard not available); Call/General capture tabs and narrow width (same component, not clicked separately); Clear on a selection.
+
+Test notes (2) deleted from DEV DB via API.
+
 VERDICT: PASS (0 open Blocker/High)

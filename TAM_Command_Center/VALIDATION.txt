@@ -1,6 +1,6 @@
 TAM COMMAND CENTER - VALIDATION REPORT
 ======================================
-Build: 0.1.0-rc6   Report date: 2026-10-17   Author: deployment-agent (Phase 4.3)
+Build: 0.2.0-rc1   Report date: 2026-10-23   Author: deployment-agent (Phase 4.3)
 STATUS: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 
 *** THIS BUILD IS NOT PRODUCTION-READY. ***
@@ -10,12 +10,20 @@ must not be called production-ready until that is done. The "channel=prod" stamp
 VERSION.txt only selects the production code path (production database location, test
 flags ignored, DEV routes absent); it is not a statement that validation passed.
 
-RC6 SUMMARY: gate on HEAD 1586b58 (macOS): 831 pytest, 496 Vitest, tsc clean. Schema 1 -> 2
-migration (0002_audit_prune.sql) tested on macOS only; Windows file locking during migration
-and backup untested. Audit pruning, weekly backups, log download/cleanup untested on Windows.
-pip-audit was run on the exact pins (server/requirements.txt); the shipped requirements.txt
-uses compatible RANGES, so that audit does NOT cover what pip installs on the workstation.
-NOT RUN on Windows or against Bloomberg. NOT production-ready.
+0.2.0-RC1 SUMMARY: macOS gate (Python 3.10/3.12): 734 pytest (server db), 575 Vitest, QA-W1/W2/W3 PASS
+(0 open Blocker/High). Schema 3 (0003 persistent BAMS alert policies) tested on macOS only.
+UNVERIFIED on Windows/Bloomberg (never run there): Windows NotifyIcon notifications; real blpapi
+LAST_PRICE polling; PROD mode on Windows; Terminal-workbook import via the browser file picker;
+Cmd-Z/undo and external paste in the rich-text editor. Also unchanged from rc6: all .bat files were only
+statically linted; Windows file locking during migration/backup; pip install of ranges against the
+Bloomberg mirror (pip-audit covers exact pins only, not the installed set).
+NOT production-ready until validated on the target Bloomberg Windows environment.
+
+(Older rc6 figures in section 1 are historical.)
+
+Release smoke (tools/smoke_release.py, macOS, scratch dir, 0.2.0-rc1): PASS, 118 checks. NOTE: blpapi is not on public PyPI, so
+the smoke run installed requirements.txt WITHOUT the blpapi line (stock script fails at pip on blpapi, as expected off the Bloomberg index);
+PROD env check failed closed on missing BLPAPI as designed. tools/lint_bat.py: see CHANGELOG/report. Install with the real blpapi was NOT exercised.
 
 1. WHAT PASSED (all on macOS, Apple silicon, Python 3.10 and 3.12, SQLite 3.38-3.53)
    Source suites, run by the PM/deployment agents on the build tree:

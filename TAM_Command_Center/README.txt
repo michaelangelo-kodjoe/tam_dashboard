@@ -7,21 +7,20 @@ Single user. No login. Nothing is reachable from the network.
 STATUS: NOT PRODUCTION-READY. This build has not been validated on the target
 Bloomberg Windows workstation. Read VALIDATION.txt before relying on it.
 
-*** UPGRADE WARNING (rc6) ***
-  The first start of rc6 migrates an existing database from schema 1 to schema 2. A
-  pre-migration backup is taken automatically. An older build CANNOT open the upgraded
-  database afterwards. Keep the previous zip to roll back, and take a manual backup
-  (Settings > Data > Create backup) before the first rc6 start.
+*** UPGRADE WARNING (0.2.0-rc1) ***
+  The first start of 0.2.0-rc1 migrates an existing database to schema 3 (persistent BAMS
+  alert policies; 0003). A pre-migration backup is taken automatically. An older build
+  CANNOT open the upgraded database afterwards. Keep the previous zip to roll back, and
+  take a manual backup (Settings > Data > Create backup) before the first start.
 
-NEW IN RC6
-  - Settings > Audit log: records changes; entries older than 14 days are pruned automatically.
-  - Weekly automatic backups (retention applied) and log cleanup/download in Settings.
-  - Terminal links: write {..} in a note or task to make a clickable Terminal link.
-  - Task popup: click a task to see it read-only, with complete (confirm + undo).
-  - Note action items offer to create a task.
-  - BAMS is grouped by account and sections are collapsible.
+NEW IN 0.2.0-rc1
+  - Rich-text notes (bold, lists, colour; sanitised HTML).
+  - Bloomberg Terminal BAMS workbooks (Client, Ticker, Region, Metric, DC Location) are
+    detected and converted on import; Polarity (East/West) column; LAST_PRICE polling.
+  - Persistent BAMS alert policies; faster BAMS sparklines; desktop notifications (Windows).
+  - BLPAPI (blpapi>=3.25.10.1,<4) is listed in requirements.txt.
 
-WHAT IS IN THIS BUILD (0.1.0-rc6, spec runs 1-6)
+WHAT IS IN THIS BUILD (0.2.0-rc1, spec runs 1-6)
   Today queue, Accounts (with bulk import), Account Workspace, Tasks, Quick Capture,
   BAMS monitor and appliance import, Operations (quarters, account-grouped appliances,
   target versions; entered manually), Settings, backups, and portability: Excel export,
