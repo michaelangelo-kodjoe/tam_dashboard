@@ -43,7 +43,7 @@ class BlpapiProvider(Provider):
     HOST = "localhost"
     PORT = 8194
     SERVICE = "//blp/refdata"
-    FIELD = "PX_LAST"              # constant: no setting exists for it (settings routes are fixed by the contract)
+    FIELD = "LAST_PRICE"              # constant: no setting exists for it (settings routes are fixed by the contract)
     BATCH_SIZE = 500               # [U] max securities per request; lower this if the Terminal rejects big requests
     REQUEST_TIMEOUT_S = 30.0       # hard deadline for one request (all its events)
     EVENT_WAIT_MS = 1000

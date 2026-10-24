@@ -69,6 +69,8 @@ export const toNote = (r: Row): Note => ({
   timestamp: r.timestamp,
   subject: r.subject ?? null,
   body: r.body ?? null,
+  body_format: r.body_format === 'html' ? 'html' : 'plain',
+  body_text: r.body_text ?? r.body ?? null,
   action_items: r.action_items ?? null,
   source: r.source,
   created_at: r.created_at,

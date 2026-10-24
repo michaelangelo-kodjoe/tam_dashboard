@@ -11,7 +11,7 @@ import { errText } from './common';
 export function DeleteDialog({ kind, id, rowVersion, onClose, onDeleted }: { kind: 'object' | 'metric'; id: string; rowVersion?: number; onClose: () => void; onDeleted: () => void }) {
   const { ds, bump } = useData();
   const toast = useToast();
-  const prev = useQuery(`bams-delprev:${kind}:${id}`, (d) => d.getBamsDeletePreview(kind, id));
+  const prev = useQuery(`bams-delprev:${kind}:${id}`, (d) => d.getBamsDeletePreview(kind, id), { cache: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const p = prev.data;

@@ -87,6 +87,12 @@ class Monitor:
 
     def shutdown(self) -> None:
         self.deactivate()
+        shutdown = getattr(self.notifier, "shutdown", None)
+        if callable(shutdown):
+            try:
+                shutdown()
+            except Exception:  # noqa: BLE001 - notification shutdown must not block app shutdown
+                log.warning("desktop notifier shutdown failed", exc_info=True)
 
     def _loop(self) -> None:
         stop = self._stop
@@ -125,6 +131,11 @@ class Monitor:
         with self.rt.db() as conn:
             settings = repo.read_settings(conn)
             self.poll_interval = settings["poll_interval_seconds"]
+            # Catch metrics created by bulk import or any future write path before they are evaluated.
+            # Local import avoids the service<->monitor module import cycle.
+            from .service import sync_auto_policies
+            with transaction(conn):
+                sync_auto_policies(conn)
             if self.provider.simulated:
                 with transaction(conn):
                     backfill(conn, self.provider, now)
@@ -258,7 +269,12 @@ class Monitor:
                             "where": f"{m['client_name']} / {m['object_name']}", "value": value})
 
     def _deliver(self, conn: Any, pending: List[Dict[str, Any]], settings: Dict[str, Any]) -> None:
-        """Desktop toasts after the data transaction. Never raises; once per event/kind/channel."""
+        """Desktop notifications after the data transaction. Never raises; once per event/kind/channel.
+
+        Notifiers that support ``send_async`` deliver on their own worker and call back
+        with the *actual* PowerShell result. This keeps BAMS polling non-blocking while
+        preserving truthful success/failure rows in ``bams_notification_log``.
+        """
         if not settings["desktop_notifications"]:
             return
         for p in pending:
@@ -269,11 +285,32 @@ class Monitor:
                     continue
                 verb = "opened" if p["kind"] == "opened" else "recovered"
                 title, body = toast_text(verb, p["severity"], settings["privacy_mode"], p["metric"], p["where"], p["value"])
-                res = self.notifier.send(title, body)
-                if not res.ok:
-                    log.warning("desktop notification failed: %s", res.detail)
-                with transaction(conn):
-                    repo.log_notification(conn, p["event_id"], p["kind"], "desktop", fmt(self.clock.now()), res.ok, res.detail)
+
+                event_id = p["event_id"]
+                kind = p["kind"]
+
+                def record_result(res: Any, *, event_id: str = event_id, kind: str = kind) -> None:
+                    try:
+                        if not res.ok:
+                            log.warning("desktop notification failed: %s", res.detail)
+                        with self.rt.db() as delivery_conn:
+                            if repo.notification_logged(delivery_conn, event_id, kind, "desktop"):
+                                return
+                            with transaction(delivery_conn):
+                                repo.log_notification(
+                                    delivery_conn, event_id, kind, "desktop",
+                                    fmt(self.clock.now()), bool(res.ok), res.detail,
+                                )
+                    except Exception:  # noqa: BLE001 - callback failure must not affect BAMS
+                        log.exception("desktop notification result logging failed")
+
+                send_async = getattr(self.notifier, "send_async", None)
+                if callable(send_async):
+                    send_async(title, body, record_result)
+                else:
+                    # Backward-compatible path for injected test/fake notifiers.
+                    res = self.notifier.send(title, body)
+                    record_result(res)
             except Exception as exc:  # noqa: BLE001
                 log.warning("desktop notification error: %s", type(exc).__name__)
 

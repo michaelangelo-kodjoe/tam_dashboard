@@ -14,7 +14,7 @@
 [role='group']:first-child > .tier-head { padding-top: var(--sp-1); }
 
 .trow {
-  display: grid; grid-template-columns: 22px 3px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  display: grid; grid-template-columns: 22px 3px minmax(0, 1fr) 62px auto; gap: 10px; align-items: center;
   min-height: var(--row-h-triage); padding: 4px 10px 4px 8px; border-radius: var(--r-md); border: 1px solid transparent; cursor: pointer;
   transition: background-color var(--dur) var(--ease);
 }
@@ -76,5 +76,7 @@
   .pagehead__actions { flex-wrap: wrap; }
 }
 .trow__note { font-style: normal; }
+.trow__done { align-self: center; min-width: 58px; }
+.trow__done-spacer { display: block; width: 58px; }
 .detail__notes { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--border); }
 .detail__notes-body { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

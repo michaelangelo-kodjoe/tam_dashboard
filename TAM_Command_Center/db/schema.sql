@@ -402,6 +402,7 @@ CREATE TABLE IF NOT EXISTS bams_alert_rules (
                          CHECK ((created_at IS strftime('%Y-%m-%dT%H:%M:%fZ', created_at) AND substr(created_at, 1, 10) IS date(created_at, '+0 days'))),
     updated_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                          CHECK ((updated_at IS strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) AND substr(updated_at, 1, 10) IS date(updated_at, '+0 days'))),
+    config_id TEXT REFERENCES bams_alert_configs(id) ON DELETE SET NULL,
     -- fixed: absolute threshold, no reference; pct: % of a historical high;
     -- exceeds: value vs the historical high itself (threshold unused).
     CHECK ((rule_type = 'fixed_threshold' AND threshold IS NOT NULL AND reference_period IS NULL)
@@ -479,10 +480,13 @@ CREATE TABLE IF NOT EXISTS bams_alert_configs (
                         CHECK ((created_at IS strftime('%Y-%m-%dT%H:%M:%fZ', created_at) AND substr(created_at, 1, 10) IS date(created_at, '+0 days'))),
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                         CHECK ((updated_at IS strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) AND substr(updated_at, 1, 10) IS date(updated_at, '+0 days'))),
+    auto_apply INTEGER NOT NULL DEFAULT 0 CHECK (auto_apply IN (0,1)),
     CHECK ((rule_type = 'fixed_threshold' AND threshold IS NOT NULL AND reference_period IS NULL)
         OR (rule_type = 'pct_of_high'     AND threshold > 0       AND reference_period IS NOT NULL)
         OR (rule_type = 'exceeds_high'    AND reference_period IS NOT NULL))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS ux_bams_alert_rules_config_metric
+    ON bams_alert_rules (config_id, metric_id) WHERE config_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS bams_notification_log (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -863,6 +867,6 @@ END;
 -- -----------------------------------------------------------------------------
 -- Schema version (forward-only; never lowered).
 -- -----------------------------------------------------------------------------
-INSERT INTO app_meta (key, value) VALUES ('schema_version', '2')
+INSERT INTO app_meta (key, value) VALUES ('schema_version', '3')
     ON CONFLICT (key) DO UPDATE SET value = excluded.value
     WHERE CAST(app_meta.value AS INTEGER) < 2;

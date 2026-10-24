@@ -14,7 +14,7 @@ import type {
   CandidateRef, DownloadedFile, ImportApplyInput, ImportFormat, ImportPlan, ImportResult, ImportRow, ImportValues, ReasonText, SimilarCandidate, SimilarCheck,
 } from '../types';
 import type {
-  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
+  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigInput, BamsMetricCatalogItem, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
   BamsImportPlan, BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRow, BamsRule,
   BamsRuleInput, BamsSettings, BamsState, BamsStateQuery, BamsTrend, TrendRange,
 } from '../bamsTypes';
@@ -50,7 +50,7 @@ interface WireServerTile {
 type WireSideEffect = { type: string; name?: string; contact_id?: string };
 interface WireMutation<T> { ok: true; item: T; side_effects?: WireSideEffect[] }
 type WireActivity =
-  | { kind: 'note'; entry_key: string; ts: string; id: string; client_id: string; created_at: string; note_type: Note['note_type']; subject: string | null; body: string | null; action_items: string | null; source: string; row_version: number; updated_at: string }
+  | { kind: 'note'; entry_key: string; ts: string; id: string; client_id: string; created_at: string; note_type: Note['note_type']; subject: string | null; body: string | null; body_format?: 'plain' | 'html'; body_text?: string | null; action_items: string | null; source: string; row_version: number; updated_at: string }
 
 // ---- mappers (exported for tests) -------------------------------------------------------
 export function mapAccount(a: WireAccount): AccountSummary {
@@ -107,7 +107,7 @@ export function mapActivity(e: WireActivity): ActivityEntry {
   return {
       entry_kind: 'note', entry_key: e.entry_key, ts: e.ts,
       note: {
-        id: e.id, client_id: e.client_id, note_type: e.note_type, timestamp: e.ts, subject: e.subject, body: e.body, action_items: e.action_items,
+        id: e.id, client_id: e.client_id, note_type: e.note_type, timestamp: e.ts, subject: e.subject, body: e.body, body_format: e.body_format, body_text: e.body_text, action_items: e.action_items,
         source: e.source, created_at: e.created_at, updated_at: e.updated_at, row_version: e.row_version,
       },
   };
@@ -350,6 +350,9 @@ export class ApiDataSource implements DataSource {
   async getBamsTrend(id: string, range: TrendRange): Promise<BamsTrend> {
     return (await this.request<{ item: BamsTrend }>('GET', `/api/bams/metric/${encodeURIComponent(id)}/trend${this.qs({ range })}`)).item;
   }
+  async getBamsTrendWindow(id: string, from: string, to: string): Promise<BamsTrend> {
+    return (await this.request<{ item: BamsTrend }>('GET', `/api/bams/metric/${encodeURIComponent(id)}/trend${this.qs({ from, to })}`)).item;
+  }
   async getBamsAlerts(q: { status?: AlertListStatus; account?: string; metric_id?: string; limit?: number }): Promise<BamsAlertList> {
     const r = await this.request<BamsAlertList>('GET', `/api/bams/alerts${this.qs({ ...q })}`);
     return { counts: r.counts, next_before: r.next_before ?? null, items: r.items.map((i) => ({ ...i, event: mapBamsEvent(i.event) })) };
@@ -392,7 +395,16 @@ export class ApiDataSource implements DataSource {
     await this.request('POST', '/api/bams/rule/delete', { ...input, confirm: true });
   }
   async getBamsConfigs(): Promise<BamsConfig[]> {
-    return (await this.request<{ items: BamsConfig[] }>('GET', '/api/bams/configs')).items.map((c) => ({ ...c, enabled: !!c.enabled, starter: !!c.starter }));
+    return (await this.request<{ items: BamsConfig[] }>('GET', '/api/bams/configs')).items.map(mapBamsConfig);
+  }
+  async getBamsMetricCatalog(): Promise<BamsMetricCatalogItem[]> {
+    return (await this.request<{ items: BamsMetricCatalogItem[] }>('GET', '/api/bams/metrics/catalog')).items;
+  }
+  async saveBamsConfig(input: BamsConfigInput): Promise<BamsConfig> {
+    return mapBamsConfig((await this.request<{ item: { config: BamsConfig } }>('POST', '/api/bams/configs/save', input)).item.config);
+  }
+  async deleteBamsConfig(input: { id: string }): Promise<void> {
+    await this.request('POST', '/api/bams/configs/delete', { id: input.id, confirm: true });
   }
   async previewBamsConfig(input: { config_id: string; metric_ids?: string[] | null }): Promise<BamsConfigPreview> {
     return (await this.request<{ item: BamsConfigPreview }>('POST', '/api/bams/configs/apply', { config_id: input.config_id, metric_ids: input.metric_ids ?? null, preview: true, confirm: false })).item;
@@ -594,3 +606,5 @@ export function mapPlan(w: WirePlan): ImportPlan {
 export function mapResult(r: ImportResult): ImportResult {
   return { ...r, backup: r.backup ?? null, created: r.created ?? [], updated: r.updated ?? [], skipped: r.skipped ?? [], breakdown: r.breakdown ?? {} };
 }
+
+const mapBamsConfig = (c: BamsConfig): BamsConfig => ({ ...c, enabled: !!c.enabled, starter: !!c.starter, auto_apply: !!c.auto_apply });

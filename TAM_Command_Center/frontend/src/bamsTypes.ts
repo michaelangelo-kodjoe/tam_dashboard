@@ -132,7 +132,7 @@ export interface BamsMetricDetail {
   row: BamsRow; rules: BamsRule[]; alerts: BamsAlertEvent[]; alerts_total: number; ranges: TrendRange[];
 }
 export interface BamsTrend {
-  metric_id: string; range: TrendRange; from: ISOInstant; to: ISOInstant;
+  metric_id: string; range: TrendRange | 'custom'; from: ISOInstant; to: ISOInstant; /** monitor poll interval; present on window requests */ sample_interval_seconds?: number;
   points: { t: ISOInstant; v: number }[]; downsampled: boolean;
   text: { min: number | null; max: number | null; last: number | null; count: number; from: ISOInstant | null; to: ISOInstant | null };
   reference_lines: { id: string; label: string; value: number | null; date: ISODate | null }[];
@@ -159,8 +159,14 @@ export interface BamsDeleteResult { id: string; name: string; metrics: number; s
 
 export interface BamsConfig {
   id: string; name: string; metric_match: string; rule_type: RuleType; operator: Operator; threshold: number | null; reference_period: ReferencePeriod | null;
-  consecutive_updates: number; severity: Severity; cooldown_minutes: number; enabled: boolean; starter: boolean; row_version: number; preview: string; matches: number;
+  consecutive_updates: number; severity: Severity; cooldown_minutes: number; enabled: boolean; starter: boolean; /** persistent metric policy: matching metrics inherit a managed rule now and in the future */ auto_apply?: boolean; row_version: number; preview: string; matches: number;
 }
+/** Metric-first policy save (POST /bams/configs/save). Toggle sends only id, expected_row_version, enabled, auto_apply. */
+export interface BamsConfigInput {
+  id?: string; name?: string; metric_match?: string; rule_type?: RuleType; operator?: Operator; threshold?: number | null; reference_period?: ReferencePeriod | null;
+  consecutive_updates?: number; severity?: Severity; cooldown_minutes?: number; enabled?: boolean; auto_apply?: boolean; expected_row_version?: number;
+}
+export interface BamsMetricCatalogItem { metric_name: string; metric_count: number; appliance_count: number; account_count: number }
 export interface BamsConfigPreview {
   config_id: string; plan_hash: string; would_create: number; skipped_identical: number;
   metrics: { metric_id: string; metric_name: string; object_name: string; client_name: string; action: 'create' | 'skip_identical' }[];

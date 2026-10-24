@@ -14,7 +14,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from . import constants as C
-from . import reads
+from . import reads, richtext
 from .audit import write_audit
 from .dbkit import migrate, one, open_db, transaction
 from .errors import (AppError, Conflict, ConfirmationRequired, NotFound, PossibleDuplicate, StaleWrite,
@@ -504,11 +504,25 @@ def _local_date(instant: str) -> str:
 def _note_label(subject: Optional[str], body: Optional[str]) -> str:
     if subject:
         return subject
-    return (body or "").strip().splitlines()[0][:80] if body else "(untitled note)"
+    text = richtext.search_text(body).strip()
+    return text.splitlines()[0][:80] if text else "(untitled note)"
+
+
+def _note_body(prov: Dict[str, Any]) -> None:
+    """Turn the submitted body (+ body_format) into the stored value, in place. HTML is sanitised and size-checked."""
+    fmt = prov.pop("body_format", None)
+    if "body" not in prov:
+        if fmt is not None:
+            raise _fail("body_format", "needs a body")
+        return
+    prov["body"] = richtext.to_storage(prov["body"], fmt or "plain")
+    if prov["body"] is not None and len(prov["body"]) > richtext.MAX_STORED:
+        raise _fail("body", f"is too long after formatting is cleaned (limit {richtext.MAX_STORED} characters)")
 
 
 def save_note(rt: Runtime, body: NoteSave) -> Result:
     prov = body.provided("id", "expected_row_version", "client_id")
+    _note_body(prov)
     side: List[Dict[str, Any]] = []
     with rt.db() as conn:
         try:

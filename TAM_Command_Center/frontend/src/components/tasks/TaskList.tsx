@@ -9,13 +9,11 @@ import { Checkbox } from '../ui/Checkbox';
 import { DataTable, cmpNum, cmpStr, type Column } from '../ui/DataTable';
 import { DateCell, PriorityLabel, StatusBadge } from '../ui/Badges';
 import { EmptyState, ErrorBanner } from '../ui/Feedback';
-import { useToast } from '../ui/Toast';
-import { taskToInput } from '../../lib/tasks';
-import { useApp, useData, useQuery } from '../../store/DataContext';
+import { useCompleteTask } from './useCompleteTask';
+import { useApp, useQuery } from '../../store/DataContext';
 import { TASK_CATEGORIES, TASK_PRIORITIES, TASK_STATUSES, type Task } from '../../types';
 import { accountPath, taskDrawerLink } from '../../lib/links';
 import { formatDate } from '../../lib/dates';
-import { DataSourceError } from '../../data/DataSource';
 
 const PRIO: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
 const STAT: Record<string, number> = { 'Not Started': 0, 'In Progress': 1, Waiting: 2, Complete: 3 };
@@ -24,8 +22,6 @@ const opts = (a: readonly string[]) => a.map((v) => ({ value: v, label: v }));
 /** Shared by the account Tasks tab and the global Tasks page (D-20). */
 export function TaskList({ clientId, caption }: { clientId?: string; caption: string }) {
   const { state, today, accountById } = useApp();
-  const { ds, bump } = useData();
-  const toast = useToast();
   const loc = useLocation();
   const global = !clientId;
 
@@ -57,29 +53,12 @@ export function TaskList({ clientId, caption }: { clientId?: string; caption: st
 
   const [confirming, setConfirming] = useState<Task | null>(null);
   const [completing, setCompleting] = useState(false);
+  const completeTask = useCompleteTask();
   const complete = async (t: Task) => {
     setCompleting(true);
-    try {
-      const saved = await ds.saveTask({ ...taskToInput(t), status: 'Complete' });
-      setConfirming(null);
-      bump();
-      toast.push({
-        kind: 'success', message: 'Task completed', detail: t.task,
-        onAction: {
-          label: 'Undo',
-          run: () => {
-            // reopen to the previous status; same save path as an edit, guarded by the new row_version
-            void ds.saveTask({ ...taskToInput(t), status: t.status, expected_row_version: saved.item.row_version }).then(
-              () => { bump(); toast.push({ kind: 'info', message: 'Task reopened', detail: t.task }); },
-              (e) => toast.push({ kind: 'error', message: 'Could not undo.', detail: e instanceof Error ? e.message : undefined }),
-            );
-          },
-        },
-      });
-    } catch (e) {
-      setConfirming(null);
-      toast.push({ kind: 'error', message: e instanceof DataSourceError && e.code === 'stale_write' ? 'This task changed elsewhere. Reload and try again.' : 'Could not complete the task.', detail: e instanceof Error ? e.message : undefined });
-    } finally { setCompleting(false); }
+    await completeTask(t);
+    setConfirming(null);
+    setCompleting(false);
   };
 
   const newLink = taskDrawerLink(loc.pathname, loc.search, 'new');

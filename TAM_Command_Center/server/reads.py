@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import base64
+import html
 import json
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import constants as C
+from . import richtext
 from .dbkit import like_pattern, load_query, migrate, one, rows_to_dicts
 from .errors import NotFound, ValidationFailed
 from .sentences import system_sentence
@@ -40,7 +42,21 @@ def contact_row(r: Dict[str, Any]) -> Dict[str, Any]:
 def note_row(r: Dict[str, Any]) -> Dict[str, Any]:
     keys = ("id", "client_id", "note_type", "timestamp", "subject", "body", "action_items", "source",
             "row_version", "created_at", "updated_at")
-    return {k: r.get(k) for k in keys}
+    out = {k: r.get(k) for k in keys}
+    _rich(out)
+    return out
+
+
+def _note_matches(item: Dict[str, Any], q: str) -> bool:
+    if item["body_format"] == "plain":
+        return True
+    needle = q.casefold()
+    return any(needle in (item.get(k) or "").casefold() for k in ("subject", "body_text", "action_items"))
+
+
+def _rich(item: Dict[str, Any]) -> None:
+    """Rich notes: body is sanitised HTML (marker removed), body_format says how to render it, body_text is plain."""
+    item["body"], item["body_format"], item["body_text"] = richtext.public(item.get("body"))
 
 
 # ------------------------------------------------------------------ accounts
@@ -169,6 +185,7 @@ def activity_page(conn: sqlite3.Connection, client_id: str, *, filter_: str = "a
         before_ts, before_key = _dec_cursor(before)
     rows = rows_to_dicts(conn.execute(load_query("activity_timeline.sql"), {
         "client_id": client_id, "filter": filter_, "q_like": like_pattern(q) if q else None,
+        "q_like_html": like_pattern(html.escape(q, quote=False)) if q else None,
         "before_ts": before_ts, "before_key": before_key, "limit": limit + 1}))
     has_more = len(rows) > limit
     rows = rows[:limit]
@@ -194,6 +211,9 @@ def activity_page(conn: sqlite3.Connection, client_id: str, *, filter_: str = "a
                           "row_version": versions.get(r["object_id"], (None, None))[0],
                           "updated_at": r["updated_at"], "client_id": client_id,
                           "created_at": versions.get(r["object_id"], (None, None))[1]})
+            _rich(items[-1])
+            if q and not _note_matches(items[-1], q):
+                items.pop()          # SQL matched markup (e.g. "strong") rather than visible text
         else:
             otype, _, action = r["event_type"].partition(".")
             label = r["subject"]

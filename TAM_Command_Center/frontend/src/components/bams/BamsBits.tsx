@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock, MinusCircle, type LucideIcon } from 'lucide-react';
 import type { BamsFreshness, BamsRow, DisplayStatus, Severity } from '../../bamsTypes';
 import { cx } from '../../lib/cx';
@@ -14,9 +15,13 @@ const DISPLAY: Record<Exclude<DisplayStatus, 'disabled'>, { tone: Tone; icon: Lu
 };
 
 /** Status is always a word plus an icon, never colour alone (mockup 01). */
-export function StatusBadge({ status, label }: { status: DisplayStatus; label?: string }) {
+const SEV_TONE: Record<Severity, Tone> = { Critical: 'danger', Warning: 'warning', Info: 'info' };
+/** Tone for an alert row edge/badge: the alert's severity (Warning amber, Critical red). */
+export const severityTone = (s: Severity): Tone => SEV_TONE[s];
+
+export function StatusBadge({ status, label, severity }: { status: DisplayStatus; label?: string; /** alert severity colours open/recovered badges (text always present) */ severity?: Severity }) {
   if (status === 'disabled') return <span className="badge badge--neutral">Disabled</span>;
-  const d = DISPLAY[status];
+  const d = severity && (status === 'open' || status === 'recovered') ? { ...DISPLAY[status], tone: SEV_TONE[severity] } : DISPLAY[status];
   const Icon = d.icon;
   return (
     <span className={cx('badge', `badge--${d.tone}`, 'bm-status')}>
@@ -33,7 +38,7 @@ export const FreshnessBadge = ({ freshness }: { freshness: BamsFreshness }) => <
 export function RowStatus({ row }: { row: BamsRow }) {
   return (
     <span className="bm-badges">
-      {row.alert && <StatusBadge status={row.alert.status === 'open' ? 'open' : 'recovered'} />}
+      {row.alert && <StatusBadge status={row.alert.status === 'open' ? 'open' : 'recovered'} severity={row.alert.severity} label={`${STATUS_LABEL[row.alert.status === 'open' ? 'open' : 'recovered']} · ${row.alert.severity}`} />}
       <FreshnessBadge freshness={row.freshness} />
     </span>
   );
@@ -44,12 +49,11 @@ export function SimulatedBadge() {
 }
 
 export function SeverityTag({ severity }: { severity: Severity }) {
-  const tone: Tone = severity === 'Critical' ? 'danger' : severity === 'Warning' ? 'warning' : 'info';
-  return <span className={cx('badge', `badge--${tone}`)}>{severity}</span>;
+  return <span className={cx('badge', `badge--${SEV_TONE[severity]}`)}>{severity}</span>;
 }
 
 /** 72x18 polyline, aria-hidden (the current value and trend text carry the information). */
-export function Spark({ points, tone }: { points: number[]; tone?: 'danger' }) {
+export const Spark = memo(function Spark({ points, tone }: { points: number[]; tone?: 'danger' }) {
   if (points.length < 2) return <span className="subtle" aria-hidden="true" />;
   const min = Math.min(...points);
   const max = Math.max(...points);
@@ -62,7 +66,7 @@ export function Spark({ points, tone }: { points: number[]; tone?: 'danger' }) {
       <polyline points={pts} fill="none" stroke={tone === 'danger' ? 'var(--danger)' : 'var(--muted)'} strokeWidth="1.2" />
     </svg>
   );
-}
+});
 
 /** Loading-safe percent cell: "91.4%" or "No data". */
 export function Value({ value }: { value: number | null }) {

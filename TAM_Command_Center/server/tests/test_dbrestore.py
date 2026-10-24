@@ -231,17 +231,17 @@ def schema1_db(tmp_path, name="Old Co"):
 
 
 def test_schema_1_database_is_upgraded_to_2_on_the_staged_copy_only(ra, tmp_path):
-    """Real 0001 -> 0002 upgrade (audit prune guard) on the staged copy; the live database is never migrated by inspect."""
+    """Real 0001 -> 0003 upgrade (audit prune guard) on the staged copy; the live database is never migrated by inspect."""
     old = schema1_db(tmp_path)
     live_before = live_sha(ra)
     item = stage(ra, old)
-    assert item["file"]["will_upgrade_from"] == 1 and item["file"]["schema_version"] == 2
-    assert item["current"]["schema_version"] == 2 and item["file"]["counts"]["accounts"] == 1
+    assert item["file"]["will_upgrade_from"] == 1 and item["file"]["schema_version"] == 3
+    assert item["current"]["schema_version"] == 3 and item["file"]["counts"]["accounts"] == 1
     assert live_sha(ra) == live_before and leftovers(ra) == []
     go(ra, item)
     assert accounts(ra) == ["Old Co"]
     with ra.rt.db() as conn:
-        assert conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "2"
+        assert conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "3"
         trg = conn.execute("SELECT sql FROM sqlite_master WHERE name='trg_audit_events_no_delete'").fetchone()[0]
         assert "14 days" in trg
         DR.migrate.assert_guards(conn)
@@ -249,10 +249,10 @@ def test_schema_1_database_is_upgraded_to_2_on_the_staged_copy_only(ra, tmp_path
 
 def test_failed_upgrade_of_a_staged_database_is_refused(ra, tmp_path, monkeypatch):
     good = copy_bytes(ra)
-    bad = tmp_path / "0003_bad.sql"
+    bad = tmp_path / "0004_bad.sql"
     bad.write_text("CREATE TABLE broken (;\n")
     real = DR.migrate.discover
-    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(3, bad)])
+    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(4, bad)])
     err = stage(ra, good, status=422)
     assert err["code"] == "migration_failed" and "nothing was changed" in err["message"]
 
@@ -466,10 +466,10 @@ def test_from_backup_writes_nothing_beside_the_backup(ra):
 def test_raw_sqlite_error_in_a_staged_migration_is_a_clean_refusal(ra, tmp_path, monkeypatch):
     """QA-8-1: bad SQL in a migration must give migration_failed (422), never a 500, and leave the live DB alone."""
     good = copy_bytes(ra)
-    bad = tmp_path / "0003_bad.sql"
+    bad = tmp_path / "0004_bad.sql"
     bad.write_text("INSERT INTO nonexistent_table VALUES (1);\n")
     real = DR.migrate.discover
-    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(3, bad)])
+    monkeypatch.setattr(DR.migrate, "discover", lambda: real() + [(4, bad)])
     before = live_sha(ra)
     err = stage(ra, good, status=422)
     assert err["code"] == "migration_failed" and "nothing was changed" in err["message"]

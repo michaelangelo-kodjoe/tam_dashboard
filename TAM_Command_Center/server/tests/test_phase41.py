@@ -20,7 +20,7 @@ def test_get_note_returns_note_shape(api):
     n = _note(api, c["id"], body="hello")
     j = api.get(f"/api/note/{n['id']}").json()
     assert j["ok"] is True and j["item"] == n
-    assert set(j["item"]) == {"id", "client_id", "note_type", "timestamp", "subject", "body", "action_items", "source",
+    assert set(j["item"]) == {"id", "client_id", "note_type", "timestamp", "subject", "body", "body_format", "body_text", "action_items", "source",
                               "row_version", "created_at", "updated_at"}
 
 

@@ -95,12 +95,6 @@ def rules_for_metric(conn: sqlite3.Connection, metric_id: str, enabled_only: boo
     return _all(conn.execute(sql + " ORDER BY created_at, id", {"m": metric_id}))
 
 
-def spark_points(conn: sqlite3.Connection, metric_id: str, t_hi: str, t_lo: str) -> Optional[float]:
-    r = conn.execute("SELECT value FROM bams_metric_samples WHERE metric_id = :m AND sampled_at <= :hi"
-                     " AND sampled_at >= :lo ORDER BY sampled_at DESC LIMIT 1", {"m": metric_id, "hi": t_hi, "lo": t_lo}).fetchone()
-    return r[0] if r else None
-
-
 def ticker_owner(conn: sqlite3.Connection, ticker: str, exclude_metric: Optional[str] = None) -> Optional[Dict[str, Any]]:
     return _d(conn.execute(
         "SELECT m.id AS metric_id, m.metric_name, o.name AS object_name, c.name AS client_name"

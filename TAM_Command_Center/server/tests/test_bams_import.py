@@ -21,8 +21,8 @@ ROWS_FIX = Path(__file__).resolve().parents[2] / "db" / "fixtures" / "bams_impor
 
 
 def R(account="Acme Capital", bpid="", appliance="BPOD-01", metric="CPU %", ticker="T.CPU", region="", location="",
-      env="", enabled="", stale=""):
-    return [account, bpid, appliance, metric, ticker, region, location, env, enabled, stale]
+      env="", enabled="", stale="", polarity=""):
+    return [account, bpid, appliance, metric, ticker, region, location, env, enabled, stale, polarity]
 
 
 def up(api, rows, name="a.xlsx", headers=HEAD, **kw):
@@ -99,9 +99,9 @@ def test_headers_formulas_unknown_columns_limits(ia):
     r = up(ia, [["x"]], headers=["Appliance", "Metric"])
     j = r.json()
     assert r.status_code == 422 and j["error"]["code"] == "invalid_file" and j["error"]["details"]["reason"] == "header_missing"
-    assert j["error"]["details"]["missing"] == ["Account or BPID", "Ticker"] and j["error"]["details"]["found"] == ["Appliance", "Metric"]
+    assert j["error"]["details"]["missing"] == ["Account"] and j["error"]["details"]["found"] == ["Appliance", "Metric"]
     item = inspect_ok(ia, [R() + ["x"], R(appliance="B2", ticker="T2") + ["y"]], headers=HEAD + ["Owner"], formulas=["C3"])
-    assert item["warnings"] == [{"code": "unknown_column", "text": 'Column K "Owner" is ignored.'}]
+    assert item["warnings"] == [{"code": "unknown_column", "text": 'Column L "Owner" is ignored.'}]
     assert [r["state"] for r in item["rows"]] == ["new", "invalid"] and item["rows"][1]["errors"][0]["code"] == "formula_not_allowed"
     assert inspect_ok(ia, [R(appliance=f"A{i}", ticker=f"T{i}") for i in range(500)])["counts"]["rows"] == 500
     r = up(ia, [R(appliance=f"A{i}", ticker=f"T{i}") for i in range(501)])
@@ -129,12 +129,11 @@ def test_row_validation_and_account_resolution(ia):
             R(account="", bpid="", ticker="T8"), R(env="dev", enabled="No", stale="300", ticker="T9", appliance="E9")]
     item = inspect_ok(ia, rows)
     codes = [[e["code"] for e in r["errors"]] for r in item["rows"]]
-    assert codes == [[], [], ["account_not_found"], ["account_mismatch"], ["environment_invalid"], ["stale_after_invalid"],
+    assert codes == [[], ["account_required"], ["account_not_found"], ["account_mismatch"], ["environment_invalid"], ["stale_after_invalid"],
                      ["enabled_invalid"], ["account_required"], []]
     last = item["rows"][-1]
     assert last["values"]["environment"] == "DEV" and last["values"]["enabled"] is False and last["values"]["stale_after_seconds"] == 300
-    assert item["rows"][1]["target"]["client_name"] == "Beta Fund"
-    assert item["counts"]["rows"] == 9 and item["counts"]["invalid"] == 6
+    assert item["counts"]["rows"] == 9 and item["counts"]["invalid"] == 7
     c = item["counts"]
     assert c["rows"] == c["new"] + c["updates"] + c["unchanged"] + c["needs_review"] + c["invalid"] and c["valid"] == c["rows"] - c["invalid"]
 
@@ -232,10 +231,10 @@ def test_apply_new_and_merge_rules_audit_backup(ia):
     c = res["counts"]
     assert c["appliances_created"] == 1 and c["appliances_updated"] == 1 and c["metrics_created"] == 3
     assert c["metrics_updated"] == 1 and c["skipped"] == 1 and c["invalid"] == 1 and c["overwritten"] == 0
-    assert res["fields_filled"] == 2 and res["backup"]["reason"] == "pre-import" and len(backups(ia)) == 1
+    assert res["fields_filled"] == 3 and res["backup"]["reason"] == "pre-import" and len(backups(ia)) == 1
     assert res["touched_accounts"] == [{"id": ia.cid, "name": "Acme Capital"}]
     o = ia.sql("SELECT * FROM bams_objects WHERE name = 'OLD-01'")[0]
-    assert (o["region"], o["location"], o["environment"], o["enabled"]) == ("Americas", "Paris", "DEV", 0)   # fills blanks only
+    assert (o["region"], o["location"], o["environment"], o["enabled"]) == ("Europe", "Paris", "DEV", 0)   # explicit non-blank values overwrite (0.2.0)
     m = {r["metric_name"]: r for r in ia.sql("SELECT * FROM bams_metrics WHERE object_id = ?", (o["id"],))}
     assert m["CPU"]["stale_after_seconds"] == 999 and m["CPU"]["enabled"] == 0 and m["CPU"]["ticker"] == "TO1"
     assert m["MEM"]["enabled"] == 0 and m["MEM"]["stale_after_seconds"] == 45
@@ -251,7 +250,7 @@ def test_apply_new_and_merge_rules_audit_backup(ia):
     sk = ia.c.get(res["skipped_url"])
     assert sk.status_code == 200
     ws = openpyxl.load_workbook(io.BytesIO(sk.content))["Import"]
-    assert [c.value for c in ws[1]] == HEAD + ["Source row", "Reason", "Possible duplicate of"] and ws["K2"].value == "6"
+    assert [c.value for c in ws[1]] == HEAD + ["Source row", "Reason", "Possible duplicate of"] and ws["L2"].value == "6"
     again = apply(ia, item, status=409)
     assert again["error"]["code"] == "already_applied"
     stale = apply(ia, {**item, "import_id": "0" * 32}, status=410)
@@ -282,7 +281,7 @@ def test_decisions_gate_and_validation(ia):
     g = item["review"][0]
     assert g["key"] == "g2" and g["candidates"][0]["ref"]["type"] == "appliance" and g["strength"] == "High"
     cand = g["candidates"][0]
-    assert cand["fills"] == {"location": "New York"} and cand["kept"]["region"]["differs"] is True
+    assert cand["fills"] == {"location": "New York", "region": "Europe"}
     assert cand["metrics_conflicts"] == [{"metric": "CPU", "ticker": "NEW.CPU", "owner": "BPOD-NY-01", "existing_ticker": "EXIST.CPU"}]
     assert cand["metrics_added"] == ["Disk"]
     b = counts(ia)
@@ -304,7 +303,7 @@ def test_decision_same_different_skip(ia):
     # CPU hits a different existing ticker -> invalid, not blocking; Disk is added; blank location filled
     assert res["counts"]["metrics_created"] == 1 and res["counts"]["invalid"] == 1 and res["counts"]["appliances_updated"] == 1
     o = ia.sql("SELECT * FROM bams_objects")[0]
-    assert (o["location"], o["region"]) == ("New York", "Americas")
+    assert (o["location"], o["region"]) == ("New York", "Europe")     # explicit Region overwrites (0.2.0)
     assert {r["metric_name"]: r["ticker"] for r in ia.sql("SELECT * FROM bams_metrics")} == {"CPU": "EXIST.CPU", "Disk": "NEW.DISK"}
     assert res["decisions"][0]["label"] == "BPOD NY 01 merged into BPOD-NY-01" and res["breakdown"]["merged_marked_same"] == 1
     # different

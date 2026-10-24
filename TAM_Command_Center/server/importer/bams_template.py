@@ -12,16 +12,16 @@ from .template import CSV_MEDIA, LAST_ROW, XLSX_MEDIA  # noqa: F401  (re-exporte
 INSTRUCTIONS = [
     "TAM Command Center: BAMS appliance and metrics import",
     "",
-    "Fill the Import sheet (one row per metric; repeat the appliance columns on each of its rows), save, and upload "
-    "the file on the BAMS import page. Nothing is written until you confirm on the Preview page.",
+    "Fill the Import sheet and upload it on the BAMS import page. A row may update appliance metadata only, or may "
+    "contain a Metric + Ticker pair. Nothing is written until you confirm on the Preview page.",
     "",
     "Columns (row 1 is the header; keep the names, the order may change):",
-    "Account: the exact account name already in the tracker. Or BPID (text). One of the two is required. "
-    "Accounts are never created by this import.",
-    "Appliance (required, up to 200 characters), Metric (required, up to 200), Ticker (required, up to 200; "
-    "a ticker belongs to exactly one metric and is never changed by import).",
-    "Region (up to 100), Location (up to 200), Environment (PROD or DEV): only blanks on an existing appliance are filled.",
-    "Region / Polarity: East or West (used by Operations). The header Polarity is accepted instead of Region. Environment is also used by Operations.",
+    "Account: the exact account name already in the tracker. This is the only universally required column/value. "
+    "BPID is optional and can be used as an additional match check. Accounts are never created by this import.",
+    "Appliance: required only when the row is making a BAMS change. For an appliance-only metadata update, leave Metric and Ticker blank.",
+    "Metric + Ticker: optional as a pair. If either is supplied, both are required. A ticker belongs to exactly one metric and is never changed by import.",
+    "Region, Location and Environment (PROD or DEV): blank means leave the existing appliance value unchanged; an explicit non-blank value updates it.",
+    "Polarity: optional East or West. When supplied, it is authoritative for the appliance's East/West Operations polarity and overrides Region for that row.",
     "Enabled (Yes or No, blank means Yes) and Stale after (s) (whole number above 0, blank means 120) apply to new metrics only.",
     "",
     "Values are percentages as returned by Bloomberg; there is no unit column. Limits: up to " + str(C.IMPORT_MAX_ROWS) +
@@ -29,9 +29,9 @@ INSTRUCTIONS = [
     "You can also upload a CSV (.csv) file with the same column names.",
 ]
 EXAMPLE = [
-    ["Example Capital", "", "BPOD-NY-01", "CPU utilisation", "EXAMPLE.BPOD.NY01.CPU", "East", "New York", "PROD", "Yes", "120"],
-    ["Example Capital", "", "BPOD-NY-01", "Memory used", "EXAMPLE.BPOD.NY01.MEM", "", "", "", "", ""],
-    ["Example Capital", "", "BPOD-LDN-01", "CPU utilisation", "EXAMPLE.BPOD.LDN01.CPU", "West", "London", "DEV", "No", "300"],
+    ["Example Capital", "", "BA49686", "", "", "", "", "PROD", "", "", "West"],
+    ["Example Capital", "", "BA51186", "", "", "", "", "PROD", "", "", "East"],
+    ["Example Capital", "", "BPOD-NY-01", "CPU utilisation", "EXAMPLE.BPOD.NY01.CPU", "", "New York", "PROD", "Yes", "120", "East"],
 ]
 
 
@@ -64,8 +64,8 @@ def build_template_xlsx() -> bytes:
         for col, h in enumerate(HEADERS, start=1):
             c = sheet.cell(row=1, column=col, value=h)
             c.font = Font(bold=True)
-            c.fill = req_fill if h in ("Account", "Appliance", "Metric", "Ticker") else head_fill
-        for i, w in enumerate([32, 12, 22, 26, 30, 14, 18, 14, 10, 16]):
+            c.fill = req_fill if h == "Account" else head_fill
+        for i, w in enumerate([32, 12, 22, 26, 30, 14, 18, 14, 10, 16, 12]):
             sheet.column_dimensions[chr(65 + i)].width = w
         sheet.freeze_panes = "A2"
     for r, vals in enumerate(EXAMPLE, start=2):
@@ -81,10 +81,10 @@ def build_template_xlsx() -> bytes:
                            errorTitle="Enabled", error="Choose Yes or No.")
     dv_stale = DataValidation(type="whole", operator="greaterThan", formula1="0", allow_blank=True,
                               showErrorMessage=True, errorTitle="Stale after (s)", error="Use a whole number above 0.")
-    dv_reg = DataValidation(type="list", formula1="=Lists!$C$1:$C$2", allow_blank=True, showErrorMessage=True,
-                            errorStyle="warning", errorTitle="Region / Polarity",
-                            error="Operations uses East or West here. Other text is still imported.")
-    for dv, col in ((dv_env, "H"), (dv_en, "I"), (dv_stale, "J"), (dv_reg, "F")):
+    dv_pol = DataValidation(type="list", formula1="=Lists!$C$1:$C$2", allow_blank=True, showErrorMessage=True,
+                            errorStyle="stop", errorTitle="Polarity",
+                            error="Choose East or West.")
+    for dv, col in ((dv_env, "H"), (dv_en, "I"), (dv_stale, "J"), (dv_pol, "K")):
         ws.add_data_validation(dv)
         dv.add(rng(col))
     wb.properties.creator = "TAM Command Center"

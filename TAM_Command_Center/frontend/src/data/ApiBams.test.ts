@@ -32,8 +32,10 @@ describe('state and detail', () => {
     const ds = new ApiDataSource();
     await ds.getBamsTrend('m 1', '30d');
     expect(calls[0].url).toBe('/api/bams/metric/m%201/trend?range=30d');
+    await ds.getBamsTrendWindow('m 1', '2026-10-14T01:00:00.000Z', '2026-10-14T02:00:00.000Z');
+    expect(calls[1].url).toBe('/api/bams/metric/m%201/trend?from=2026-10-14T01%3A00%3A00.000Z&to=2026-10-14T02%3A00%3A00.000Z');
     const a = await ds.getBamsAlerts({ status: 'all', account: 'c', limit: 200 });
-    expect(calls[1].url).toBe('/api/bams/alerts?status=all&account=c&limit=200');
+    expect(calls[2].url).toBe('/api/bams/alerts?status=all&account=c&limit=200');
     expect(a.items[0].event.still_breaching).toBe(true);
   });
 });

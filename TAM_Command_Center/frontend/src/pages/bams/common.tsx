@@ -13,7 +13,7 @@ export function errText(e: unknown, fallback = 'Something went wrong. Nothing wa
   return fallback;
 }
 
-export function Kpi({ label, value, tone, sub }: { label: string; value: ReactNode; tone?: 'danger' | 'warning' | 'success'; sub?: ReactNode }) {
+export function Kpi({ label, value, tone, sub }: { label: string; value: ReactNode; tone?: 'danger' | 'warning' | 'success' | 'info'; sub?: ReactNode }) {
   return (
     <div className="bm-kpi">
       <span className="label">{label}</span>

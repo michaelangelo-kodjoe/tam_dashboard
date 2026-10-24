@@ -107,3 +107,17 @@ New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `t
 | QA-7-4 | Low | frontend-dev | Data section cramped at 375 px | FIXED: action rows stack with full-width buttons, Backups table shows name + Restore only under 600 px, dialog footers wrap; verified live at 375 px, no horizontal page scroll |
 | REL-1 | Medium | backend-dev | 413 for oversize uploads could surface as httpx.ReadError / connection reset (server closed while the client was still sending) | FIXED: BodyLimit drains (discards, bounded) the remaining body before sending the 413; regression test `server/tests/test_bodylimit.py` fails without the fix; 20/20 clean-venv runs (py3.10, pydantic 2.14.0, release-range install) |
 | QA-8-1 | Medium | backend-dev | A migration failing with a raw sqlite3.Error gave a traceback and exit 1 instead of a clean refusal | FIXED: migrate.migrate converts it to MigrationError (rolled back, backup kept); Runtime also catches sqlite3.Error; StartupRefused exit 4 (real entry-point test); staged restore gives 422 migration_failed (tests added) |
+
+## 0.2.0 candidate integration gate, ERROR_LOG_W1 (2026-10-23): PASS (0 open Blocker/High)
+| ID | Sev | Owner | Item | Check at |
+|---|---|---|---|---|
+| QA-W1-1 | Medium | frontend-dev | RichTextEditor toolbar `Btn` defined inside the component: toolbar remounts every render, keyboard focus drops to BODY after activating a button | Hoist `Btn`; test keyboard activation keeps focus |
+| QA-W1-2 | Low | backend-dev | test_qa_e5_3_seeded_alert_mix_survives_polls fails on untouched tree | Fix test or seed |
+| QA-W1-3 | Low | frontend-dev | npm audit: 2 moderate (react-router) | Next dependency pass |
+| QA-W1-4 | Low | frontend-dev | 390 px: account workspace page scrolls horizontally (tab bar) | Next UI pass |
+| QA-W1-5 | Low | team-lead | health version still 0.1.0-rc6 | Bump at packaging |
+| QA-W1-6 | Low | backend-dev | DEV simulator highs above 100 % | Cosmetic |
+| QA-W2-1 | Low | frontend-dev | npm audit dev-dependency advisories (vite/esbuild/vitest/tinypool); production deps 0 | Next dependency pass |
+| QA-W2-2 | Low | frontend-dev | No UI control to nest list items (Tab moves focus) | Next UI pass |
+| QA-W2-3 | Low | backend-dev | Sanitised HTML keeps list-in-list as direct child (browser indent output); cosmetic | Optional |
+| QA-W2-4 | Low | backend-dev | Simulator limitation: percent-only simulator vs seeded Mbps NET metrics; test narrowed to percent metrics | Extend simulator or seed |

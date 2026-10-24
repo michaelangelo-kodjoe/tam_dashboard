@@ -72,7 +72,7 @@ describe('dashboard (mockups 01, 02)', () => {
     const tabs = within(screen.getByRole('tablist', { name: 'Quick views' })).getAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual([`All${s.view_counts.all}`, `Active Alerts${s.view_counts.active_alerts}`, `Delayed / Stale${s.view_counts.delayed_stale}`, `Live${s.view_counts.live}`, `No Data${s.view_counts.no_data}`]);
     const firstRow = dataRows(table)[0];
-    expect(firstRow.className).toMatch(/bm-row--open|bm-row--recovered/);
+    expect(firstRow.className).toMatch(/bm-row--(critical|warning|info)/); // edge colour follows the alert severity
     expect(within(firstRow).getByText(/Open alert|Recovered, awaiting close/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Import appliances' })).toHaveAttribute('href', '/bams/import');
     expect(screen.getByRole('button', { name: 'Add appliance' })).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('dashboard (mockups 01, 02)', () => {
     await user.click(screen.getByRole('tab', { name: /^Active Alerts/ }));
     await waitFor(() => expect(loc()).toBe('/bams?view=active_alerts'));
     await waitFor(() => expect(dataRows(screen.getByRole('table', { name: 'Monitored metrics' }))).toHaveLength(s.view_counts.active_alerts)); // a quick view auto-expands matching accounts
-    await user.type(screen.getByRole('searchbox', { name: /Search appliance or metric/ }), 'cpu');
+    await user.type(screen.getByRole('combobox', { name: /Search appliance or metric/ }), 'cpu');
     await waitFor(() => expect(loc()).toContain('q=cpu'));
     await user.click(await screen.findByRole('button', { name: 'Clear filters' }));
     await waitFor(() => expect(loc()).toBe('/bams?view=active_alerts'));

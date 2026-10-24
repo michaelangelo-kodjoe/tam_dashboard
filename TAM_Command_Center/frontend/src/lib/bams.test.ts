@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { breaches, formatAge, formatHighDate, formatSeconds, formatValue, globMatch, ruleCondition, ruleLevel, rulePreview } from './bams';
-import { spreadLabels } from '../pages/bams/TrendChart';
 
 const highs = { d30: { value: 1688, date: '2026-10-03' }, d60: { value: 1702, date: null }, d90: { value: 1755, date: '2026-07-21' } };
 
@@ -48,14 +47,5 @@ describe('rule sentences match the backend preview (contract §11.1)', () => {
     expect(globMatch('CPU*', 'cpu utilisation %')).toBe(true);
     expect(globMatch('*Disk*', 'Disk Usage (%)')).toBe(true);
     expect(globMatch('Latency?', 'Latency ms')).toBe(false);
-  });
-});
-
-describe('trend labels never overlap', () => {
-  it('spreads labels at least the gap apart and keeps order', () => {
-    const out = spreadLabels([100, 100, 100, 104], 13);
-    const sorted = [...out].sort((a, b) => a - b);
-    for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThanOrEqual(13);
-    expect(out[0]).toBeLessThanOrEqual(out[1]);
   });
 });

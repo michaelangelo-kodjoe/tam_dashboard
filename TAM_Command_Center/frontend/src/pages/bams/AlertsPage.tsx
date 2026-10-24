@@ -85,8 +85,8 @@ function AlertTable({ items, tz, eventId, empty, dim, onClose }: { items: BamsAl
           {items.map((i) => {
             const e = i.event;
             return (
-              <tr key={e.id} className={cx(e.id === eventId && 'is-highlight', e.status === 'open' && 'bm-row--open', e.status === 'recovered' && 'bm-row--recovered')} data-event={e.id}>
-                <td>{e.status === 'closed' ? <span className="badge badge--neutral">Closed</span> : <StatusBadge status={e.status === 'open' ? 'open' : 'recovered'} label={`${e.status === 'open' ? 'Open' : 'Recovered'} · ${e.severity}`} />}</td>
+              <tr key={e.id} className={cx(e.id === eventId && 'is-highlight', e.status !== 'closed' && `bm-row--${e.severity.toLowerCase()}`)} data-event={e.id}>
+                <td>{e.status === 'closed' ? <span className="badge badge--neutral">Closed</span> : <StatusBadge status={e.status === 'open' ? 'open' : 'recovered'} severity={e.severity} label={`${e.status === 'open' ? 'Open' : 'Recovered'} · ${e.severity}`} />}</td>
                 <td>{i.object.client_name} / <span className="mono">{i.object.name}</span></td>
                 <td>{e.message}</td>
                 <td className="is-right num">{e.status === 'closed' ? `peak ${formatValue(e.peak_value)}` : `peak ${formatValue(e.peak_value)} / now ${i.freshness === 'No Data' ? 'no data' : formatValue(e.current_value)}`}</td>

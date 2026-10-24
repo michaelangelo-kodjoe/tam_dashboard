@@ -62,7 +62,7 @@ export function BellInbox() {
             {q.data.items.map((n) => (
               <li key={n.id}>
                 <button type="button" className={cx('bm-nt', n.unread && 'is-unread')} onClick={() => void go(n)}>
-                  {n.kind === 'opened' ? <AlertCircle size={16} strokeWidth={1.5} aria-hidden="true" className="bm-danger" /> : n.kind === 'recovered' ? <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden="true" className="bm-warning" /> : <Info size={16} strokeWidth={1.5} aria-hidden="true" className="muted" />}
+                  {n.kind === 'opened' ? <AlertCircle size={16} strokeWidth={1.5} aria-hidden="true" className={n.severity === 'Warning' ? 'bm-warning' : n.severity === 'Info' ? 'bm-info' : 'bm-danger'} /> : n.kind === 'recovered' ? <CheckCircle2 size={16} strokeWidth={1.5} aria-hidden="true" className="bm-warning" /> : <Info size={16} strokeWidth={1.5} aria-hidden="true" className="muted" />}
                   <span className="bm-nt__body"><span>{n.title}</span><span className="muted sm">{n.detail}</span></span>
                   <span className="muted sm num">{when(n.attempted_at, settings.time_display)}</span>
                   {n.unread && <span className="sr-only">(unread)</span>}

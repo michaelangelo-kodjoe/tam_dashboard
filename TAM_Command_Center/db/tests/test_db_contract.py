@@ -58,7 +58,7 @@ class SchemaConstraints(unittest.TestCase):
     def test_integrity_and_fk_clean(self):
         self.assertEqual(self.c.execute("PRAGMA integrity_check").fetchone()[0], "ok")
         self.assertEqual(self.c.execute("PRAGMA foreign_key_check").fetchall(), [])
-        self.assertEqual(self.c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "2")
+        self.assertEqual(self.c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "3")
         self.assertEqual(self.c.execute("PRAGMA application_id").fetchone()[0], migrate.APPLICATION_ID)
 
     def test_one_primary_contact_per_account(self):
@@ -207,23 +207,24 @@ class MigrationContract(unittest.TestCase):
         self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         r1 = migrate.migrate(conn, channel=None)
         self.assertEqual((r1["from"], r1["to"], r1["applied"], r1["backup"]),
-                         (0, 2, ["0001_initial.sql", "0002_audit_prune.sql"], None))
+                         (0, 3, ["0001_initial.sql", "0002_audit_prune.sql", "0003_bams_persistent_metric_alerts.sql"], None))
         before = conn.execute("SELECT key, value FROM app_meta ORDER BY key").fetchall()
         calls = []
         r2 = migrate.migrate(conn, backup_hook=lambda c, why: calls.append(why), channel=None)
-        self.assertEqual((r2["from"], r2["to"], r2["applied"]), (2, 2, []))
+        self.assertEqual((r2["from"], r2["to"], r2["applied"]), (3, 3, []))
         self.assertEqual(calls, [])  # no backup when nothing is pending
         self.assertEqual(conn.execute("SELECT key, value FROM app_meta ORDER BY key").fetchall(), before)
         # executing 0001 directly a second time is also harmless (IF NOT EXISTS / guarded upsert)
         conn.executescript((migrate.MIGRATIONS_DIR / "0001_initial.sql").read_text())
-        self.assertEqual(conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "2")
+        self.assertEqual(conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "3")
 
     def _with_extra_migration(self, body: str) -> Path:
         mdir = self.tmp / "migrations"
         mdir.mkdir()
         shutil.copy(migrate.MIGRATIONS_DIR / "0001_initial.sql", mdir)
         shutil.copy(migrate.MIGRATIONS_DIR / "0002_audit_prune.sql", mdir)
-        (mdir / "0003_test.sql").write_text(body.replace("value='2'", "value='3'"))
+        shutil.copy(migrate.MIGRATIONS_DIR / "0003_bams_persistent_metric_alerts.sql", mdir)
+        (mdir / "0004_test.sql").write_text(body.replace("value='2'", "value='4'"))
         return mdir
 
     def test_existing_db_backup_hook_contract(self):
@@ -242,12 +243,12 @@ class MigrationContract(unittest.TestCase):
                 raise OSError("disk full")
             with self.assertRaises(OSError):                          # failing backup -> abort, untouched
                 migrate.migrate(conn, failing, channel=None)
-            self.assertEqual(migrate.current_version(conn), 2)
+            self.assertEqual(migrate.current_version(conn), 3)
             res = migrate.migrate(conn, migrate.make_backup_hook(self.tmp / "backups"), channel=None)
-            self.assertEqual((res["from"], res["to"]), (2, 3))
+            self.assertEqual((res["from"], res["to"]), (3, 4))
             b = sqlite3.connect(res["backup"])
             self.assertEqual(b.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-            self.assertEqual(b.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "2")
+            self.assertEqual(b.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0], "3")
             self.assertEqual(b.execute("SELECT count(*) FROM clients").fetchone()[0], 1)
             b.close()
         finally:
@@ -263,7 +264,7 @@ class MigrationContract(unittest.TestCase):
                 "UPDATE app_meta SET value='2' WHERE key='schema_version';\n")
             with self.assertRaisesRegex(migrate.MigrationError, "rolled back"):       # QA-8-1: not a raw sqlite3 error
                 migrate.migrate(conn, lambda c, why: self.tmp / "unused", channel=None)
-            self.assertEqual(migrate.current_version(conn), 2)
+            self.assertEqual(migrate.current_version(conn), 3)
             self.assertIsNone(conn.execute("SELECT 1 FROM sqlite_master WHERE name='half_done'").fetchone())
         finally:
             migrate.MIGRATIONS_DIR = orig
@@ -340,7 +341,7 @@ class MockSeed(unittest.TestCase):
         conn.row_factory = sqlite3.Row
         q = lambda f: (DB_DIR / "queries" / f).read_text(encoding="utf-8")  # noqa: E731
         cid = conn.execute("SELECT id FROM clients WHERE name LIKE 'Northwind%'").fetchone()[0]
-        base = dict(client_id=cid, q_like=None, before_ts=None, before_key=None, limit=100)
+        base = dict(client_id=cid, q_like=None, q_like_html=None, before_ts=None, before_key=None, limit=100)
         expected = {"meeting": {"Meeting Note"}, "call": {"Call Note"}, "general": {"General Note"}}
         for f, types in expected.items():
             rows = conn.execute(q("activity_timeline.sql"), dict(base, filter=f)).fetchall()
@@ -787,7 +788,7 @@ class Schema2_AuditPrune(unittest.TestCase):
             with self.assertRaisesRegex(sqlite3.DatabaseError, "append-only"):          # schema 1: all deletes refused
                 conn.execute("DELETE FROM audit_events")
             res = migrate.migrate(conn, migrate.make_backup_hook(tmp / "bk"), channel=None)
-            self.assertEqual((res["from"], res["to"], res["applied"]), (1, 2, ["0002_audit_prune.sql"]))
+            self.assertEqual((res["from"], res["to"], res["applied"]), (1, 3, ["0002_audit_prune.sql", "0003_bams_persistent_metric_alerts.sql"]))
             self.assertTrue(res["backup"] and Path(res["backup"]).exists())               # pre-migration safety backup
             self.assertEqual(conn.execute("SELECT count(*) FROM audit_events").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT count(*) FROM clients").fetchone()[0], 1)
@@ -1656,7 +1657,7 @@ class T61_ActivityTrend(unittest.TestCase):
         edges = [p[f"b{i}"] for i in range(15)]
         busy = 0
         for cid, pts in series.items():
-            entries = c.execute(TIMELINE_SQL, dict(client_id=cid, filter="all", q_like=None, before_ts=None,
+            entries = c.execute(TIMELINE_SQL, dict(client_id=cid, filter="all", q_like=None, q_like_html=None, before_ts=None,
                                                    before_key=None, limit=100000)).fetchall()
             expect = [0] * 14
             for e in entries:

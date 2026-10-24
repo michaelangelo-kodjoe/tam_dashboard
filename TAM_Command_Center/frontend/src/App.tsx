@@ -10,7 +10,7 @@ import type { DataSource } from './data/DataSource';
 export function App({ ds: injected }: { ds?: DataSource }) {
   const ds = useMemo(() => injected ?? createDataSource(), [injected]);
   return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <BrowserRouter>
       <DataProvider ds={ds}>
         <ToastProvider>
           <UIProvider>

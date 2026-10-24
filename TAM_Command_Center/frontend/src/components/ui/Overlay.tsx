@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '../../lib/cx';
 
@@ -111,7 +111,7 @@ export function Overlay({
         aria-labelledby={labelledBy}
         tabIndex={-1}
         className={cx('overlay__panel', `overlay__panel--${variant}`, className)}
-        style={width ? { width } : undefined}
+        style={width ? ({ '--overlay-w': `${width}px` } as CSSProperties) : undefined}
         onKeyDown={onKeyDown}
       >
         {children}

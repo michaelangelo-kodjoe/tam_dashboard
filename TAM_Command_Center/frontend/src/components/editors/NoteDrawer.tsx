@@ -4,6 +4,7 @@ import { Drawer } from '../ui/Drawer';
 import { Button } from '../ui/Button';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Field, TextArea, TextInput } from '../ui/Fields';
+import { RichTextEditor } from '../ui/RichTextEditor';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ErrorBanner, SkeletonRows } from '../ui/Feedback';
 import { useToast } from '../ui/Toast';
@@ -12,13 +13,15 @@ import { findNote, instantToLocalInput, localInputToInstant } from './noteLookup
 import { useApp, useData } from '../../store/DataContext';
 import { NOTE_TYPES, type Note, type NoteInput, type NoteType } from '../../types';
 import { clean, validateNote } from '../../lib/validate';
+import { plainToHtml } from '../../lib/richText';
 import { useUI } from '../../store/UIContext';
 import { noteLabelOf } from '../../lib/actionItems';
 import { formatTimestamp } from '../../lib/dates';
 
-interface FormState { note_type: NoteType; timestamp: string; subject: string; body: string; action_items: string }
-const blank = (type: NoteType): FormState => ({ note_type: type, timestamp: instantToLocalInput(new Date().toISOString()), subject: '', body: '', action_items: '' });
-const fromNote = (n: Note): FormState => ({ note_type: n.note_type, timestamp: instantToLocalInput(n.timestamp), subject: n.subject ?? '', body: n.body ?? '', action_items: n.action_items ?? '' });
+/** `format` is what `body` currently holds. A legacy plain note stays plain until its body is edited in the rich editor. */
+interface FormState { note_type: NoteType; timestamp: string; subject: string; body: string; format: 'plain' | 'html'; action_items: string }
+const blank = (type: NoteType): FormState => ({ note_type: type, timestamp: instantToLocalInput(new Date().toISOString()), subject: '', body: '', format: 'html', action_items: '' });
+const fromNote = (n: Note): FormState => ({ note_type: n.note_type, timestamp: instantToLocalInput(n.timestamp), subject: n.subject ?? '', body: n.body ?? '', format: n.body_format === 'html' ? 'html' : 'plain', action_items: n.action_items ?? '' });
 
 export function NoteDrawer({ noteId, clientId, newType, onClose }: { noteId: string; clientId: string; newType?: NoteType; onClose: () => void }) {
   const { ds, bump } = useData();
@@ -60,7 +63,7 @@ export function NoteDrawer({ noteId, clientId, newType, onClose }: { noteId: str
 
   const build = (version?: number): NoteInput => ({
     id: note?.id, client_id: clientId, note_type: form.note_type, timestamp: localInputToInstant(form.timestamp),
-    subject: clean(form.subject), body: clean(form.body), action_items: clean(form.action_items), expected_row_version: isNew ? undefined : (version ?? note?.row_version),
+    subject: clean(form.subject), body: clean(form.body), ...(clean(form.body) ? { body_format: form.format } : {}), action_items: clean(form.action_items), expected_row_version: isNew ? undefined : (version ?? note?.row_version),
   });
 
   const save = async (overwrite = false) => {
@@ -141,7 +144,10 @@ export function NoteDrawer({ noteId, clientId, newType, onClose }: { noteId: str
                 {(p) => <TextInput id={p.id} value={form.subject} maxLength={300} onChange={(ev) => set('subject', ev.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} autoFocus data-autofocus />}
               </Field>
               <Field label="Body" error={e.body}>
-                {(p) => <TextArea id={p.id} value={form.body} onChange={(ev) => set('body', ev.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} />}
+                {(p) => (
+                  <RichTextEditor key={`${note?.id ?? 'new'}-${note?.row_version ?? 0}`} id={p.id} minHeight={360} initialHtml={form.format === 'html' ? form.body : plainToHtml(form.body)}
+                    onChange={(html) => setForm((f) => ({ ...f, body: html, format: 'html' }))} invalid={p.invalid} describedBy={p.describedBy} />
+                )}
               </Field>
               <Field label="Action items" error={e.action_items}>
                 {(p) => <TextArea id={p.id} value={form.action_items} onChange={(ev) => set('action_items', ev.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} />}

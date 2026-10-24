@@ -118,7 +118,7 @@ Notes:
 
 ## Workstation checklist (BlpapiProvider, built against a fake session only)
 
-Code: `server/bams/provider.py` (BlpapiProvider), `server/bams/blpapi_parse.py` (ALL [U] response shapes; edit only this if the probe shows differences), tunables as class constants/ctor args: `HOST`, `PORT` 8194, `FIELD` PX_LAST, `BATCH_SIZE` 500, `REQUEST_TIMEOUT_S` 30.
+Code: `server/bams/provider.py` (BlpapiProvider), `server/bams/blpapi_parse.py` (ALL [U] response shapes; edit only this if the probe shows differences), tunables as class constants/ctor args: `HOST`, `PORT` 8194, `FIELD` LAST_PRICE (was PX_LAST before 0.2.0), `BATCH_SIZE` 500, `REQUEST_TIMEOUT_S` 30.
 
 1. `python -m pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi` into the PROD venv (Python 3.10+, 64-bit).
 2. Terminal logged in, then `python tools/bloomberg_probe.py "IBM US Equity" "NOTAREAL XX Equity" --fields PX_LAST NOT_A_FIELD`. Send back `bloomberg_probe_output.txt`. Compare against blpapi_parse.py: event type names, `securityError`/`fieldExceptions`/`fieldData` element names, how a numeric PX_LAST value appears.

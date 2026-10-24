@@ -33,6 +33,7 @@ import type {
 } from '../../types';
 import { DataSourceError, type ActivityQuery, type DataSource } from '../DataSource';
 import { addDays, instantLocalDate, localToday } from '../../lib/dates';
+import { htmlToText, isEmptyHtml, sanitizeHtml } from '../../lib/richText';
 import { clean, validateAccount, validateContact, validateNote, validateTask } from '../../lib/validate';
 import {
   accountSummary,
@@ -58,7 +59,7 @@ import type { DbRestorePreview, DbRestoreResult, RestoreIssueQuery, RestorePlan,
 import type { OpsApplianceInput, OpsData, OpsQuarter, OpsQuarterInput, OpsQuarterName, OpsQuery, OpsRow, OpsSetVersionResult } from '../../opsTypes';
 import { MockBamsImport, bamsTemplateRows, parseBamsGrid } from './mockBamsImport';
 import type {
-  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult, BamsImportPlan,
+  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigInput, BamsMetricCatalogItem, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult, BamsImportPlan,
   BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRule, BamsRuleInput, BamsSettings,
   BamsState, BamsStateQuery, BamsTrend, TrendRange,
 } from '../../bamsTypes';
@@ -633,7 +634,9 @@ export class MockDataSource implements DataSource {
     if (Object.keys(errs).length) throw new DataSourceError('validation_error', 'Fix the highlighted fields.', errs);
     const client = this.requireClient(input.client_id)!;
     const ts = this.now();
-    const f = { note_type: input.note_type, timestamp: new Date(input.timestamp).toISOString(), subject: clean(input.subject), body: clean(input.body), action_items: clean(input.action_items) };
+    const rich = input.body_format === 'html' && !!clean(input.body);
+    const body = rich ? sanitizeHtml(clean(input.body)!) : clean(input.body);
+    const f = { note_type: input.note_type, timestamp: new Date(input.timestamp).toISOString(), subject: clean(input.subject), body: body && isEmptyHtml(body) && rich ? null : body, body_format: rich ? 'html' : 'plain', body_text: rich && body ? htmlToText(body) : body, action_items: clean(input.action_items) };
     const side: string[] = [];
     let row: Row;
     if (!input.id) {
@@ -844,6 +847,7 @@ export class MockDataSource implements DataSource {
 
   async getBamsState(q: BamsStateQuery): Promise<BamsState> { await this.enter(); return this.bamsEngine.getState(q); }
   async getBamsMetric(id: string): Promise<BamsMetricDetail> { await this.enter(); return this.bamsEngine.getMetric(id); }
+  async getBamsTrendWindow(id: string, from: string, to: string): Promise<BamsTrend> { await this.enter(); return this.bamsEngine.getTrendWindow(id, from, to); }
   async getBamsTrend(id: string, range: TrendRange): Promise<BamsTrend> { await this.enter(); return this.bamsEngine.getTrend(id, range); }
   async getBamsAlerts(q: { status?: AlertListStatus; account?: string; metric_id?: string; limit?: number }): Promise<BamsAlertList> { await this.enter(); return this.bamsEngine.getAlerts(q); }
   async closeBamsAlert(input: { id: string; note: string | null }): Promise<{ event: BamsAlertEvent; suppressed_until_clear: boolean }> { await this.enter(); return this.bamsEngine.closeAlert(input.id, input.note); }
@@ -858,6 +862,9 @@ export class MockDataSource implements DataSource {
   async saveBamsRule(input: BamsRuleInput): Promise<BamsRule> { await this.enter(); return this.bamsEngine.saveRule(input); }
   async deleteBamsRule(input: { id: string }): Promise<void> { await this.enter(); this.bamsEngine.deleteRule(input.id); }
   async getBamsConfigs(): Promise<BamsConfig[]> { await this.enter(); return this.bamsEngine.getConfigs(); }
+  async getBamsMetricCatalog(): Promise<BamsMetricCatalogItem[]> { await this.enter(); return this.bamsEngine.metricCatalog(); }
+  async saveBamsConfig(input: BamsConfigInput): Promise<BamsConfig> { await this.enter(); return this.bamsEngine.saveConfig(input); }
+  async deleteBamsConfig(input: { id: string }): Promise<void> { await this.enter(); this.bamsEngine.deleteConfig(input.id); }
   async previewBamsConfig(input: { config_id: string; metric_ids?: string[] | null }): Promise<BamsConfigPreview> { await this.enter(); return this.bamsEngine.previewConfig(input.config_id, input.metric_ids); }
   async applyBamsConfig(input: { config_id: string; metric_ids?: string[] | null; plan_hash: string }): Promise<BamsConfigApplied> { await this.enter(); return this.bamsEngine.applyConfig(input.config_id, input.plan_hash, input.metric_ids); }
   async getBamsNotifications(limit = 30): Promise<BamsNotifications> { await this.enter(); return this.bamsEngine.getNotifications(limit); }

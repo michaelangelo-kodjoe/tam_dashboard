@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BAMS v2: chart drag-to-zoom</title><link rel="stylesheet" href="bams.css"><link rel="stylesheet" href="v2.css"></head><body><main id="m">
+<div class="hd"><h1>Metric detail: CPU utilisation %</h1><span class="muted" style="padding-bottom:3px">BPOD-NY-01 · Castellan Peak</span></div>
+<p class="annot"><b>Change 1.</b> Click-drag a box across the chart to zoom into that time window. Try it: drag on the chart. Existing range buttons are kept; they set the base window. A zoom is a sub-window of the selected range.</p>
+<div class="panel"><div class="ph"><span class="label">Trend</span><div class="sp"></div>
+<span class="rangelabel" id="rl">Showing 24h: 14 Oct 00:00 to 23:59</span>
+<button class="btn sec sm" id="rz" disabled><svg class="i s"><use href="#x"/></svg>Reset zoom</button></div>
+<div class="pb"><div class="rangebar"><div class="seg" role="group" aria-label="Range"><button>1h</button><button class="on">24h</button><button>7d</button><button>30d</button><button>90d</button></div><span class="hint" id="hint">Drag on the chart to zoom. Minimum window 3 minutes.</span></div>
+<div class="chartbox" id="cb"></div><div class="legend"><span><i style="background:var(--info)"></i>CPU utilisation %</span><span id="tk" class="num"></span></div></div></div>
+<div class="annot" style="margin-top:12px">Shortcuts shown in the real build: Esc cancels a drag in progress; the Reset zoom button (or double-click chart) restores the selected range. While zoomed, buttons 1h/24h/7d... reset the zoom.</div>
+</main><script src="chart.js"></script><script src="shell.js"></script><script>
+const c=Chart.make(document.getElementById('cb'),{sev:false,onrange(v,f,st){const z=v[0]!==f[0]||v[1]!==f[1];
+ document.getElementById('rl').textContent=z?'Zoomed: '+Chart.fmt(v[0])+' to '+Chart.fmt(v[1])+' ('+Math.round((v[1]-v[0])/60000)+' min)':'Showing 24h: 14 Oct 00:00 to 23:59';
+ document.getElementById('rl').style.borderColor=z?'var(--accent)':'';document.getElementById('rz').disabled=!z;
+ document.getElementById('tk').textContent='Tick step: '+(st>=3600000?st/3600000+' h':st/60000+' min')}});
+document.getElementById('rz').onclick=()=>c.reset();document.getElementById('cb').ondblclick=()=>c.reset();
+document.addEventListener('keydown',e=>{if(e.key==='Escape')c.reset()});
+</script></body></html>

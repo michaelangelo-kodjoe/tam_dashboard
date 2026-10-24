@@ -57,9 +57,10 @@ def register(api: APIRouter, rt: Any) -> None:
             return reads.metric_detail(conn, make_ctx(rt.bams, conn), metric_id, alerts_limit)
 
     @api.get("/bams/metric/{metric_id}/trend")
-    def metric_trend(metric_id: str, range: str = "7d") -> Dict[str, Any]:
+    def metric_trend(metric_id: str, range: str = "7d", from_: Optional[str] = Query(None, alias="from", max_length=40),
+                     to: Optional[str] = Query(None, max_length=40)) -> Dict[str, Any]:
         with rt.db() as conn:
-            return reads.trend(conn, make_ctx(rt.bams, conn), metric_id, range)
+            return reads.trend(conn, make_ctx(rt.bams, conn), metric_id, range, from_, to)
 
     @api.get("/bams/alerts")
     def alerts(status: str = "active", account: Optional[str] = Query(None, max_length=4000),
@@ -104,6 +105,11 @@ def register(api: APIRouter, rt: Any) -> None:
     def rule_delete(body: DeleteById) -> Dict[str, Any]:
         return S.rule_delete(rt, body)
 
+    @api.get("/bams/metrics/catalog")
+    def metric_catalog() -> Dict[str, Any]:
+        with rt.db() as conn:
+            return reads.metric_catalog(conn)
+
     @api.get("/bams/configs")
     def configs() -> Dict[str, Any]:
         with rt.db() as conn:
@@ -125,6 +131,10 @@ def register(api: APIRouter, rt: Any) -> None:
     def notifications(limit: int = Query(50, ge=1, le=200), unread_only: bool = False) -> Dict[str, Any]:
         with rt.db() as conn:
             return reads.notifications(conn, limit, unread_only)
+
+    @api.post("/bams/notifications/test")
+    def notifications_test() -> Dict[str, Any]:
+        return S.notification_test(rt)
 
     @api.post("/bams/notifications/read")
     def notifications_read(body: NotificationsRead) -> Dict[str, Any]:

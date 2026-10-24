@@ -22,16 +22,19 @@ def _blank(v: Any) -> bool:
 
 
 def _fills_kept(file_vals: Dict[str, Any], existing: Dict[str, Any]) -> Tuple[Dict[str, str], Dict[str, Dict[str, Any]]]:
+    # Explicit non-blank appliance metadata in an import is authoritative. Blank cells mean
+    # "leave the existing value alone". This lets a backend-only metadata row correct
+    # Polarity/Environment/Location instead of only filling database blanks.
     fills: Dict[str, str] = {}
     kept: Dict[str, Dict[str, Any]] = {}
     for f in FILL:
         fv, ev = file_vals.get(f), existing.get(f)
         if _blank(fv):
             continue
-        if _blank(ev):
+        if fv != ev:
             fills[f] = fv
         else:
-            kept[f] = {"existing": ev, "file": fv, "differs": fv != ev}
+            kept[f] = {"existing": ev, "file": fv, "differs": False}
     return fills, kept
 
 
@@ -67,6 +70,14 @@ def find_similar_appliances(mt: "dupes.Matcher", name: str) -> List[Dict[str, An
     return out
 
 
+def _is_metric_row(r: "BRow") -> bool:
+    return bool(r.values.get("metric") and r.values.get("ticker"))
+
+
+def _has_appliance_metadata(r: "BRow") -> bool:
+    return any(not _blank(r.values.get(f)) for f in FILL)
+
+
 class BRow:
     def __init__(self, p: ParsedRow) -> None:
         self.row, self.values, self.raw, self.errors = p.row, p.values, p.raw, list(p.errors)
@@ -100,7 +111,8 @@ class BRow:
                       "appliance": {"id": self.obj["id"] if self.obj else None,
                                     "name": self.obj["name"] if self.obj else self.values["appliance"],
                                     "is_new": self.obj is None},
-                      "metric": {"id": self.metric["id"] if self.metric else None, "is_new": self.metric is None}}
+                      "metric": {"id": self.metric["id"] if self.metric else None,
+                                 "is_new": _is_metric_row(self) and self.metric is None}}
         return {"row": self.row, "state": self.state, "values": self.values, "raw": raw, "target": target,
                 "group": self.group, "review_key": self.review_key, "fills": self.fills, "kept": self.kept,
                 "errors": self.errors, "warnings": self.warnings, "notes": self.notes}
@@ -156,7 +168,12 @@ class BPlan:
                 ap["unchanged"] += 1
         self.appliances = ap
         self.ops_missing = self._ops_missing()
-        self.metrics = {"new": c["new"], "updated": c["updates"], "unchanged": c["unchanged"]}
+        metric_rows = [r for r in rows if _is_metric_row(r) and r.state != "invalid"]
+        self.metrics = {
+            "new": sum(1 for r in metric_rows if r.state == "new"),
+            "updated": sum(1 for r in metric_rows if r.state == "update"),
+            "unchanged": sum(1 for r in metric_rows if r.state == "unchanged"),
+        }
         self.plan_hash = self._hash()
 
     def _ops_missing(self) -> int:
@@ -168,8 +185,8 @@ class BPlan:
                 continue
             fv = g.file_values()
             o = g.obj or {}
-            reg = o.get("region") if not _blank(o.get("region")) else fv.get("region")
-            env = o.get("environment") if not _blank(o.get("environment")) else fv.get("environment")
+            reg = fv.get("region") if not _blank(fv.get("region")) else o.get("region")
+            env = fv.get("environment") if not _blank(fv.get("environment")) else o.get("environment")
             if needs_ops_fix(reg, env):
                 n += 1
         return n
@@ -184,7 +201,7 @@ class BPlan:
                         "rows": [r.row for r in g.valid_rows()],
                         "file": {"appliance": g.name, "region": fv.get("region"), "location": fv.get("location"),
                                  "environment": fv.get("environment"),
-                                 "metrics": [r.values["metric"] for r in g.valid_rows()]},
+                                 "metrics": [r.values["metric"] for r in g.valid_rows() if _is_metric_row(r)]},
                         "strength": g.strength, "candidates": g.candidates})
         return out
 
@@ -259,7 +276,8 @@ def build_plan(parsed: List[ParsedRow], snap: Dict[str, Any]) -> BPlan:
     live = [r for r in rows if r.state != "invalid"]
     by_ticker: Dict[str, List[BRow]] = defaultdict(list)             # B: inside the file
     for r in live:
-        by_ticker[r.values["ticker"].casefold()].append(r)
+        if _is_metric_row(r):
+            by_ticker[r.values["ticker"].casefold()].append(r)
     for t, rs in by_ticker.items():
         if len({r.key for r in rs}) > 1:
             for r in rs:
@@ -270,7 +288,7 @@ def build_plan(parsed: List[ParsedRow], snap: Dict[str, Any]) -> BPlan:
     seen: Dict[Tuple[Any, ...], int] = {}
     seen_metric: Dict[Tuple[str, str, str], BRow] = {}
     for r in rows:
-        if r.state == "invalid":
+        if r.state == "invalid" or not _is_metric_row(r):
             continue
         k = r.key + (r.values["ticker"].casefold(),)
         if k in seen:
@@ -283,10 +301,27 @@ def build_plan(parsed: List[ParsedRow], snap: Dict[str, Any]) -> BPlan:
                    f"on row {first.row} with a different ticker. This row will be skipped.")
             continue
         seen_metric[r.key] = r
+    obj_lookup: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for r in rows:                                                    # C: database
         if r.state == "invalid":
             continue
-        r.obj = objs.get((r.client["id"], _ek(r.values["appliance"])))
+        appliance = r.values.get("appliance")
+        if _blank(appliance):
+            r.fail("appliance", "appliance_required_for_bams",
+                   f"Row {r.row}: Appliance is required for a BAMS update; this row will be skipped.")
+            continue
+        r.obj = objs.get((r.client["id"], _ek(appliance)))
+
+        if not _is_metric_row(r):
+            if not _has_appliance_metadata(r):
+                r.fail("appliance", "nothing_to_import",
+                       f"Row {r.row}: no Metric/Ticker or appliance metadata was supplied; this row will be skipped.")
+            elif r.obj is None:
+                r.fail("appliance", "appliance_not_found",
+                       f"Row {r.row}: Appliance {appliance} was not found under {r.client['name']}. "
+                       "Metadata-only rows update an existing appliance; this row will be skipped.")
+            continue
+
         if r.obj is not None:
             mk = r.values["metric"].casefold()
             cands = [m for m in metrics_of[r.obj["id"]] if m["metric_name"].casefold() == mk]
@@ -316,6 +351,24 @@ def build_plan(parsed: List[ParsedRow], snap: Dict[str, Any]) -> BPlan:
             g = gmap[k] = Group(f"g{r.row}", r.client, [], r.obj, r.values["appliance"])
             groups.append(g)
         g.rows.append(r)
+
+    # Repeated rows for the same appliance are fine when their supplied metadata agrees.
+    # Conflicting non-blank values are rejected instead of silently taking the first row.
+    for g in groups:
+        for f in FILL:
+            vals = {}
+            for r in g.valid_rows():
+                v = r.values.get(f)
+                if not _blank(v):
+                    vals.setdefault(str(v).casefold(), []).append(r)
+            if len(vals) > 1:
+                shown = ", ".join(sorted({str(r.values.get(f)) for rs in vals.values() for r in rs}))
+                for rs in vals.values():
+                    for r in rs:
+                        r.fail(f, "appliance_metadata_conflict",
+                               f"Row {r.row}: {LABELS[f]} conflicts with another row for {g.name} ({shown}); "
+                               "make the appliance metadata consistent and preview again.")
+
     matchers: Dict[str, dupes.Matcher] = {}
     for g in groups:
         cid = g.client["id"]
@@ -357,12 +410,22 @@ def build_plan(parsed: List[ParsedRow], snap: Dict[str, Any]) -> BPlan:
             if k["differs"]:
                 vr[0].warnings.append({"code": "kept_differs", "text": f"{LABELS[f]} in the file ({k['file']}) differs from the "
                                        f"appliance ({k['existing']}); the existing value is kept."})
+        first_metadata_row = None
         for r in vr:
-            if r.metric is None:
+            if not _is_metric_row(r):
+                if first_metadata_row is not None:
+                    r.state = "unchanged"
+                    r.notes = [f"Duplicate appliance metadata row; merged with row {first_metadata_row}."]
+                    continue
+                first_metadata_row = r.row
+                r.state = "update" if fills else "unchanged"
+                r.notes = ([f"Appliance metadata update: {', '.join(LABELS[f] for f in fills)}."] if fills
+                           else ["Appliance already has these metadata values; nothing to change."])
+            elif r.metric is None:
                 r.state, r.notes = "new", ["New metric on an existing appliance."]
             else:
                 r.state = "update" if fills else "unchanged"
-                r.notes = ([f"Same ticker. Fills {', '.join(LABELS[f] for f in fills)} only."] if fills
+                r.notes = ([f"Same ticker. Updates {', '.join(LABELS[f] for f in fills)}."] if fills
                            else ["Already in BAMS; nothing to change."])
                 m = r.metric
                 if (r.raw.get("enabled", "") != "" and bool(m["enabled"]) != r.values["enabled"]) or \
@@ -401,6 +464,8 @@ def _refresh_cand(c: Dict[str, Any], g: Group, metrics_of: Dict[str, List[Dict[s
     existing = {m["metric_name"].casefold(): m for m in metrics_of.get(c["ref"].get("id", ""), [])} if c["ref"]["type"] == "appliance" else {}
     added, same, conflicts = [], [], []
     for r in g.valid_rows():
+        if not _is_metric_row(r):
+            continue
         m = existing.get(r.values["metric"].casefold())
         if m is None:
             added.append(r.values["metric"])
@@ -429,7 +494,7 @@ def _cand_payload(c: Dict[str, Any], g: Group, metrics_of: Dict[str, List[Dict[s
         fills, kept = _fills_kept(fv, gv)
         out = {"ref": e.ref, "name": og.name, "region": gv.get("region"), "location": gv.get("location"),
                "environment": gv.get("environment"), "enabled": True, "metric_count": len(og.valid_rows()),
-               "metrics": [r.values["metric"] for r in og.valid_rows()][:30]}
+               "metrics": [r.values["metric"] for r in og.valid_rows() if _is_metric_row(r)][:30]}
     out.update(strength=c["strength"], reasons=c["reasons"], differences=c["differences"], fills=fills, kept=kept,
                metrics_added=[], metrics_existing=[], metrics_conflicts=[], notes=[])
     _refresh_cand(out, g, metrics_of) if d["kind"] == "appliance" else _refresh_group_cand(out, g, d["group"])
@@ -437,8 +502,10 @@ def _cand_payload(c: Dict[str, Any], g: Group, metrics_of: Dict[str, List[Dict[s
 
 
 def _refresh_group_cand(c: Dict[str, Any], g: Group, og: Group) -> None:
-    have = {r.values["metric"].casefold(): r for r in og.valid_rows()}
+    have = {r.values["metric"].casefold(): r for r in og.valid_rows() if _is_metric_row(r)}
     for r in g.valid_rows():
+        if not _is_metric_row(r):
+            continue
         m = have.get(r.values["metric"].casefold())
         if m is None:
             c["metrics_added"].append(r.values["metric"])
@@ -566,12 +633,14 @@ def resolve(plan: BPlan, by_key: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         dest_of[g.key] = dest
         fv = g.file_values()
         for f in FILL:
-            if _blank(dest.pool.get(f)) and not _blank(fv.get(f)):
+            if not _blank(fv.get(f)) and dest.pool.get(f) != fv[f]:
                 dest.pool[f] = fv[f]
                 if not dest.is_new:
                     dest.fills[f] = fv[f]
         for r in vr:
             dest.rows.append(r.row)
+            if not _is_metric_row(r):
+                continue
             mk, tk = r.values["metric"].casefold(), r.values["ticker"].casefold()
             have = dest.metrics.get(mk)
             if have is not None:

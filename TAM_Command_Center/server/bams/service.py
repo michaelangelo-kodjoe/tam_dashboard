@@ -168,6 +168,7 @@ def _name_conflict(conn: sqlite3.Connection, client_id: str, name: str, exclude:
 def _check_batch(items: List[MetricIn], existing_names: Dict[str, str]) -> None:
     """Conflicts inside one request: repeated tickers and repeated metric names."""
     seen_t: Dict[str, int] = {}
+    seen_n: Dict[str, int] = dict(existing_names)
     for i, m in enumerate(items):
         p = m.provided("id", "expected_row_version")
         t = p.get("ticker")
@@ -322,6 +323,7 @@ def object_save(rt: Any, body: ObjectSave) -> Dict[str, Any]:
                             _insert_metric(conn, obj, p, i, now)
                             changed = True
                     oid = obj["id"]
+                sync_auto_policies(conn)
         except sqlite3.IntegrityError as exc:
             raise _map_integrity(exc) from exc
         out = _object_row(conn, oid) or {}
@@ -352,6 +354,7 @@ def metric_save(rt: Any, body: MetricSave) -> Dict[str, Any]:
                         raise _fail("object_id", "cannot be changed")
                     changed = _patch_metric(conn, obj, mrow, prov, body.expected_row_version, "metric")
                     mid = body.id
+                sync_auto_policies(conn)
         except sqlite3.IntegrityError as exc:
             raise _map_integrity(exc) from exc
         m = dict(conn.execute("SELECT * FROM bams_metrics WHERE id = :i", {"i": mid}).fetchone())
@@ -431,6 +434,7 @@ def delete_item(rt: Any, kind: str, body: DeleteById) -> Dict[str, Any]:
 _RULE_COLS = ("rule_type", "operator", "threshold", "reference_period", "consecutive_updates", "severity", "cooldown_minutes")
 _RULE_DEFAULTS = {"operator": ">", "consecutive_updates": 1, "severity": "Warning", "cooldown_minutes": 0, "enabled": 1,
                   "threshold": None, "reference_period": None, "rule_type": None}
+_CONFIG_COLS = _RULE_COLS + ("name", "metric_match", "enabled", "auto_apply")
 
 
 def _merge_rule(base: Dict[str, Any], prov: Dict[str, Any]) -> Dict[str, Any]:
@@ -531,20 +535,137 @@ STARTERS = (("Exceeds the 90-day high (Warning)", "*", "exceeds_high", ">", None
             ("90% of the 90-day high (Critical)", "*", "pct_of_high", ">=", 90.0, "90d", "Critical"))
 
 
+def _policy_rule_values(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: cfg[k] for k in _RULE_COLS} | {"enabled": 1 if cfg.get("enabled") else 0}
+
+
+def _sync_policy(conn: sqlite3.Connection, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Reconcile one persistent metric policy with per-metric managed rules.
+
+    The operator belongs to the policy itself, so CPU can use > while memory/free-space
+    policies use <.  Matching is only about metric_name and never changes comparator direction.
+    Rules are disabled (not deleted) when a metric stops matching, preserving alert history.
+    """
+    matches = reads.config_matches(conn, cfg["metric_match"]) if cfg.get("auto_apply") else []
+    by_metric = {m["metric_id"]: m for m in matches}
+    managed = {r["metric_id"]: dict(r) for r in conn.execute(
+        "SELECT * FROM bams_alert_rules WHERE config_id = :c", {"c": cfg["id"]})}
+    now = migrate.utc_now()
+    created: List[str] = []
+    adopted: List[str] = []
+    updated: List[str] = []
+    disabled: List[str] = []
+
+    for mid, m in by_metric.items():
+        rule = managed.get(mid)
+        if rule is None:
+            # If this template was applied before persistent policies existed, adopt one
+            # identical standalone rule instead of creating a duplicate.
+            for candidate in repo.rules_for_metric(conn, mid):
+                if candidate.get("config_id") is None and all(candidate[k] == cfg[k] for k in _RULE_COLS):
+                    rule = candidate
+                    conn.execute(
+                        "UPDATE bams_alert_rules SET config_id = :c, enabled = :e, updated_at = :now,"
+                        " row_version = row_version + 1 WHERE id = :i",
+                        {"c": cfg["id"], "e": 1 if cfg.get("enabled") else 0, "now": now, "i": rule["id"]})
+                    adopted.append(rule["id"])
+                    _audit(conn, "bams_alert_rule", "updated", rule["id"], f"{m['object_name']} / {m['metric_name']}",
+                           client_id=conn.execute("SELECT o.client_id FROM bams_metrics bm JOIN bams_objects o ON o.id = bm.object_id WHERE bm.id = :m", {"m": mid}).fetchone()[0],
+                           old={"managed_policy": None}, new={"managed_policy": cfg["name"]},
+                           reason="Persistent alert policy adopted existing identical rule")
+                    break
+        if rule is None:
+            rid = str(uuid.uuid4())
+            vals = _policy_rule_values(cfg)
+            conn.execute(
+                "INSERT INTO bams_alert_rules (id, metric_id, rule_type, operator, threshold, reference_period,"
+                " consecutive_updates, severity, cooldown_minutes, enabled, config_id, created_at, updated_at)"
+                " VALUES (:id, :m, :rule_type, :operator, :threshold, :reference_period, :consecutive_updates,"
+                " :severity, :cooldown_minutes, :enabled, :config_id, :now, :now)",
+                {**{k: vals[k] for k in _RULE_COLS}, "id": rid, "m": mid, "enabled": vals["enabled"],
+                 "config_id": cfg["id"], "now": now})
+            created.append(rid)
+            client_id = conn.execute("SELECT o.client_id FROM bams_metrics bm JOIN bams_objects o ON o.id = bm.object_id WHERE bm.id = :m", {"m": mid}).fetchone()[0]
+            _audit(conn, "bams_alert_rule", "created", rid, f"{m['object_name']} / {m['metric_name']}", client_id=client_id,
+                   new={k: cfg[k] for k in _RULE_COLS} | {"enabled": bool(cfg.get("enabled")), "managed_policy": cfg["name"]},
+                   reason="Persistent alert policy")
+            continue
+
+        # Re-read after adoption so comparison includes the actual persisted values.
+        rule = repo.rule_row(conn, rule["id"]) or rule
+        desired = _policy_rule_values(cfg)
+        ch = {k: desired[k] for k in _RULE_COLS + ("enabled",) if rule[k] != desired[k]}
+        if ch:
+            sets = dict(ch)
+            if any(k in ch for k in _RULE_COLS):
+                sets["breach_count"] = 0
+                sets["suppress_until_clear"] = 0
+            sets_sql = ", ".join(f"{k} = :{k}" for k in sets)
+            conn.execute(f"UPDATE bams_alert_rules SET {sets_sql}, updated_at = :_now, row_version = row_version + 1 WHERE id = :_id",
+                         {**sets, "_now": now, "_id": rule["id"]})
+            updated.append(rule["id"])
+            client_id = conn.execute("SELECT o.client_id FROM bams_metrics bm JOIN bams_objects o ON o.id = bm.object_id WHERE bm.id = :m", {"m": mid}).fetchone()[0]
+            _audit(conn, "bams_alert_rule", "updated", rule["id"], f"{m['object_name']} / {m['metric_name']}", client_id=client_id,
+                   old={k: rule[k] for k in ch}, new=dict(ch), reason="Persistent alert policy synchronized")
+
+    # A managed rule whose metric is disabled, appliance is disabled, or whose name no
+    # longer matches is retained for history but cannot fire until it matches again.
+    for mid, rule in managed.items():
+        if mid in by_metric or not rule["enabled"]:
+            continue
+        conn.execute("UPDATE bams_alert_rules SET enabled = 0, breach_count = 0, suppress_until_clear = 0,"
+                     " updated_at = :now, row_version = row_version + 1 WHERE id = :i", {"now": now, "i": rule["id"]})
+        disabled.append(rule["id"])
+
+    return {"created": created, "adopted": adopted, "updated": updated, "disabled": disabled, "matched": len(matches)}
+
+
+def sync_auto_policies(conn: sqlite3.Connection, config_ids: Optional[List[str]] = None) -> Dict[str, int]:
+    """Synchronize persistent policies. Caller owns the transaction.
+
+    Startup opens the database with ``rows=False`` to keep the migration/startup
+    path lightweight, while the BAMS read/repository helpers expect named
+    ``sqlite3.Row`` results.  Make this routine row-factory independent by
+    temporarily enabling named rows for the full reconciliation and restoring
+    the caller's setting afterwards.
+    """
+    previous_row_factory = conn.row_factory
+    conn.row_factory = sqlite3.Row
+    try:
+        if config_ids is None:
+            rows = conn.execute("SELECT * FROM bams_alert_configs WHERE auto_apply = 1 ORDER BY id").fetchall()
+        elif not config_ids:
+            rows = []
+        else:
+            marks = ",".join("?" for _ in config_ids)
+            rows = conn.execute(f"SELECT * FROM bams_alert_configs WHERE id IN ({marks}) ORDER BY id", config_ids).fetchall()
+        total = {"created": 0, "adopted": 0, "updated": 0, "disabled": 0, "matched": 0}
+        for row in rows:
+            res = _sync_policy(conn, dict(row))
+            for k in total:
+                total[k] += len(res[k]) if isinstance(res[k], list) else int(res[k])
+        return total
+    finally:
+        conn.row_factory = previous_row_factory
+
+
 def ensure_starters(conn: sqlite3.Connection) -> None:
-    """Fresh databases get the two starter templates once (marker in app_meta); never re-created after a delete."""
-    if repo.meta_get(conn, repo.STARTERS_KEY) is not None:
-        return
-    with transaction(conn):
-        if conn.execute("SELECT count(*) FROM bams_alert_configs").fetchone()[0] == 0:
-            now = migrate.utc_now()
-            for name, match, rt_, op, thr, ref, sev in STARTERS:
-                conn.execute("INSERT INTO bams_alert_configs (id, name, metric_match, rule_type, operator, threshold,"
-                             " reference_period, consecutive_updates, severity, cooldown_minutes, enabled, starter,"
-                             " created_at, updated_at) VALUES (:id, :n, :m, :t, :o, :th, :r, 1, :s, 0, 1, 1, :now, :now)",
-                             {"id": str(uuid.uuid4()), "n": name, "m": match, "t": rt_, "o": op, "th": thr, "r": ref,
-                              "s": sev, "now": now})
-        repo.meta_set(conn, repo.STARTERS_KEY, "1")
+    """Create starter templates once, then reconcile any persistent policies at startup."""
+    if repo.meta_get(conn, repo.STARTERS_KEY) is None:
+        with transaction(conn):
+            if conn.execute("SELECT count(*) FROM bams_alert_configs").fetchone()[0] == 0:
+                now = migrate.utc_now()
+                for name, match, rt_, op, thr, ref, sev in STARTERS:
+                    # Starters are examples only; auto_apply remains 0 until explicitly applied to all.
+                    conn.execute("INSERT INTO bams_alert_configs (id, name, metric_match, rule_type, operator, threshold,"
+                                 " reference_period, consecutive_updates, severity, cooldown_minutes, enabled, starter,"
+                                 " auto_apply, created_at, updated_at) VALUES (:id, :n, :m, :t, :o, :th, :r, 1, :s, 0, 1, 1, 0, :now, :now)",
+                                 {"id": str(uuid.uuid4()), "n": name, "m": match, "t": rt_, "o": op, "th": thr, "r": ref,
+                                  "s": sev, "now": now})
+            repo.meta_set(conn, repo.STARTERS_KEY, "1")
+    if conn.execute("SELECT 1 FROM bams_alert_configs WHERE auto_apply = 1 LIMIT 1").fetchone():
+        with transaction(conn):
+            sync_auto_policies(conn)
 
 
 def configs_save(rt: Any, body: ConfigSave) -> Dict[str, Any]:
@@ -553,20 +674,22 @@ def configs_save(rt: Any, body: ConfigSave) -> Dict[str, Any]:
         try:
             with transaction(conn):
                 if body.id is None:
-                    merged = _merge_rule({**_RULE_DEFAULTS, "name": None, "metric_match": None, "starter": 0}, prov)
+                    merged = _merge_rule({**_RULE_DEFAULTS, "name": None, "metric_match": None, "starter": 0, "auto_apply": 0}, prov)
                     extra = {k: "is required" for k in ("name", "metric_match") if not merged.get(k)}
                     _validate_merged(merged, extra)
                     cid = str(uuid.uuid4())
                     now = migrate.utc_now()
                     conn.execute(
                         "INSERT INTO bams_alert_configs (id, name, metric_match, rule_type, operator, threshold, reference_period,"
-                        " consecutive_updates, severity, cooldown_minutes, enabled, starter, created_at, updated_at)"
+                        " consecutive_updates, severity, cooldown_minutes, enabled, starter, auto_apply, created_at, updated_at)"
                         " VALUES (:id, :name, :metric_match, :rule_type, :operator, :threshold, :reference_period,"
-                        " :consecutive_updates, :severity, :cooldown_minutes, :enabled, 0, :now, :now)",
-                        {**{k: merged[k] for k in _RULE_COLS + ("name", "metric_match", "enabled")}, "id": cid, "now": now})
+                        " :consecutive_updates, :severity, :cooldown_minutes, :enabled, 0, :auto_apply, :now, :now)",
+                        {**{k: merged[k] for k in _RULE_COLS + ("name", "metric_match", "enabled", "auto_apply")}, "id": cid, "now": now})
                     _audit(conn, "bams_alert_config", "created", cid, merged["name"],
-                           new={k: merged[k] for k in _RULE_COLS + ("name", "metric_match")})
+                           new={k: merged[k] for k in _RULE_COLS + ("name", "metric_match", "auto_apply")})
                     changed = True
+                    if merged.get("auto_apply"):
+                        sync_auto_policies(conn, [cid])
                 else:
                     cfg = conn.execute("SELECT * FROM bams_alert_configs WHERE id = :i", {"i": body.id}).fetchone()
                     if cfg is None:
@@ -575,13 +698,16 @@ def configs_save(rt: Any, body: ConfigSave) -> Dict[str, Any]:
                     _check_version(cfg, body.expected_row_version)
                     merged = _merge_rule(cfg, prov)
                     _validate_merged(merged)
-                    cols = _RULE_COLS + ("name", "metric_match", "enabled")
+                    cols = _CONFIG_COLS
                     ch = {k: merged[k] for k in cols if merged[k] != cfg[k]}
                     changed = bool(ch)
                     cid = cfg["id"]
                     if ch:
                         _apply_update(conn, "bams_alert_configs", cfg, ch, cols)
                         _audit(conn, "bams_alert_config", "updated", cid, cfg["name"], old={k: cfg[k] for k in ch}, new=dict(ch))
+                        # Reconcile both when a policy remains active and when auto_apply is turned off.
+                        if cfg.get("auto_apply") or merged.get("auto_apply"):
+                            sync_auto_policies(conn, [cid])
         except sqlite3.IntegrityError as exc:
             raise _map_integrity(exc) from exc
         c = dict(conn.execute("SELECT * FROM bams_alert_configs WHERE id = :i", {"i": cid}).fetchone())
@@ -597,8 +723,13 @@ def configs_delete(rt: Any, body: ConfigDelete) -> Dict[str, Any]:
         if body.confirm is not True:
             raise ConfirmationRequired("Deleting needs confirmation. Resend with \"confirm\": true.")
         with transaction(conn):
+            now = migrate.utc_now()
+            conn.execute("UPDATE bams_alert_rules SET enabled = 0, breach_count = 0, suppress_until_clear = 0,"
+                         " updated_at = :now, row_version = row_version + 1 WHERE config_id = :i AND enabled = 1",
+                         {"now": now, "i": body.id})
             conn.execute("DELETE FROM bams_alert_configs WHERE id = :i", {"i": body.id})
-            _audit(conn, "bams_alert_config", "deleted", body.id, cfg["name"], old={"name": cfg["name"]})
+            _audit(conn, "bams_alert_config", "deleted", body.id, cfg["name"],
+                   old={"name": cfg["name"], "auto_apply": bool(cfg["auto_apply"])})
     return _ok({"deleted": {"id": body.id}})
 
 
@@ -635,7 +766,8 @@ def configs_apply(rt: Any, body: ConfigApply) -> Dict[str, Any]:
         if body.preview:
             pl = _plan(conn, cfg, body.metric_ids)
             return _ok({"config_id": cfg["id"], "plan_hash": pl["plan_hash"], "would_create": pl["would_create"],
-                        "skipped_identical": pl["skipped_identical"], "metrics": pl["metrics"]})
+                        "skipped_identical": pl["skipped_identical"], "persistent": body.metric_ids is None,
+                        "metrics": pl["metrics"]})
         if body.confirm is not True:
             raise ConfirmationRequired("Applying a template needs confirmation. Resend with \"confirm\": true.")
         if not body.plan_hash:
@@ -646,6 +778,24 @@ def configs_apply(rt: Any, body: ConfigApply) -> Dict[str, Any]:
             if pl["plan_hash"] != body.plan_hash:
                 raise PreviewStale("The matching metrics or existing rules changed since the preview. Preview again.")
             now = migrate.utc_now()
+            if body.metric_ids is None:
+                # Applying to ALL matching metrics converts this template into a persistent policy.
+                # Its own operator/threshold remain intact: e.g. CPU > 90 and Memory Available < 15.
+                if not cfg.get("auto_apply"):
+                    conn.execute("UPDATE bams_alert_configs SET auto_apply = 1, updated_at = :now,"
+                                 " row_version = row_version + 1 WHERE id = :i", {"now": now, "i": cfg["id"]})
+                    _audit(conn, "bams_alert_config", "updated", cfg["id"], cfg["name"],
+                           old={"auto_apply": False}, new={"auto_apply": True},
+                           reason="Apply to all matching metrics enabled persistent inheritance")
+                    cfg = dict(conn.execute("SELECT * FROM bams_alert_configs WHERE id = :i", {"i": cfg["id"]}).fetchone())
+                synced = _sync_policy(conn, cfg)
+                ids = list(synced["created"])
+                return _ok({"created": len(ids), "adopted_identical": len(synced["adopted"]),
+                            "updated_managed": len(synced["updated"]), "disabled_managed": len(synced["disabled"]),
+                            "skipped_identical": pl["skipped_identical"], "rule_ids": ids,
+                            "persistent": True, "matched": synced["matched"]})
+
+            # Explicitly selected metrics remain a one-time application and do not turn on inheritance.
             for x in pl["metrics"]:
                 if x["action"] != "create":
                     continue
@@ -661,10 +811,34 @@ def configs_apply(rt: Any, body: ConfigApply) -> Dict[str, Any]:
                                   " WHERE m.id = :i", {"i": x["metric_id"]}).fetchone()
                 _audit(conn, "bams_alert_rule", "created", rid, f"{x['object_name']} / {x['metric_name']}",
                        client_id=cl[0], new={k: cfg[k] for k in _RULE_COLS}, reason="Applied template: " + cfg["name"])
-        return _ok({"created": len(ids), "skipped_identical": pl["skipped_identical"], "rule_ids": ids})
+        return _ok({"created": len(ids), "skipped_identical": pl["skipped_identical"], "rule_ids": ids,
+                    "persistent": False})
 
 
 # ===================================================================== notifications
+def notification_test(rt: Any) -> Dict[str, Any]:
+    """Send one real desktop notification using the same PROD notifier as BAMS alerts."""
+    with rt.db() as conn:
+        settings = repo.read_settings(conn)
+    if settings.get("privacy_mode", True):
+        title = "TAM Command Center"
+        body = "Test BAMS alert detected. Open Command Center for details."
+    else:
+        title = "TAM Command Center - Test Alert"
+        body = "Windows notifications are configured for BAMS monitoring."
+
+    notifier = rt.bams.notifier
+    send_sync = getattr(notifier, "send_sync", None)
+    result = send_sync(title, body) if callable(send_sync) else notifier.send(title, body)
+    info = notifier.info() if callable(getattr(notifier, "info", None)) else {"mode": type(notifier).__name__}
+    return {
+        "ok": bool(result.ok),
+        "detail": result.detail,
+        "notifier": info,
+        "last_result": getattr(notifier, "last_result", None),
+    }
+
+
 def notifications_read(rt: Any, body: NotificationsRead) -> Dict[str, Any]:
     with rt.db() as conn:
         top = conn.execute("SELECT coalesce(max(id), 0) FROM bams_notification_log WHERE channel = 'in_app'").fetchone()[0]

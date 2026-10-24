@@ -8,6 +8,7 @@
 --   :client_id
 --   :filter      'all' | 'meeting' | 'call' | 'general' | 'system'
 --   :q_like      NULL, or a LIKE pattern built by the backend: '%' || escaped(q) || '%'
+--   :q_like_html same pattern for the HTML-escaped query (rich note bodies store & < > as entities)
 --                (escape \ % _ with '\'; the pattern uses ESCAPE '\')
 --   :before_ts   NULL for the first page, else the last row's ts      (keyset cursor)
 --   :before_key  NULL for the first page, else the last row's entry_key
@@ -29,7 +30,7 @@ WITH entries AS (
            OR (:filter = 'meeting' AND n.note_type = 'Meeting Note')
            OR (:filter = 'call'    AND n.note_type = 'Call Note')
            OR (:filter = 'general' AND n.note_type = 'General Note'))
-      AND (:q_like IS NULL OR n.subject LIKE :q_like ESCAPE '\' OR n.body LIKE :q_like ESCAPE '\'
+      AND (:q_like IS NULL OR n.subject LIKE :q_like ESCAPE '\' OR n.body LIKE :q_like ESCAPE '\' OR n.body LIKE :q_like_html ESCAPE '\'
            OR n.action_items LIKE :q_like ESCAPE '\')
 
 )

@@ -80,7 +80,7 @@ export function InfrastructureTab({ q, clientId }: { q: QueryResult<Infrastructu
                 {rows.some((r) => r.simulated) && <SimulatedBadge />}
                 {!o.enabled ? <span className="badge badge--neutral">Monitoring disabled</span> : (
                   <>
-                    {active > 0 && top?.alert && <StatusBadge status={top.alert.status === 'open' ? 'open' : 'recovered'} label={`${active} ${top.alert.status === 'open' ? 'open' : 'recovered'} ${active === 1 ? 'alert' : 'alerts'}`} />}
+                    {active > 0 && top?.alert && <StatusBadge status={top.alert.status === 'open' ? 'open' : 'recovered'} severity={top.alert.severity} label={`${active} ${top.alert.status === 'open' ? 'open' : 'recovered'} ${active === 1 ? 'alert' : 'alerts'}`} />}
                     <FreshnessBadge freshness={worst.freshness} />
                     <span className="muted num">{Number.isFinite(youngest) ? formatAge(youngest) : 'never'}</span>
                   </>

@@ -485,7 +485,7 @@ def test_configs_starters_apply_preview_hash(b):
     assert done["created"] == 1 and len(done["rule_ids"]) == 1
     again = b.ok("/api/bams/configs/apply", {"config_id": cfg["id"]})["item"]
     assert again["would_create"] == 0 and again["skipped_identical"] == 1
-    assert b.audit(object_type="bams_alert_rule", action="created")[-1]["reason"] == "Applied template: CPU 85"
+    assert b.audit(object_type="bams_alert_rule", action="created")[-1]["reason"] == "Persistent alert policy"
     b.ok("/api/bams/configs/delete", {"id": cfg2["config"]["id"] if "config" in cfg2 else cfg["id"], "confirm": True})
 
 
@@ -552,19 +552,27 @@ def test_monitor_thread_polls_and_stops(build):
     assert api.rt.bams.provider.calls == calls
 
 
-def _status_counts(api):
-    return {r["status"]: r["n"] for r in api.sql("SELECT status, count(*) AS n FROM bams_alert_events GROUP BY status")}
+def _status_counts(api, percent_only=False):
+    """percent_only skips the seeded Mbps "NET" metrics: the DEV simulator only produces percentages (0..100), so it cannot
+    hold or clear alerts whose levels sit at hundreds of Mbps (QA-W1-2)."""
+    where = " WHERE m.ticker NOT LIKE '%.NET'" if percent_only else ""
+    return {r["status"]: r["n"] for r in api.sql(
+        "SELECT e.status, count(*) AS n FROM bams_alert_events e JOIN bams_metrics m ON m.id = e.metric_id" + where
+        + " GROUP BY e.status")}
 
 
 def test_qa_e5_3_seeded_alert_mix_survives_polls(build):
     """QA-E5-3: first and later DEV polls keep seeded open alerts open and recovered ones recovered."""
-    api = build(seed=True, app_kw={"utc_base": lambda: T0, "notifier": FakeNotifier()})
-    before = _status_counts(api)
-    assert before.get("open", 0) >= 7 and before.get("recovered", 0) >= 2
+    # QA-W1-2: align the seed with the pinned BAMS clock. The seed anchors "now" to the real instant when the app
+    # date is the real today, which put seeded events after the pinned T0 clock; a fixed app date seeds at 12:00Z = T0.
+    api = build(seed=True, app_kw={"utc_base": lambda: T0, "notifier": FakeNotifier(),
+                                   "clock": lambda: T0.date()})
+    before = _status_counts(api, percent_only=True)
+    assert before.get("open", 0) >= 6 and before.get("recovered", 0) >= 2
     for _ in range(4):
         post(api, "/api/dev/bams/clock", {"advance_seconds": 60})
         post(api, "/api/dev/bams/poll")
-        assert _status_counts(api) == before, api.sql("SELECT e.alert_type, r.operator||r.threshold||coalesce(r.reference_period,'') AS rl, e.current_value AS cv, m.high_30 AS h30, m.high_90 AS h90, m.ticker FROM bams_alert_events e LEFT JOIN bams_alert_rules r ON r.id=e.rule_id JOIN bams_metrics m ON m.id=e.metric_id WHERE e.status='recovered'")
+        assert _status_counts(api, percent_only=True) == before, api.sql("SELECT e.alert_type, r.operator||r.threshold||coalesce(r.reference_period,'') AS rl, e.current_value AS cv, m.high_30 AS h30, m.high_90 AS h90, m.ticker FROM bams_alert_events e LEFT JOIN bams_alert_rules r ON r.id=e.rule_id JOIN bams_metrics m ON m.id=e.metric_id WHERE e.status='recovered'")
     # dev routes still force changes: force a seeded open rule alert to recover, then stale another
     ev = api.sql("SELECT e.metric_id, e.id FROM bams_alert_events e WHERE e.status='open' AND e.rule_id IS NOT NULL LIMIT 1")[0]
     post(api, "/api/dev/bams/clock", {"advance_seconds": 60})
@@ -576,3 +584,109 @@ def test_qa_e5_3_seeded_alert_mix_survives_polls(build):
     post(api, "/api/dev/bams/clock", {"advance_seconds": 600})
     post(api, "/api/dev/bams/poll")
     assert api.sql("SELECT status FROM bams_alert_events WHERE metric_id = ? AND rule_id IS NOT NULL AND status<>'closed'", (mid,))[0]["status"] == "open"
+
+
+# ------------------------------------------------------------------ B-2: set-based spark parity
+def _legacy_spark(conn, metric_id, now):
+    """The pre-0.2.0 implementation: 24 queries per metric (kept here as the reference oracle)."""
+    from server.bams.clock import fmt
+    out = []
+    for i in range(23, -1, -1):
+        hi = now - dt.timedelta(hours=i)
+        r = conn.execute("SELECT value FROM bams_metric_samples WHERE metric_id = :m AND sampled_at <= :hi"
+                         " AND sampled_at >= :lo ORDER BY sampled_at DESC LIMIT 1",
+                         {"m": metric_id, "hi": fmt(hi), "lo": fmt(hi - dt.timedelta(hours=1))}).fetchone()
+        if r:
+            out.append(r[0])
+    return out
+
+
+def test_spark_many_matches_legacy_per_bucket_queries(b):
+    import random
+    from server.bams import reads
+    from server.bams.clock import fmt
+    mids = [setup_metric(b, name=f"Co{i}", obj=f"B{i}", ticker=f"T{i}")[2] for i in range(3)]
+    now = T0
+    rnd = random.Random(7)
+    with b.rt.db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        for n, mid in enumerate(mids):
+            # n=0: dense (every 7 min), n=1: sparse with gaps and samples exactly on bucket boundaries, n=2: none
+            if n == 0:
+                times = [now - dt.timedelta(minutes=7 * k) for k in range(0, 24 * 9)]
+            elif n == 1:
+                times = [now - dt.timedelta(hours=h) for h in (0, 1, 5, 5.5, 13, 23.5, 24, 30)]
+            else:
+                times = []
+            for t in times:
+                conn.execute("INSERT INTO bams_metric_samples (metric_id, sampled_at, value) VALUES (?, ?, ?)",
+                             (mid, fmt(t), round(rnd.uniform(0, 100), 1)))
+        conn.execute("COMMIT")
+        new = reads.spark_many(conn, mids, now)
+        for mid in mids:
+            assert new[mid] == _legacy_spark(conn, mid, now) == reads.spark(conn, mid, now)
+        assert new[mids[0]] and new[mids[1]] and new[mids[2]] == []
+        assert reads.spark_many(conn, [], now) == {}
+
+
+def test_spark_many_chunks_large_metric_lists(b):
+    """More metrics than one statement's bound-parameter budget: results stay keyed and ordered per metric."""
+    from server.bams import reads
+    mid = setup_metric(b)[2]
+    with b.rt.db() as conn:
+        ids = [f"ghost-{i}" for i in range(700)] + [mid]
+        out = reads.spark_many(conn, ids, T0)
+    assert len(out) == 701 and out[mid] == [] and all(v == [] for v in out.values())
+
+
+# ------------------------------------------------------------------ B-3: trend zoom window (from/to)
+def _seed_samples(api, mid, times):
+    from server.bams.clock import fmt
+    with api.rt.db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        for k, t in enumerate(times):
+            conn.execute("INSERT INTO bams_metric_samples (metric_id, sampled_at, value) VALUES (?, ?, ?)", (mid, fmt(t), float(k)))
+        conn.execute("COMMIT")
+
+
+def test_trend_zoom_window(b):
+    from server.bams.clock import fmt
+    mid = setup_metric(b)[2]
+    url = f"/api/bams/metric/{mid}/trend"
+    now = T0
+    _seed_samples(b, mid, [now - dt.timedelta(minutes=m) for m in range(0, 120)])        # 1/min for 2h
+    w = dict(**{"from": fmt(now - dt.timedelta(minutes=30)), "to": fmt(now - dt.timedelta(minutes=20))})
+    it = b.get(url, **w).json()["item"]
+    assert it["range"] == "custom" and it["from"] == w["from"] and it["to"] == w["to"] and it["downsampled"] is False
+    assert len(it["points"]) == 11 and it["points"][0]["t"] == w["to"][:0] + fmt(now - dt.timedelta(minutes=30))
+    assert it["text"]["count"] == 11 and it["sample_interval_seconds"] == 60
+    # range-based behaviour unchanged when from/to are absent
+    assert b.get(url, range="24h").json()["item"]["range"] == "24h"
+    # empty window
+    e = b.get(url, **{"from": fmt(now - dt.timedelta(days=3)), "to": fmt(now - dt.timedelta(days=2))}).json()["item"]
+    assert e["points"] == [] and e["text"]["count"] == 0
+    # errors
+    bad = lambda **q: b.get(url, **q)  # noqa: E731
+    assert bad(**{"from": w["to"], "to": w["from"]}).status_code == 422
+    assert bad(**{"from": w["from"], "to": w["from"]}).status_code == 422
+    assert bad(**{"from": w["from"]}).status_code == 422
+    assert bad(**{"to": w["to"]}).status_code == 422
+    assert bad(**{"from": "nope", "to": w["to"]}).json()["error"]["code"] == "validation_error"
+    assert bad(**{"from": fmt(now - dt.timedelta(days=8)), "to": fmt(now)}).status_code == 422          # > 7 days
+    old = now - dt.timedelta(days=101)
+    r = bad(**{"from": fmt(old), "to": fmt(old + dt.timedelta(hours=1))})
+    assert r.status_code == 422 and "from" in r.json()["error"]["fields"]                              # outside retention
+    assert bad(**{"from": fmt(now + dt.timedelta(hours=1)), "to": fmt(now + dt.timedelta(hours=2))}).status_code == 422
+    assert b.get(f"/api/bams/metric/ghost/trend", **w).status_code == 404
+
+
+def test_trend_zoom_downsamples_over_the_cap_keeping_first_and_last(b):
+    from server.bams.clock import fmt
+    mid = setup_metric(b)[2]
+    start = T0 - dt.timedelta(hours=2)
+    _seed_samples(b, mid, [start + dt.timedelta(seconds=2 * k) for k in range(3000)])                # 3000 samples in 100 min
+    it = b.get(f"/api/bams/metric/{mid}/trend", **{"from": fmt(start), "to": fmt(T0)}).json()["item"]
+    assert it["downsampled"] is True and len(it["points"]) == 2000 and it["text"]["count"] == 3000
+    assert it["points"][0]["t"] == fmt(start) and it["points"][-1]["t"] == fmt(start + dt.timedelta(seconds=2 * 2999))
+    ts = [p["t"] for p in it["points"]]
+    assert ts == sorted(set(ts))

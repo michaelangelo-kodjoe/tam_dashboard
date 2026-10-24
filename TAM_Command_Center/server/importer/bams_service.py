@@ -2,6 +2,7 @@
 Reuses the Run 3 session store, reader, limits, backup and error vocabulary. Routes call these functions only."""
 from __future__ import annotations
 
+import dataclasses
 import datetime as _dt
 import logging
 import uuid
@@ -16,6 +17,7 @@ from ..errors import (AlreadyApplied, AppError, Conflict, ConfirmationRequired, 
 from ..schemas import BamsImportApply
 from . import bams_plan as P
 from . import bams_reader, bams_repo, bams_template, template
+from . import bams_terminal_adapter as terminal_adapter
 from .reader import display_file_name
 from .sessions import Session, SessionStore
 
@@ -69,9 +71,21 @@ def ops_note(n: int) -> Dict[str, Any]:
     return {"count": n, "text": (f"{n} appliances need East or West set for Operations" if n else None)}
 
 
+def _read(data: bytes, name: str) -> Any:
+    """Read a BAMS upload. A Bloomberg Terminal BAMS export (Client, Ticker, Region, Metric, DC Location)
+    is auto-detected and converted in memory to the template schema; any other file is read unchanged."""
+    norm = terminal_adapter.normalize_terminal_upload(data, name)
+    if norm is None:
+        return bams_reader.read_upload(data, name)
+    parsed = bams_reader.read_upload(norm.data, "bloomberg_terminal_bams.xlsx")
+    note = (f"Bloomberg Terminal BAMS export recognised (sheet \"{norm.source_sheet}\", {norm.rows_adapted} rows converted). "
+            "Terminal Region and current values are ignored; Environment and Polarity are left for you to set.")
+    return dataclasses.replace(parsed, size_bytes=len(data), notes=list(parsed.notes) + [note])
+
+
 def inspect(rt: Any, data: bytes, raw_name: Optional[str]) -> Dict[str, Any]:
     name = display_file_name(unquote(raw_name or ""))
-    parsed = bams_reader.read_upload(data, name)
+    parsed = _read(data, name)
     s = Session(uuid.uuid4().hex, parsed, name, store(rt).now())
     plan = _plan(rt, s)
     store(rt).add(s)
@@ -135,6 +149,7 @@ def apply(rt: Any, body: BamsImportApply) -> Dict[str, Any]:
             audit_n = {"appliance": 0, "metric": 0}
             created: List[Dict[str, Any]] = []
             updated: List[Dict[str, Any]] = []
+            policy_sync = {"created": 0, "adopted": 0, "updated": 0, "disabled": 0, "matched": 0}
             if todo:
                 backup = rt.backups.create(conn, "pre-import")
                 _hook("after_backup", rt, plan)
@@ -148,6 +163,10 @@ def apply(rt: Any, body: BamsImportApply) -> Dict[str, Any]:
                             cur_row[0] = d.rows[0]
                             _write_dest(conn, s, d, audit_n, created, updated, cur_row)
                             _hook("after_write", n, d)
+                        # Persistent metric alert policies must attach immediately to newly
+                        # imported metrics, even when the monitor is currently stopped.
+                        from ..bams.service import sync_auto_policies
+                        policy_sync = sync_auto_policies(conn)
                 except AppError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - rolled back by the transaction; report plainly
@@ -183,6 +202,7 @@ def apply(rt: Any, body: BamsImportApply) -> Dict[str, Any]:
             "backup": ({"name": backup["name"], "reason": "pre-import", "size_bytes": backup["size_bytes"]} if backup else None),
             "touched_accounts": [{"id": k, "name": v} for k, v in sorted(touched.items(), key=lambda kv: kv[1].casefold())],
             "created": created, "updated": updated, "skipped": skipped,
+            "policy_sync": policy_sync,
             "skipped_url": (f"/api/import/bams/{s.id}/skipped.{s.parsed.format}" if skipped else None),
         }
         s.applied, s.applied_at = result, st.now()

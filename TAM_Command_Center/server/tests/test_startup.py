@@ -179,9 +179,9 @@ def test_fresh_db_wal_fk_schema_version(api):
     with api.rt.db() as conn:
         assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-        assert conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "2"
+        assert conn.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "3"
         assert conn.execute("SELECT value FROM app_meta WHERE key='db.channel'").fetchone()[0] == "dev"
-    assert api.get("/api/health").json()["schema_version"] == 2
+    assert api.get("/api/health").json()["schema_version"] == 3
     mig = api.audit(object_type="schema", action="migrated")
     assert len(mig) == 1 and mig[0]["source"] == "Migration"
 
@@ -234,21 +234,21 @@ def test_pre_migration_backup_then_migrate(tmp_path, monkeypatch):
     create_app(cfg).state.runtime.close()                          # DB at v1
     mdir = tmp_path / "migrations"
     shutil.copytree(migrate.MIGRATIONS_DIR, mdir)
-    (mdir / "0003_probe.sql").write_text(
+    (mdir / "0004_probe.sql").write_text(
         "CREATE TABLE IF NOT EXISTS probe (id INTEGER PRIMARY KEY);\n"
-        "INSERT INTO app_meta(key, value) VALUES ('schema_version', '3') "
+        "INSERT INTO app_meta(key, value) VALUES ('schema_version', '4') "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value;\n")
     monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
     app = create_app(cfg)
     try:
         res = app.state.runtime.startup_result
-        assert res["from"] == 2 and res["to"] == 3 and res["applied"] == ["0003_probe.sql"]
-        backups = list(cfg.backup_dir.glob("tam_*_pre-migration_v2.db"))
+        assert res["from"] == 3 and res["to"] == 4 and res["applied"] == ["0004_probe.sql"]
+        backups = list(cfg.backup_dir.glob("tam_*_pre-migration_v3.db"))
         assert len(backups) == 1 and res["backup"].endswith(backups[0].name)
         import sqlite3
         c = sqlite3.connect(backups[0])
         assert c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        assert c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "2"
+        assert c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "3"
         c.close()
         with app.state.runtime.db() as conn:
             assert conn.execute("SELECT count(*) FROM audit_events WHERE action='migrated'").fetchone()[0] == 2
@@ -264,9 +264,9 @@ def test_pre_migration_backup_failure_aborts_migration(tmp_path, monkeypatch):
     create_app(cfg).state.runtime.close()
     mdir = tmp_path / "migrations"
     shutil.copytree(migrate.MIGRATIONS_DIR, mdir)
-    (mdir / "0003_probe.sql").write_text(
+    (mdir / "0004_probe.sql").write_text(
         "CREATE TABLE probe (id INTEGER PRIMARY KEY);\n"
-        "INSERT INTO app_meta(key, value) VALUES ('schema_version', '3') ON CONFLICT(key) DO UPDATE SET value = excluded.value;\n")
+        "INSERT INTO app_meta(key, value) VALUES ('schema_version', '4') ON CONFLICT(key) DO UPDATE SET value = excluded.value;\n")
     monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
 
     def boom(self, conn, reason):
@@ -276,7 +276,7 @@ def test_pre_migration_backup_failure_aborts_migration(tmp_path, monkeypatch):
         create_app(cfg)
     import sqlite3
     c = sqlite3.connect(cfg.db_path)
-    assert c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "2"
+    assert c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "3"
     assert c.execute("SELECT 1 FROM sqlite_master WHERE name='probe'").fetchone() is None
     c.close()
 
@@ -319,7 +319,7 @@ def test_nosniff_and_no_store(api):
 # ------------------------------------------------------------------ logging (US-1.7)
 def test_startup_logs_mode_version_db_schema_migration(api):
     text = "\n".join(api.get("/api/logs/recent", limit=200).json()["lines"])
-    for needle in ("mode=DEV", "0.1.0-test", "database:", "schema migration result", "'applied': ['0001_initial.sql', '0002_audit_prune.sql']"):
+    for needle in ("mode=DEV", "0.1.0-test", "database:", "schema migration result", "'applied': ['0001_initial.sql', '0002_audit_prune.sql', '0003_bams_persistent_metric_alerts.sql']"):
         assert needle in text, needle
 
 
@@ -390,7 +390,7 @@ def _bad_migration_dir(tmp_path, monkeypatch, sql="INSERT INTO nonexistent_table
     from server.dbkit import migrate
     mdir = tmp_path / "migrations_bad"
     shutil.copytree(migrate.MIGRATIONS_DIR, mdir)
-    (mdir / "0003_bad.sql").write_text(sql + "INSERT INTO app_meta(key, value) VALUES ('schema_version', '3') "
+    (mdir / "0004_bad.sql").write_text(sql + "INSERT INTO app_meta(key, value) VALUES ('schema_version', '4') "
                                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value;\n")
     monkeypatch.setattr(migrate, "MIGRATIONS_DIR", mdir)
 
@@ -405,11 +405,11 @@ def test_failing_migration_with_raw_sqlite_error_is_a_clean_refusal(tmp_path, mo
     _bad_migration_dir(tmp_path, monkeypatch)
     with pytest.raises(StartupRefused) as e:
         Runtime(cfg)
-    assert e.value.exit_code == 4 and "Database refused" in str(e.value) and "0003_bad.sql" in str(e.value)
+    assert e.value.exit_code == 4 and "Database refused" in str(e.value) and "0004_bad.sql" in str(e.value)
     assert "rolled back" in str(e.value)
-    assert list(cfg.backup_dir.glob("tam_*_pre-migration_v2.db"))      # the safety backup is kept
+    assert list(cfg.backup_dir.glob("tam_*_pre-migration_v3.db"))      # the safety backup is kept
     c = sqlite3.connect(cfg.db_path)
-    assert c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "2"
+    assert c.execute("SELECT value FROM app_meta WHERE key='schema_version'").fetchone()[0] == "3"
     c.close()
 
 

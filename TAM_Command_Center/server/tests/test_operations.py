@@ -270,10 +270,12 @@ def test_unknown_operations_subroutes_stay_501(op):
 
 # ---------------------------------------------------------------- import additions (T-165)
 def test_polarity_alias_and_east_west_normalisation(op):
-    h = [("Polarity" if x == "Region" else x) for x in HEAD]
-    item = inspect_ok(op, [R(appliance="N1", ticker="N1.T", region="EAST", env="PROD"),
-                           R(appliance="N2", metric="M", ticker="N2.T", region=" west ", env="DEV"),
-                           R(appliance="N3", metric="M", ticker="N3.T", region="Americas", env="PROD")], headers=h)
+    """Polarity is its own column (0.2.0): authoritative East/West, overrides Region; Region keeps free text."""
+    item = inspect_ok(op, [R(appliance="N1", ticker="N1.T", polarity="EAST", env="PROD"),
+                           R(appliance="N2", metric="M", ticker="N2.T", polarity=" west ", region="Europe", env="DEV"),
+                           R(appliance="N3", metric="M", ticker="N3.T", region="Americas", env="PROD")])
+    bad = inspect_ok(op, [R(appliance="N4", ticker="N4.T", polarity="North")])
+    assert [e["code"] for e in bad["rows"][0]["errors"]] == ["polarity_invalid"]
     vals = {r["values"]["appliance"]: r["values"]["region"] for r in item["rows"]}
     assert vals == {"N1": "East", "N2": "West", "N3": "Americas"}                 # other text still imports
     assert item["operations_note"] == {"count": 1, "text": "1 appliances need East or West set for Operations"}
@@ -301,8 +303,8 @@ def test_region_header_still_works_and_template_text(op):
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     text = " ".join(str(c.value) for row in wb["Instructions"].iter_rows() for c in row if c.value)
-    assert "East or West (used by Operations)" in text
-    assert any(dv.sqref and "F2" in str(dv.sqref) and dv.errorStyle == "warning" for dv in wb["Import"].data_validations.dataValidation)
+    assert "Polarity: optional East or West" in text
+    assert any(dv.sqref and "K2" in str(dv.sqref) and dv.errorStyle == "stop" for dv in wb["Import"].data_validations.dataValidation)
     assert [c.value for c in wb["Import"][1]] == HEAD
     assert up(op, [R(appliance="E1", ticker="E1.T", region="East", env="PROD")], name="e.xlsx").status_code == 200
 

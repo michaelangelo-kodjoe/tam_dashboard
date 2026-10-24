@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { PageHeader, Panel } from '../../components/ui/Panel';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
@@ -18,6 +18,8 @@ import { OPERATOR_LABEL, PERIOD_LABEL, RULE_TYPE_LABEL, ruleCondition, rulePrevi
 import { cx } from '../../lib/cx';
 import type { BamsConfig, BamsConfigPreview, BamsRow, BamsRule, Operator, ReferencePeriod, RuleType, Severity } from '../../bamsTypes';
 import { errText } from './common';
+import { MetricTree } from './MetricTree';
+import { PolicyPanel } from './PolicyPanel';
 
 const SEVERITIES: Severity[] = ['Info', 'Warning', 'Critical'];
 interface Draft { rule_type: RuleType; operator: Operator; threshold: string; reference_period: ReferencePeriod | null; consecutive_updates: string; severity: Severity; cooldown_minutes: string; enabled: boolean; suppress_until_clear: boolean }
@@ -35,11 +37,10 @@ export function ConfigPage() {
   const { ds, bump } = useData();
   const toast = useToast();
   const list = useQuery('bams-config-metrics', (d) => d.getBamsState({ spark: false, sort: 'appliance' }));
-  const [filter, setFilter] = useState('');
-  const rows = useMemo(() => (list.data?.rows ?? []).filter((r) => `${r.object.name} ${r.metric_name} ${r.object.client_name}`.toLowerCase().includes(filter.trim().toLowerCase())), [list.data, filter]);
   const selectedId = sp.get('metric') ?? list.data?.rows[0]?.id ?? null;
   const detail = useQuery(`bams-config-detail:${selectedId}`, (d) => d.getBamsMetric(selectedId!), { enabled: !!selectedId });
   const [editing, setEditing] = useState<null | { id?: string; version?: number }>(null);
+  const [initialLinked] = useState(() => sp.get('metric'));
   const [deleting, setDeleting] = useState<BamsRule | null>(null);
   const [delError, setDelError] = useState<string | null>(null);
   const configs = useQuery('bams-configs', (d) => d.getBamsConfigs());
@@ -66,24 +67,14 @@ export function ConfigPage() {
   return (
     <div className="page bm-page">
       <PageHeader title="Alert configuration" meta="Rules per metric" actions={<Link to="/bams" className="btn btn--ghost btn--md"><span className="btn__label">Back to dashboard</span></Link>} />
+      <PolicyPanel />
       {list.loading && <SkeletonRows rows={6} label="Loading metrics" />}
       {list.error ? <ErrorBanner error={list.error} onRetry={list.reload} title="Could not load metrics" /> : null}
       {list.data && list.data.rows.length === 0 && <Panel><p className="bm-empty muted">There are no monitored metrics yet. Add an appliance first.</p></Panel>}
       {list.data && list.data.rows.length > 0 && (
         <div className="bm-split">
-          <Panel title="Metrics" className="bm-metriclist">
-            <label className="bm-search bm-search--block"><Search size={14} strokeWidth={1.5} aria-hidden="true" /><input className="bm-search__input" type="search" aria-label="Filter metrics" placeholder="Filter metrics" value={filter} onChange={(e) => setFilter(e.target.value)} /></label>
-            <ul className="bm-metricnav" aria-label="Metrics">
-              {rows.map((r) => (
-                <li key={r.id}>
-                  <button type="button" className={cx('bm-metricnav__item', r.id === selectedId && 'is-on')} aria-current={r.id === selectedId ? 'true' : undefined} onClick={() => select(r.id)}>
-                    <span className="bm-metricnav__name">{r.metric_name}</span>
-                    <span className="muted sm">{r.object.name}</span>
-                  </button>
-                </li>
-              ))}
-              {rows.length === 0 && <li className="muted sm bm-metricnav__none">No metric matches.</li>}
-            </ul>
+          <Panel className="bm-metriclist" bodyClassName="bm-tablebody">
+            <MetricTree rows={list.data.rows} selectedId={selectedId} linkedId={initialLinked} onSelect={select} />
           </Panel>
           <div className="bm-stack">
             <Panel

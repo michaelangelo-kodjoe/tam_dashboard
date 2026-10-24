@@ -11,10 +11,12 @@ export interface FieldProps {
   /** receives ids to wire onto the control */
   children: (ids: { id: string; labelId: string; describedBy?: string; invalid: boolean; required: boolean }) => ReactNode;
   className?: string;
+  /** keep the label for assistive tech only (the page supplies a visible one) */
+  hideLabel?: boolean;
 }
 
 /** Visible label above, error linked with aria-describedby (guidelines §7). */
-export function Field({ label, required, error, hint, children, className }: FieldProps) {
+export function Field({ label, required, error, hint, children, className, hideLabel }: FieldProps) {
   const uid = useId();
   const id = `${uid}-c`;
   const labelId = `${uid}-l`;
@@ -23,7 +25,7 @@ export function Field({ label, required, error, hint, children, className }: Fie
   const describedBy = [error ? errId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined;
   return (
     <div className={cx('field', error && 'has-error', className)}>
-      <label id={labelId} htmlFor={id} className="field__label">
+      <label id={labelId} htmlFor={id} className={cx('field__label', hideLabel && 'sr-only')}>
         {label}
         {required && <span className="field__req" aria-hidden="true"> *</span>}
       </label>

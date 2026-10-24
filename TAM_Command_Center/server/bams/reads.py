@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as _dt
 import sqlite3
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from ..errors import NotFound, ValidationFailed
 from . import lifecycle as L
@@ -37,14 +37,42 @@ def pick_alert(events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return sorted(events, key=lambda e: (-SEV[e["severity"]], e["opened_at"], e["id"]))[0]
 
 
-def spark(conn: sqlite3.Connection, metric_id: str, now: _dt.datetime) -> List[float]:
-    out: List[float] = []
-    for i in range(23, -1, -1):
-        hi = now - _dt.timedelta(hours=i)
-        v = repo.spark_points(conn, metric_id, fmt(hi), fmt(hi - _dt.timedelta(hours=1)))
-        if v is not None:
-            out.append(v)
+_SPARK_CHUNK = 300
+
+
+def spark_many(conn: sqlite3.Connection, metric_ids: Iterable[str], now: _dt.datetime) -> Dict[str, List[float]]:
+    """24 hourly points per metric from ONE statement (was 24 round trips per row).
+
+    Bucket i (23..0) is the window [now-(i+1)h, now-i h], both ends inclusive; its point is the latest sample in
+    that window (identical semantics to the former per-bucket queries; empty buckets are skipped). The lookups
+    stay index seeks on (metric_id, sampled_at), so we never scan or load all samples.
+    """
+    ids = list(dict.fromkeys(metric_ids))
+    out: Dict[str, List[float]] = {m: [] for m in ids}
+    bound: Dict[str, Any] = {}
+    values = []
+    for k, i in enumerate(range(23, -1, -1)):
+        bound[f"hi{k}"] = fmt(now - _dt.timedelta(hours=i))
+        bound[f"lo{k}"] = fmt(now - _dt.timedelta(hours=i + 1))
+        values.append(f"({k}, :hi{k}, :lo{k})")
+    buckets = ", ".join(values)
+    for start in range(0, len(ids), _SPARK_CHUNK):          # chunked: stays under SQLite's bound-parameter limit
+        chunk = ids[start:start + _SPARK_CHUNK]
+        params = dict(bound)
+        params.update({f"m{j}": mid for j, mid in enumerate(chunk)})
+        marks = ", ".join(f"(:m{j})" for j in range(len(chunk)))
+        sql = (f"WITH b(k, hi, lo) AS (VALUES {buckets}), ids(mid) AS (VALUES {marks}) "  # nosec B608 - generated placeholders only
+               "SELECT ids.mid, b.k, (SELECT s.value FROM bams_metric_samples s WHERE s.metric_id = ids.mid"
+               " AND s.sampled_at <= b.hi AND s.sampled_at >= b.lo ORDER BY s.sampled_at DESC LIMIT 1) AS v"
+               " FROM ids CROSS JOIN b ORDER BY ids.mid, b.k")
+        for mid, _k, v in conn.execute(sql, params):
+            if v is not None:
+                out[mid].append(v)
     return out
+
+
+def spark(conn: sqlite3.Connection, metric_id: str, now: _dt.datetime) -> List[float]:
+    return spark_many(conn, [metric_id], now)[metric_id]
 
 
 def build_row(m: Dict[str, Any], ctx: Ctx, events: List[Dict[str, Any]], with_spark: Optional[sqlite3.Connection] = None
@@ -169,8 +197,9 @@ def build_state(conn: sqlite3.Connection, ctx: Ctx, monitor: Dict[str, Any], pro
     truncated = len(rows) > ROW_CAP
     rows = rows[:ROW_CAP]
     if q.get("spark", 1) not in (0, "0", False):
+        sparks = spark_many(conn, [r["id"] for r in rows if r["current_value"] is not None], ctx.now)
         for r in rows:
-            r["spark"] = spark(conn, r["id"], ctx.now) if r["current_value"] is not None else []
+            r["spark"] = sparks[r["id"]] if r["current_value"] is not None else []
     # summary over all enabled metrics (events counted from enabled items only)
     summ_events = [e for r in enabled_rows for e in ev.get(r["id"], [])]
     fc = lambda name: sum(1 for r in enabled_rows if r["freshness"] == name)  # noqa: E731
@@ -249,19 +278,83 @@ def metric_detail(conn: sqlite3.Connection, ctx: Ctx, metric_id: str, alerts_lim
                                  "alerts_total": total, "ranges": list(RANGES)}}
 
 
-def trend(conn: sqlite3.Connection, ctx: Ctx, metric_id: str, rng: str) -> Dict[str, Any]:
-    if rng not in RANGES:
+ZOOM_MAX_POINTS = 2000
+ZOOM_MAX_WINDOW = 7 * 86400
+SAMPLE_RETENTION_DAYS = 100          # monitor.PRUNE_DAYS
+
+
+def _instant(field: str, v: str) -> _dt.datetime:
+    from ..schemas import normalize_instant
+    try:
+        return parse(normalize_instant(v))
+    except ValueError as exc:
+        raise _bad(field, str(exc)) from None
+
+
+def _zoom(conn: sqlite3.Connection, ctx: Ctx, m: Dict[str, Any], frm: str, to: str) -> Dict[str, Any]:
+    """Raw samples inside [from, to]; evenly thinned (first and last kept) only above ZOOM_MAX_POINTS."""
+    lo_dt, hi_dt = _instant("from", frm), _instant("to", to)
+    if lo_dt >= hi_dt:
+        raise _bad("from", "must be earlier than to")
+    if (hi_dt - lo_dt).total_seconds() > ZOOM_MAX_WINDOW:
+        raise _bad("to", "the window can be at most 7 days")
+    if lo_dt < ctx.now - _dt.timedelta(days=SAMPLE_RETENTION_DAYS):
+        raise _bad("from", f"is older than the {SAMPLE_RETENTION_DAYS}-day sample retention")
+    if lo_dt > ctx.now:
+        raise _bad("from", "must not be in the future")
+    lo, hi = fmt(lo_dt), fmt(hi_dt)
+    item = _empty_trend(m["metric_id"], "custom", lo, hi)
+    item["sample_interval_seconds"] = ctx.interval
+    if ctx.available:
+        rows = conn.execute("SELECT sampled_at, value FROM bams_metric_samples WHERE metric_id = :m AND sampled_at >= :lo"
+                            " AND sampled_at <= :hi ORDER BY sampled_at, id", {"m": m["metric_id"], "lo": lo, "hi": hi}).fetchall()
+        n = len(rows)
+        if n:
+            vals = [r[1] for r in rows]
+            item["text"] = {"min": min(vals), "max": max(vals), "last": vals[-1], "count": n, "from": rows[0][0], "to": rows[-1][0]}
+            if n > ZOOM_MAX_POINTS:
+                idx = sorted({round(i * (n - 1) / (ZOOM_MAX_POINTS - 1)) for i in range(ZOOM_MAX_POINTS)})
+                rows = [rows[i] for i in idx]
+                item["downsampled"] = True
+            item["points"] = [{"t": r[0], "v": r[1]} for r in rows]
+    _add_lines(conn, item, m)
+    return {"ok": True, "item": item}
+
+
+def _empty_trend(metric_id: str, rng: str, lo: str, hi: str) -> Dict[str, Any]:
+    return {"metric_id": metric_id, "range": rng, "from": lo, "to": hi, "points": [], "downsampled": False,
+            "text": {"min": None, "max": None, "last": None, "count": 0, "from": None, "to": None},
+            "reference_lines": [], "rule_lines": []}
+
+
+def _add_lines(conn: sqlite3.Connection, item: Dict[str, Any], m: Dict[str, Any]) -> None:
+    metric_id = item["metric_id"]
+    for key, label, k in (("high_30", "30D high", "30"), ("high_60", "60D high", "60"), ("high_90", "90D high", "90")):
+        if m[key] is not None:
+            item["reference_lines"].append({"id": "high_" + k, "label": label, "value": m[key], "date": m["high_%s_date" % k]})
+    highs = {"high_30": m["high_30"], "high_60": m["high_60"], "high_90": m["high_90"]}
+    for r in repo.rules_for_metric(conn, metric_id, enabled_only=True):
+        lv = L.level(r, highs)
+        if lv is not None:
+            item["rule_lines"].append({"rule_id": r["id"], "label": f"{r['severity']} threshold {L.num(lv)}",
+                                       "value": lv, "severity": r["severity"]})
+
+
+def trend(conn: sqlite3.Connection, ctx: Ctx, metric_id: str, rng: str, frm: Optional[str] = None,
+          to: Optional[str] = None) -> Dict[str, Any]:
+    if (frm is None) != (to is None):
+        raise _bad("from" if frm is None else "to", "from and to must be given together")
+    if frm is None and rng not in RANGES:
         raise _bad("range", "must be one of 24h, 7d, 30d, 90d")
     rows = repo.metric_rows(conn, include_disabled=True, metric_id=metric_id)
     if not rows:
         raise NotFound("Metric not found.")
     m = rows[0]
+    if frm is not None:
+        return _zoom(conn, ctx, m, frm, to)
     lo_dt, hi_dt = ctx.now - _dt.timedelta(seconds=RANGES[rng]), ctx.now
     lo, hi = fmt(lo_dt), fmt(hi_dt)
-    item: Dict[str, Any] = {"metric_id": metric_id, "range": rng, "from": lo, "to": hi, "points": [],
-                            "downsampled": False,
-                            "text": {"min": None, "max": None, "last": None, "count": 0, "from": None, "to": None},
-                            "reference_lines": [], "rule_lines": []}
+    item = _empty_trend(metric_id, rng, lo, hi)
     if not ctx.available:
         return {"ok": True, "item": item}
     p = {"m": metric_id, "lo": lo, "hi": hi}
@@ -285,15 +378,7 @@ def trend(conn: sqlite3.Connection, ctx: Ctx, metric_id: str, rng: str) -> Dict[
             item["points"] = [{"t": fmt(lo_dt + _dt.timedelta(seconds=b * width)), "v": round(v, 3)}
                               for b, v in cur]
             item["downsampled"] = True
-    for key, label, k in (("high_30", "30D high", "30"), ("high_60", "60D high", "60"), ("high_90", "90D high", "90")):
-        if m[key] is not None:
-            item["reference_lines"].append({"id": "high_" + k, "label": label, "value": m[key], "date": m["high_%s_date" % k]})
-    highs = {"high_30": m["high_30"], "high_60": m["high_60"], "high_90": m["high_90"]}
-    for r in repo.rules_for_metric(conn, metric_id, enabled_only=True):
-        lv = L.level(r, highs)
-        if lv is not None:
-            item["rule_lines"].append({"rule_id": r["id"], "label": f"{r['severity']} threshold {L.num(lv)}",
-                                       "value": lv, "severity": r["severity"]})
+    _add_lines(conn, item, m)
     return {"ok": True, "item": item}
 
 
@@ -374,8 +459,8 @@ def config_public(c: Dict[str, Any], matches: int) -> Dict[str, Any]:
     keys = ("id", "name", "metric_match", "rule_type", "operator", "threshold", "reference_period",
             "consecutive_updates", "severity", "cooldown_minutes", "row_version")
     out = {k: c[k] for k in keys}
-    out.update(enabled=bool(c["enabled"]), starter=bool(c["starter"]), matches=matches,
-               preview=L.preview_for(c, "a matching metric", None))
+    out.update(enabled=bool(c["enabled"]), starter=bool(c["starter"]), auto_apply=bool(c.get("auto_apply", 0)),
+               matches=matches, preview=L.preview_for(c, "a matching metric", None))
     return out
 
 
@@ -385,6 +470,22 @@ def config_matches(conn: sqlite3.Connection, pattern: str) -> List[Dict[str, Any
         " JOIN bams_objects o ON o.id = m.object_id JOIN clients c ON c.id = o.client_id"
         " WHERE m.enabled = 1 AND o.enabled = 1 AND lower(m.metric_name) GLOB lower(:p) ORDER BY o.name, m.metric_name, m.id",
         {"p": pattern})]
+
+
+def metric_catalog(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Distinct enabled metric names for metric-first alert policy configuration."""
+    rows = conn.execute(
+        "SELECT MIN(m.metric_name) AS metric_name, count(*) AS metric_count,"
+        " count(DISTINCT o.id) AS appliance_count, count(DISTINCT o.client_id) AS account_count"
+        " FROM bams_metrics m JOIN bams_objects o ON o.id = m.object_id"
+        " WHERE m.enabled = 1 AND o.enabled = 1"
+        " GROUP BY lower(m.metric_name) ORDER BY lower(MIN(m.metric_name))"
+    ).fetchall()
+    return {"ok": True, "items": [
+        {"metric_name": r["metric_name"], "metric_count": int(r["metric_count"]),
+         "appliance_count": int(r["appliance_count"]), "account_count": int(r["account_count"])}
+        for r in rows
+    ]}
 
 
 def configs_list(conn: sqlite3.Connection) -> Dict[str, Any]:

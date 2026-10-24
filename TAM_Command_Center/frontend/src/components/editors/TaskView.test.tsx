@@ -23,7 +23,7 @@ describe('task popup', () => {
     const { user } = await boot('/tasks', ds);
     await user.click(await screen.findByRole('link', { name: task.task }));
     const dlg = await screen.findByRole('dialog', { name: task.task });
-    for (const l of ['Account', 'Category', 'Priority', 'Status', 'Due', 'Next update', 'Waiting on', 'Created', 'Updated', 'Notes']) expect(within(dlg).getByText(l)).toBeInTheDocument();
+    for (const l of ['Account', 'Category', 'Priority', 'Status', 'Due', 'Next update', 'Waiting on', 'Created', 'Updated', 'Notes']) expect(within(dlg).getAllByText(l).length).toBeGreaterThan(0);
     expect(within(dlg).getByRole('link', { name: (await ds.getState()).accounts.find((a) => a.id === task.client_id)!.name })).toHaveAttribute('href', `/accounts/${task.client_id}/overview`);
     expect(within(dlg).getByRole('link', { name: /DRQS 5/ })).toHaveAttribute('href', 'bbg://screens/DRQS%205');
     expect(dlg.querySelector('.tv-notes')?.textContent).toBe('Line one {DRQS 5 <GO>}\nLine two');

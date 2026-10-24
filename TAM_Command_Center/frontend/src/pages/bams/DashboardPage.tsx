@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Bell, Play, Plus, Search, Settings as SettingsIcon, ShieldAlert, Square, Upload } from 'lucide-react';
 import { PageHeader, Panel } from '../../components/ui/Panel';
@@ -14,6 +14,7 @@ import { useDebounced, useDocumentTitle } from '../../lib/hooks';
 import { groupSummary, hasActiveAlert, loadGroupState, saveGroupState } from '../../lib/bamsGroups';
 import { formatAge, formatSeconds, formatTime } from '../../lib/bams';
 import { cx } from '../../lib/cx';
+import { KIND_LABEL, buildSuggestions, choiceQuery, searchChoices, type Suggestion } from '../../lib/bamsSearch';
 import { BAMS_VIEWS, type BamsRow, type BamsSortKey, type BamsState, type BamsStateQuery, type BamsStatusFilter, type BamsView } from '../../bamsTypes';
 import { TabStrip } from '../../components/bams/TabStrip';
 import { Kpi, REFRESH_MS, errText } from './common';
@@ -48,7 +49,7 @@ export function DashboardPage() {
   const [sp, setSp] = useSearchParams();
   const query = useMemo(() => parseQuery(sp), [sp]);
   const key = `bams-state:${[...sp.entries()].filter(([k]) => k !== 'open').map(([k, v]) => `${k}=${v}`).join('&')}`;
-  const q = useQuery(key, (d) => d.getBamsState(query), { refreshMs: REFRESH_MS });
+  const q = useQuery(key, (d) => d.getBamsState(query), { refreshMs: REFRESH_MS, keepPrevious: true });
   const [dialog, setDialog] = useState<null | { objectId?: string }>(null);
   const [busy, setBusy] = useState(false);
   const openId = sp.get('open');
@@ -67,6 +68,26 @@ export function DashboardPage() {
   useEffect(() => { setSearch(query.q ?? ''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [query.q]);
 
   const data = q.data;
+  const listId = useId();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchIndex, setSearchIndex] = useState(0);
+  const choices = useMemo(() => searchChoices(buildSuggestions(data?.filters, data?.rows, search), search), [data, search]);
+  const showList = searchOpen && search.trim() !== '';
+  const choose = (c: Suggestion) => {
+    setSearchOpen(false); setSearchIndex(0);
+    setSearch(c.kind === 'search' ? c.value : '');
+    patch(choiceQuery(c), { keepOpen: true });
+  };
+  const onSearchKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSearchOpen(true); setSearchIndex((i) => Math.min(i + 1, Math.max(choices.length - 1, 0))); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSearchOpen(true); setSearchIndex((i) => Math.max(i - 1, 0)); }
+    else if (e.key === 'Escape') { if (showList) { e.stopPropagation(); setSearchOpen(false); } }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      const c = showList ? choices[searchIndex] : null;
+      if (c) choose(c); else { setSearchOpen(false); patch({ q: search.trim() || null }, { keepOpen: true }); }
+    }
+  };
   const filtered = FILTER_KEYS.some((k) => sp.get(k));
   const clear = () => { const n = new URLSearchParams(sp); for (const k of FILTER_KEYS) n.delete(k); setSp(n, { replace: true }); };
 
@@ -100,6 +121,8 @@ export function DashboardPage() {
     for (const r of rows) { const l = m.get(r.object.client_id); if (l) l.push(r); else m.set(r.object.client_id, [r]); }
     return m;
   }, [rows]);
+  // KPI tile colour follows the worst active alert severity (Critical red, Warning amber)
+  const alertSeverities = useMemo(() => new Set(rows.filter((r) => r.alert && r.alert.status !== 'closed').map((r) => r.alert!.severity)), [rows]);
   const active = !!(query.view && query.view !== 'all') || filtered;
   const isOpen = (id: string) => (active ? !collapsedWhileFiltered.has(id) : id in manual ? manual[id] : hasActiveAlert(byAccount.get(id) ?? []));
   const setOpen = (id: string, open: boolean) => {
@@ -150,7 +173,7 @@ export function DashboardPage() {
             </div>
           )}
           <div className="bm-strip" role="group" aria-label="Summary">
-            <Kpi label="Active alerts" value={data.summary.active_alerts} tone={data.summary.active_alerts ? 'danger' : undefined}
+            <Kpi label="Active alerts" value={data.summary.active_alerts} tone={data.summary.active_alerts ? (alertSeverities.has('Critical') || alertSeverities.size === 0 ? 'danger' : alertSeverities.has('Warning') ? 'warning' : 'info') : undefined}
               sub={data.banner ? 'none evaluated' : `${data.summary.open} open · ${data.summary.recovered} recovered, awaiting close`} />
             <Kpi label="Delayed / Stale" value={data.summary.delayed_stale} tone={data.summary.delayed_stale ? 'warning' : undefined}
               sub={data.banner ? 'n/a' : `${data.summary.delayed} delayed · ${data.summary.stale} stale`} />
@@ -164,10 +187,28 @@ export function DashboardPage() {
             <Link to="/bams/config" className="btn btn--secondary btn--sm"><span className="btn__icon"><SettingsIcon size={14} strokeWidth={1.5} aria-hidden="true" /></span><span className="btn__label">Alert configuration</span></Link>
           </div>
           <div className="bm-bar bm-filters">
-            <label className="bm-search">
-              <Search size={14} strokeWidth={1.5} aria-hidden="true" />
-              <input className="bm-search__input" type="search" aria-label="Search appliance or metric" placeholder="Search appliance or metric" value={search} onChange={(e) => setSearch(e.target.value)} />
-            </label>
+            <div className="bm-searchwrap">
+              <label className="bm-search">
+                <Search size={14} strokeWidth={1.5} aria-hidden="true" />
+                <input className="bm-search__input" type="search" role="combobox" aria-label="Search appliance or metric" aria-autocomplete="list" aria-expanded={showList} aria-controls={listId}
+                  aria-activedescendant={showList && choices[searchIndex] ? `${listId}-o${searchIndex}` : undefined} placeholder="Search appliance or metric" value={search}
+                  onFocus={() => { if (search.trim()) setSearchOpen(true); }} onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
+                  onChange={(e) => { setSearch(e.target.value); setSearchIndex(0); setSearchOpen(!!e.target.value.trim()); }} onKeyDown={onSearchKey} />
+              </label>
+              {showList && (
+                <ul id={listId} className="bm-search-suggestions" role="listbox" aria-label="BAMS search suggestions">
+                  {choices.map((c, i) => (
+                    <li key={c.id} id={`${listId}-o${i}`} role="option" aria-selected={i === searchIndex} className={cx('bm-search-option', i === searchIndex && 'is-active')}>
+                      <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setSearchIndex(i)} onClick={() => choose(c)}>
+                        <span className="bm-search-option__main"><b>{c.label}</b><small>{KIND_LABEL[c.kind]}</small></span>
+                        <span className="bm-search-option__meta">{c.meta}</span>
+                      </button>
+                    </li>
+                  ))}
+                  {choices.length === 1 && <li className="bm-search-empty">No matching appliances, accounts or metrics. Press Enter to search all fields.</li>}
+                </ul>
+              )}
+            </div>
             <FilterSelect label="Account" value={query.account ?? null} options={accountOpts} onChange={(v) => patch({ account: v, object_id: null })} />
             <FilterSelect label="Location" value={query.location ?? null} options={data.filters.locations.map((l) => ({ value: l, label: l }))} onChange={(v) => patch({ location: v })} />
             <FilterSelect label="Appliance" value={query.object_id ?? null} options={data.filters.objects.filter((o) => !query.account || query.account.split(',').includes(o.client_id)).map((o) => ({ value: o.id, label: `${o.name} (${o.client_name})` }))} onChange={(v) => patch({ object_id: v })} />
@@ -204,7 +245,7 @@ export function DashboardPage() {
                 grouping={grouping}
                 rowKey={(r) => r.id}
                 onRowOpen={(r) => patch({ open: r.id }, { keepOpen: true })}
-                rowClassName={(r) => cx(r.display_status === 'open' && 'bm-row--open', r.display_status === 'recovered' && 'bm-row--recovered', r.id === openId && 'is-highlight')}
+                rowClassName={(r) => cx((r.display_status === 'open' || r.display_status === 'recovered') && `bm-row--${(r.alert?.severity ?? 'Critical').toLowerCase()}`, r.id === openId && 'is-highlight')}
                 sort={sort}
                 onSortChange={(s) => patch(s ? { sort: s.key === 'status' && s.dir === 'asc' ? null : s.key, dir: s.dir === 'desc' ? 'desc' : null } : { sort: null, dir: null })}
               />

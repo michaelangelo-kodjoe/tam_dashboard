@@ -29,7 +29,7 @@ import type {
   TodayData,
 } from '../types';
 import type {
-  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
+  AlertListStatus, BamsAlertEvent, BamsAlertList, BamsApplyInput, BamsConfig, BamsConfigApplied, BamsConfigInput, BamsMetricCatalogItem, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
   BamsImportPlan, BamsImportResult, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRule,
   BamsRuleInput, BamsSettings, BamsState, BamsStateQuery, BamsTrend, TrendRange,
 } from '../bamsTypes';
@@ -135,6 +135,8 @@ export interface DataSource {
   getBamsState(query: BamsStateQuery): Promise<BamsState>;
   getBamsMetric(id: string): Promise<BamsMetricDetail>;
   getBamsTrend(id: string, range: TrendRange): Promise<BamsTrend>;
+  /** Raw samples for a zoom window (contract 17.5): at most 7 days, from within 100 days. */
+  getBamsTrendWindow(id: string, from: string, to: string): Promise<BamsTrend>;
   getBamsAlerts(query: { status?: AlertListStatus; account?: string; metric_id?: string; limit?: number }): Promise<BamsAlertList>;
   /** `expected_row_version` is deliberately not sent (contract §11.12 0c). */
   closeBamsAlert(input: { id: string; note: string | null }): Promise<{ event: BamsAlertEvent; suppressed_until_clear: boolean }>;
@@ -149,6 +151,9 @@ export interface DataSource {
   saveBamsRule(input: BamsRuleInput): Promise<BamsRule>;
   deleteBamsRule(input: { id: string; expected_row_version?: number }): Promise<void>;
   getBamsConfigs(): Promise<BamsConfig[]>;
+  getBamsMetricCatalog(): Promise<BamsMetricCatalogItem[]>;
+  saveBamsConfig(input: BamsConfigInput): Promise<BamsConfig>;
+  deleteBamsConfig(input: { id: string }): Promise<void>;
   previewBamsConfig(input: { config_id: string; metric_ids?: string[] | null }): Promise<BamsConfigPreview>;
   applyBamsConfig(input: { config_id: string; metric_ids?: string[] | null; plan_hash: string }): Promise<BamsConfigApplied>;
   getBamsNotifications(limit?: number): Promise<BamsNotifications>;

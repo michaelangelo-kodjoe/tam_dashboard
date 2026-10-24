@@ -24,7 +24,7 @@ export function ApplianceDialog({ objectId, defaultClientId, onClose, onDeleted 
   const { accounts } = useApp();
   const { ds, bump } = useData();
   const toast = useToast();
-  const existing = useQuery(`bams-edit:${objectId}`, (d) => d.getBamsState({ object_id: objectId, include_disabled: true, spark: false }), { enabled: edit });
+  const existing = useQuery(`bams-edit:${objectId}`, (d) => d.getBamsState({ object_id: objectId, include_disabled: true, spark: false }), { enabled: edit, cache: false });
   if (edit && !existing.data) return <Dialog title="Edit appliance" width={720} onClose={onClose} footer={<Button onClick={onClose}>Cancel</Button>}>{existing.error ? <p role="alert" className="field__error">{errText(existing.error)}</p> : <SkeletonRows rows={5} label="Loading appliance" />}</Dialog>;
   const rows = existing.data?.rows ?? [];
   const obj = rows[0]?.object;

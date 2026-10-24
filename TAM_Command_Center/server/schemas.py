@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import re
-from typing import Annotated, Any, Dict, Optional
+from typing import Annotated, Any, Dict, Literal, Optional
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
@@ -173,6 +173,7 @@ class NoteSave(Body):
     timestamp: Optional[InstantStr] = None
     subject: Optional[Annotated[str, Field(max_length=200)]] = None
     body: Optional[Annotated[str, Field(max_length=50000)]] = None
+    body_format: Optional[Literal["plain", "html"]] = None      # "html": body is sanitised server-side (server/richtext.py)
     action_items: Optional[Annotated[str, Field(max_length=10000)]] = None
 
     @field_validator("note_type")

@@ -101,3 +101,7 @@
   .brief .rail-ctx__sec:nth-child(even) { border-left: 1px solid var(--border); }
 }
 .activity__audit { margin: var(--sp-3) 0 0; }
+
+/* QA-W1-4: the tab bar scrolls inside its own container; nothing in the account page may widen the document */
+.ws > * { min-width: 0; max-width: 100%; }
+.ws .tabs { max-width: 100%; overscroll-behavior-x: contain; }

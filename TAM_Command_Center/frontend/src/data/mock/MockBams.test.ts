@@ -43,6 +43,24 @@ describe('state', () => {
     const desc = (await ds.getBamsState({ sort: 'current', dir: 'desc' })).rows.map((r) => r.current_value).filter((v): v is number => v != null);
     expect(desc).toEqual([...desc].sort((a, b) => b - a));
   });
+  it('trend window (contract 17.5): custom range, raw samples inside the window, validation like the API', async () => {
+    const ds = newMock();
+    const s = await ds.getBamsState({});
+    const now = Date.now();
+    let row = s.rows[0]; let base = await ds.getBamsTrend(row.id, '7d');
+    for (const r of s.rows) { base = await ds.getBamsTrend(r.id, '7d'); row = r; if (base.points.length > 20) break; }
+    const mid = Date.parse(base.points[Math.floor(base.points.length / 2)].t);
+    const w = await ds.getBamsTrendWindow(row.id, new Date(mid - 3600e3).toISOString(), new Date(mid + 3600e3).toISOString());
+    expect(w.range).toBe('custom');
+    expect(w.sample_interval_seconds).toBeGreaterThanOrEqual(30);
+    expect(w.points.every((p) => Date.parse(p.t) >= mid - 3600e3 && Date.parse(p.t) <= mid + 3600e3)).toBe(true);
+    const empty = await ds.getBamsTrendWindow(row.id, new Date(now + 1).toISOString(), new Date(now + 2).toISOString()).catch((e) => e);
+    expect(empty.code).toBe('validation_error'); // future
+    const bad = (a: number, b: number) => ds.getBamsTrendWindow(row.id, new Date(a).toISOString(), new Date(b).toISOString()).catch((e) => e);
+    expect((await bad(mid, mid)).fields.from).toBeTruthy();
+    expect((await bad(now - 10 * 86400e3, now - 1 * 86400e3)).fields.to).toMatch(/7 days/);
+    expect((await bad(now - 200 * 86400e3, now - 199 * 86400e3)).fields.from).toBeTruthy();
+  });
   it('PROD provider unavailable: every row is No Data with no number, never simulated', async () => {
     const ds = newMock({ bamsProvider: 'unavailable' });
     const s = await ds.getBamsState({});

@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { FileText, Pencil, Phone, Trash2, UsersRound } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { RichText } from '../ui/Feedback';
+import { NoteBody, isLongNote } from '../ui/NoteBody';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../ui/Toast';
 import { useData } from '../../store/DataContext';
@@ -28,7 +29,7 @@ export function NoteEntry({ entry, tz, today, onDeleted }: { entry: ActivityNote
   const { ds, bump } = useData();
   const toast = useToast();
   const Icon = NOTE_ICON[n.note_type];
-  const long = (n.body?.length ?? 0) > 360 || (n.body?.split('\n').length ?? 0) > 6;
+  const long = isLongNote(n);
 
   const del = async () => {
     setBusy(true);
@@ -60,7 +61,7 @@ export function NoteEntry({ entry, tz, today, onDeleted }: { entry: ActivityNote
         </span>
       </header>
       {n.subject && <h3 className="note__subject">{n.subject}</h3>}
-      {n.body && <RichText text={n.body} className={cx('note__body', long && !expanded && 'is-clamped')} />}
+      <NoteBody note={n} expanded={expanded} long={long} />
       {long && (
         <button type="button" className="linkbtn" aria-expanded={expanded} onClick={() => setExpanded((x) => !x)}>
           {expanded ? 'Show less' : 'Show more'}

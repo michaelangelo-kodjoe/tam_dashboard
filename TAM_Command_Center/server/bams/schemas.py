@@ -94,6 +94,9 @@ class RuleSave(Body):
 class ConfigSave(RuleSave):
     name: Optional[Name] = None
     metric_match: Optional[Annotated[str, AfterValidator(_ticker), Field(min_length=1, max_length=200)]] = None
+    # When true this configuration is a persistent metric policy: every enabled metric
+    # matching metric_match inherits/updates a managed rule automatically.
+    auto_apply: Optional[StrictBool] = None
     metric_id: None = None
     suppress_until_clear: None = None
 

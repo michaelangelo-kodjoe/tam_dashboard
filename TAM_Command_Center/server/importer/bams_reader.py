@@ -10,13 +10,12 @@ from . import reader as R
 from .reader import CellError, FileSpec, Formula, ParsedRow, _clip, _is_blank, _raw_text, _text
 
 FIELDS = ("account", "bpid", "appliance", "metric", "ticker", "region", "location", "environment", "enabled",
-          "stale_after_seconds")
+          "stale_after_seconds", "polarity")
 LABELS = {"account": "Account", "bpid": "BPID", "appliance": "Appliance", "metric": "Metric", "ticker": "Ticker",
           "region": "Region", "location": "Location", "environment": "Environment", "enabled": "Enabled",
-          "stale_after_seconds": "Stale after (s)"}
+          "stale_after_seconds": "Stale after (s)", "polarity": "Polarity"}
 HEADERS = [LABELS[f] for f in FIELDS]
 ALIASES = {v.casefold(): k for k, v in LABELS.items()}
-ALIASES["polarity"] = "region"   # D-108: Polarity is an alias of Region
 
 
 def norm_polarity(v):
@@ -29,7 +28,8 @@ def norm_polarity(v):
 def needs_ops_fix(region, environment) -> bool:
     return norm_polarity(region) not in ("East", "West") or environment not in ("PROD", "DEV")
 
-LIMITS = {"account": 200, "bpid": 32, "appliance": 200, "metric": 200, "ticker": 200, "region": 100, "location": 200}
+LIMITS = {"account": 200, "bpid": 32, "appliance": 200, "metric": 200, "ticker": 200, "region": 100,
+          "location": 200, "polarity": 10}
 DEFAULT_STALE = 120
 MAX_STALE = 31536000
 _YES = {"yes", "y", "true", "1"}
@@ -41,13 +41,15 @@ def _e(row: int, fld: str, code: str, problem: str) -> Dict[str, str]:
 
 
 def check_headers(mapping: Dict[str, int], header_cells: List[Any]) -> None:
-    missing = [LABELS[f] for f in ("appliance", "metric", "ticker") if f not in mapping]
-    if "account" not in mapping and "bpid" not in mapping:
-        missing.insert(0, "Account or BPID")
+    # Only Account is universally required at the file-schema level. Appliance/Metric/Ticker
+    # requirements are conditional and are validated per row after the backend determines
+    # whether the row is an appliance-metadata update or a metric row.
+    missing = ["Account"] if "account" not in mapping else []
     if missing:
         found = [_clip(str(c), 40) for c in header_cells if not _is_blank(c)][:30]
-        raise R._bad("header_missing", "Row 1 must contain the columns: " + ", ".join(missing) +
-                     ". Download the template to see the layout.", missing=missing, found=found)
+        raise R._bad("header_missing", "Row 1 must contain the column: Account. "
+                     "Other BAMS columns are optional and are validated by row type.",
+                     missing=missing, found=found)
 
 
 def _flag_cell(v: Any, fld: str, row: int, errors: List[Dict[str, str]]) -> bool:
@@ -64,7 +66,7 @@ def parse_row(rownum: int, cells: Dict[str, Any]) -> ParsedRow:
     errors: List[Dict[str, str]] = []
     values: Dict[str, Any] = {f: None for f in FIELDS}
     raw = {f: _raw_text(cells.get(f)) for f in FIELDS}
-    for fld in ("account", "bpid", "appliance", "metric", "ticker", "region", "location", "environment"):
+    for fld in ("account", "bpid", "appliance", "metric", "ticker", "region", "location", "environment", "polarity"):
         values[fld] = _text(cells.get(fld), fld, rownum, errors, LABELS)
     for fld in ("appliance", "metric"):
         if values[fld] is not None:
@@ -75,12 +77,31 @@ def parse_row(rownum: int, cells: Dict[str, Any]) -> ParsedRow:
             code = f"{fld}_too_long"
             errors.append(_e(rownum, fld, code, f"is {len(val)} characters; the limit is {limit}. Shorten it (nothing is cut automatically)"))
             values[fld] = None
-    for fld, code in (("appliance", "appliance_required"), ("metric", "metric_required"), ("ticker", "ticker_required")):
-        if values[fld] is None and not any(e["field"] == fld for e in errors):
-            errors.append(_e(rownum, fld, code, "is required"))
-    if values["account"] is None and values["bpid"] is None and not any(e["field"] in ("account", "bpid") for e in errors):
-        errors.append(_e(rownum, "account", "account_required", "needs an Account name or a BPID"))
+    # Account is the only universal required value. Everything else is conditional on the
+    # row's intent and is handled here/the planner rather than by fixed required flags.
+    if values["account"] is None and not any(e["field"] == "account" for e in errors):
+        errors.append(_e(rownum, "account", "account_required", "is required"))
+
+    has_metric = values["metric"] is not None
+    has_ticker = values["ticker"] is not None
+    if has_metric != has_ticker:
+        missing_fld = "ticker" if has_metric else "metric"
+        errors.append(_e(rownum, missing_fld, f"{missing_fld}_required_for_metric",
+                         "is required when the other metric field is supplied"))
+
+    # Polarity is a distinct upload column. When present it is authoritative for the
+    # appliance's stored East/West region value. Region remains accepted for backwards
+    # compatibility, but does not override an explicit Polarity value.
     values["region"] = norm_polarity(values["region"])
+    pol = norm_polarity(values["polarity"])
+    if pol is not None and pol not in ("East", "West"):
+        errors.append(_e(rownum, "polarity", "polarity_invalid",
+                         f"'{_clip(str(pol), 30)}' is not East or West"))
+        values["polarity"] = None
+    else:
+        values["polarity"] = pol
+        if pol is not None:
+            values["region"] = pol
     env = values["environment"]
     if env is not None:
         if env.upper() in ("PROD", "DEV"):

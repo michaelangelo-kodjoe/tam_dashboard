@@ -2,7 +2,8 @@
 # Pinned to the versions verified by pytest and audited with pip-audit (QA-E1-7, 2026-10-12).
 # No optional uvicorn[standard] extras (uvloop has no Windows wheels, websockets>=17 needs Python 3.11+).
 # Tests, audit tools and the optional extras live in requirements-dev.txt.
-# BLPAPI is NOT listed: it is workstation-specific and must come from the Bloomberg-provided package.
+# blpapi (live BAMS provider) is listed in requirements-release.txt / the shipped requirements.txt, not in these dev pins:
+# it only resolves from the Bloomberg index, so developer machines without it use the simulated provider.
 # Run 3 (account import, T-82): xlsx template/reader/writer. Pure Python wheels, py3.10-3.12, pip-audit clean (2026-10-13).
 openpyxl==3.1.5
 et_xmlfile==2.0.0

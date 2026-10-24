@@ -1,0 +1,34 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BAMS v2: dialog sizes</title><link rel="stylesheet" href="bams.css"><link rel="stylesheet" href="v2.css"><style>
+.row{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;margin:12px 0 28px;overflow:auto}
+.fr{--k:.42;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;font-size:10px}
+.fr.cur{border-color:var(--warning)}.fr.new{border-color:var(--accent)}
+.fr header{padding:5px 8px;border-bottom:1px solid var(--border);font-weight:600}.fr footer{padding:5px 8px;border-top:1px solid var(--border);margin-top:auto;color:var(--muted)}
+.fr .tb{padding:3px 8px;border-bottom:1px solid var(--border);color:var(--muted)}.fr .bd{padding:6px 8px;flex:1;display:flex;flex-direction:column;gap:5px}
+.fr .ed{flex:1;border:1px solid var(--border);border-radius:3px;background:var(--surface-3);padding:4px;color:var(--muted)}
+.fr .gr{flex:1;border:1px solid var(--border);border-radius:3px;background:var(--surface-3);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.cap{font-size:12px;margin-bottom:6px}.cap b{color:var(--text)}
+table.t{border-collapse:collapse;width:100%;font-size:13px}.t th,.t td{border:1px solid var(--border);padding:6px 10px;text-align:left}
+</style></head><body data-rail="BAMS"><main id="m">
+<div class="hd"><h1>Dialog and drawer sizes</h1><span class="muted" style="padding-bottom:3px">Frames drawn at 42% of real pixels; labels give real sizes</span></div>
+<p class="annot"><b>Change 9.</b> Popups are too small to write notes or read the graph. Amber = current, blue = proposed. <b>Shared rule:</b> one larger default per kind, always capped to the viewport (<code>min(W, 100vw - 32px)</code>, height <code>min(H, 100vh - 48px)</code>), body scrolls inside, full-screen sheet under 640px.</p>
+
+<h2 style="font-size:15px">1. Task popup (Done + notes)</h2>
+<div class="row"><div><div class="cap"><b>Current</b> 640 x auto (max 84vh), notes read-only rich text</div><div class="fr cur" style="width:calc(var(--k)*640px);height:calc(var(--k)*520px)"><header>Task</header><div class="bd"><span>Account, due, priority</span><div class="ed">Notes (short)</div></div><footer>Close | Edit</footer></div></div>
+<div><div class="cap"><b>Proposed</b> 880 x up to 90vh (min 640); notes editor min-height 320, resizable, with the page 04 toolbar</div><div class="fr new" style="width:calc(var(--k)*880px);height:calc(var(--k)*720px)"><header>Task - Done + notes</header><div class="bd"><span>Account, due, priority</span><div class="tb">B  I  U  | size | lists | link | Clear</div><div class="ed">Notes editor, roomy (min 320px tall)</div></div><footer>Close | Mark done | Save</footer></div></div></div>
+
+<h2 style="font-size:15px">2. BAMS metric graph popup</h2>
+<div class="row"><div><div class="cap"><b>Current</b> drawer 520 wide, chart 220 tall</div><div class="fr cur" style="width:calc(var(--k)*520px);height:calc(var(--k)*720px)"><header>Metric</header><div class="bd"><span>KPIs</span><div class="gr" style="flex:none;height:calc(var(--k)*220px)">chart 220px</div><span>Alerts, notes</span></div></div></div>
+<div><div class="cap"><b>Proposed</b> 1100 x 90vh (cap 100vw - 32); chart 420 tall, width fills; suits drag-to-zoom of page 01</div><div class="fr new" style="width:calc(var(--k)*1100px);height:calc(var(--k)*760px)"><header>Metric - CPU utilisation %</header><div class="bd"><span>KPIs + range buttons + Reset zoom</span><div class="gr" style="flex:none;height:calc(var(--k)*420px)">chart 420px, drag to zoom</div><span>Alerts, notes</span></div></div></div></div>
+
+<h2 style="font-size:15px">3. Note drawers (Meeting, Call, General)</h2>
+<div class="row"><div><div class="cap"><b>Current</b> drawer 480 wide, full height</div><div class="fr cur" style="width:calc(var(--k)*480px);height:calc(var(--k)*700px)"><header>Meeting note</header><div class="bd"><span>Account, type</span><div class="tb">toolbar</div><div class="ed">Body (short)</div><span>Action items</span></div><footer>Cancel | Save</footer></div></div>
+<div><div class="cap"><b>Proposed</b> drawer 720 wide, full height; body editor min-height 360, grows with the drawer</div><div class="fr new" style="width:calc(var(--k)*720px);height:calc(var(--k)*700px)"><header>Meeting note</header><div class="bd"><span>Account, type</span><div class="tb">B  I  U  | size | lists | link | Clear</div><div class="ed">Body (min 360px tall)</div><span>Action items</span></div><footer>Cancel | Save</footer></div></div></div>
+
+<h2 style="font-size:15px">Summary</h2>
+<table class="t"><tr><th>Surface</th><th>Current</th><th>Proposed</th><th>Source</th></tr>
+<tr><td>Task popup</td><td>640 / 84vh</td><td>880 / 90vh</td><td>TaskViewDialog width=640</td></tr>
+<tr><td>Quick capture dialog</td><td>600</td><td>760</td><td>QuickCaptureDialog width=600</td></tr>
+<tr><td>Note / task / contact / account drawers</td><td>480</td><td>720</td><td>--drawer-w in tokens.css</td></tr>
+<tr><td>BAMS metric drawer</td><td>520, chart 220</td><td>1100, chart 420</td><td>.bm-drawer, TrendChart H=220</td></tr>
+<tr><td>Small confirm dialogs</td><td>480-520</td><td>unchanged</td><td>DeleteDialog, CloseAlertDialog</td></tr></table>
+</main><script src="shell.js"></script></body></html>

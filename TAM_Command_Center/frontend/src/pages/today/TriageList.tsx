@@ -1,10 +1,13 @@
-import { Fragment, useEffect, useRef, type KeyboardEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { QueueItem } from '../../types';
 import type { TimeDisplay } from '../../lib/dates';
 import { TIER_TONE, groupByTier, itemKey, rowWhen, type Show } from '../../lib/triage';
 import { cx } from '../../lib/cx';
+import { Check } from 'lucide-react';
 import { useApp } from '../../store/DataContext';
+import { Button } from '../../components/ui/Button';
+import { useCompleteTask } from '../../components/tasks/useCompleteTask';
 import { TerminalLinkText } from '../../components/ui/TerminalLinkText';
 
 export const optionId = (i: number) => `triage-opt-${i}`;
@@ -29,6 +32,14 @@ export function TriageList({ items, total, show, selected, onSelect, onOpen, onV
     if (i.kind !== 'task') return null;
     const n = state.tasks.find((t) => t.id === i.id)?.notes;
     return n ? n.split('\n').find((l) => l.trim())?.trim() ?? null : null;
+  };
+  const completeTask = useCompleteTask();
+  const [doneBusy, setDoneBusy] = useState<string | null>(null);
+  const markDone = async (i: QueueItem) => {
+    const t = state.tasks.find((x) => x.id === i.id);
+    if (!t || t.status === 'Complete' || doneBusy) return;
+    setDoneBusy(i.id);
+    try { await completeTask(t); } finally { setDoneBusy(null); }
   };
   const ref = useRef<HTMLDivElement>(null);
 
@@ -89,6 +100,10 @@ export function TriageList({ items, total, show, selected, onSelect, onOpen, onV
           <small className="truncate">{i.client_name ?? 'No account'}</small>
           {rowNotes(i) && <small className="truncate trow__note"><TerminalLinkText text={rowNotes(i)} /></small>}
         </span>
+        {i.kind === 'task'
+          ? <Button variant="ghost" size="sm" className="trow__done" busy={doneBusy === i.id} aria-label={`Mark done: ${i.title}`} title="Mark done" icon={<Check size={14} strokeWidth={1.5} />}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); void markDone(i); }} onDoubleClick={(e) => e.stopPropagation()}>Done</Button>
+          : <span className="trow__done-spacer" aria-hidden="true" />}
         <span className={cx('trow__when num', `when--${when.tone}`)}>{when.text}</span>
       </div>
     );

@@ -90,7 +90,11 @@ export interface Note {
   note_type: NoteType;
   timestamp: ISOInstant;
   subject: string | null;
+  /** plain text, or sanitised HTML when body_format is "html" (contract 17.1) */
   body: string | null;
+  body_format?: 'plain' | 'html';
+  /** plain-text projection of the body */
+  body_text?: string | null;
   action_items: string | null;
   source: string;
   created_at: ISOInstant;
@@ -352,6 +356,8 @@ export interface NoteInput {
   timestamp: ISOInstant;
   subject: string | null;
   body: string | null;
+  /** only with a body; "html" bodies are sanitised by the server */
+  body_format?: 'plain' | 'html';
   action_items: string | null;
   expected_row_version?: number;
 }

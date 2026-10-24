@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DataSource } from '../data/DataSource';
+import { cacheGet, cacheSet, shareStructure } from '../lib/queryCache';
 import type { AppState, AccountSummary, Settings } from '../types';
 
 interface DataCtx {
@@ -40,15 +41,22 @@ export interface QueryResult<T> {
 }
 
 /**
- * Cached query bound to the data version. Earlier data is kept while refreshing and when a
- * refresh fails (flagged `stale`). A different `key` resets the cache for that query.
+ * Stale-while-revalidate query bound to the data version. The last data for a `key` is kept in a module-level
+ * cache, so a remount (e.g. switching tabs) shows it instantly while a background refresh runs. Earlier data is
+ * also kept while refreshing and when a refresh fails (flagged `stale`). Polling pauses while the tab is hidden.
  */
-export function useQuery<T>(key: string, fetcher: (ds: DataSource) => Promise<T>, opts: { enabled?: boolean; refreshMs?: number | null } = {}): QueryResult<T> {
+export function useQuery<T>(key: string, fetcher: (ds: DataSource) => Promise<T>, opts: { enabled?: boolean; refreshMs?: number | null; /** false for edit forms and destructive previews, which must not show stale data */ cache?: boolean; /** while a new key loads for the first time, keep showing the previous key's data (filters, search) */ keepPrevious?: boolean } = {}): QueryResult<T> {
   const { ds, version } = useData();
   const enabled = opts.enabled ?? true;
-  const [st, setSt] = useState<{ key: string; data: T | null; error: unknown; staleError: unknown; lastOk: Date | null; inflight: boolean }>({
-    key, data: null, error: null, staleError: null, lastOk: null, inflight: enabled,
-  });
+  const useCache = opts.cache !== false;
+  const lastGood = useRef<{ data: T; lastOk: Date | null } | null>(null);
+  type St = { key: string; data: T | null; error: unknown; staleError: unknown; lastOk: Date | null; inflight: boolean };
+  const seed = (k: string): St => {
+    const c = useCache ? cacheGet<T>(ds, k) : undefined;
+    const prev = !c && opts.keepPrevious ? lastGood.current : null;
+    return { key: k, data: c?.data ?? prev?.data ?? null, error: null, staleError: null, lastOk: c?.lastOk ?? prev?.lastOk ?? null, inflight: enabled };
+  };
+  const [st, setSt] = useState<St>(() => seed(key));
   const [tick, setTick] = useState(0);
   const seq = useRef(0);
   const fetcherRef = useRef(fetcher);
@@ -57,30 +65,34 @@ export function useQuery<T>(key: string, fetcher: (ds: DataSource) => Promise<T>
   useEffect(() => {
     if (!enabled) return;
     const id = ++seq.current;
-    setSt((s) => (s.key === key ? { ...s, inflight: true } : { key, data: null, error: null, staleError: null, lastOk: null, inflight: true }));
+    setSt((s) => (s.key === key ? { ...s, inflight: true } : seed(key)));
     fetcherRef.current(ds).then(
       (data) => {
         if (id !== seq.current) return;
-        setSt({ key, data, error: null, staleError: null, lastOk: new Date(), inflight: false });
+        const lastOk = new Date();
+        const prev = useCache ? cacheGet<T>(ds, key)?.data : undefined;
+        const shared = shareStructure(prev, data);
+        if (useCache) cacheSet(ds, key, shared, lastOk);
+        lastGood.current = { data: shared, lastOk };
+        setSt({ key, data: shared, error: null, staleError: null, lastOk, inflight: false });
       },
       (err) => {
         if (id !== seq.current) return;
         setSt((s) => (s.key === key && s.data !== null ? { ...s, staleError: err, inflight: false } : { key, data: null, error: err, staleError: null, lastOk: null, inflight: false }));
       },
     );
-    return () => {
-      // a newer effect run supersedes this one via seq
-    };
+    // a newer effect run supersedes this one via seq
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ds, key, version, tick, enabled]);
 
   useEffect(() => {
     if (!opts.refreshMs) return;
-    const h = setInterval(() => setTick((n) => n + 1), opts.refreshMs);
+    const h = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) setTick((n) => n + 1); }, opts.refreshMs);
     return () => clearInterval(h);
   }, [opts.refreshMs]);
 
   const reload = useCallback(() => setTick((n) => n + 1), []);
-  const cur = st.key === key ? st : { data: null, error: null, staleError: null, lastOk: null, inflight: enabled };
+  const cur = st.key === key ? st : seed(key);
   return {
     data: cur.data,
     loading: cur.data === null && cur.error === null && (cur.inflight || !enabled),

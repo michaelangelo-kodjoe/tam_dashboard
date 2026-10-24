@@ -6,6 +6,7 @@ import { AccountPicker } from '../ui/AccountPicker';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Checkbox } from '../ui/Checkbox';
 import { DateField, Field, TextArea, TextInput } from '../ui/Fields';
+import { RichTextEditor } from '../ui/RichTextEditor';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../ui/Toast';
 import { FormError, focusFirstInvalid, useSaveFlow } from './shared';
@@ -112,6 +113,7 @@ function CaptureForm({ prefill, onClose }: { prefill: { type?: CaptureType; clie
       timestamp: localInputToInstant(ts),
       subject: clean(subject),
       body: clean(body),
+      ...(clean(body) ? { body_format: 'html' as const } : {}),
       action_items: clean(actions),
     };
     Object.assign(errs, validateNote(input));
@@ -131,7 +133,7 @@ function CaptureForm({ prefill, onClose }: { prefill: { type?: CaptureType; clie
     <>
       <Dialog
         title="Quick capture"
-        width={600}
+        width={760}
         onClose={requestClose}
         closable={!flow.busy && !discard}
         closeOnScrim={!dirty}
@@ -181,7 +183,7 @@ function CaptureForm({ prefill, onClose }: { prefill: { type?: CaptureType; clie
                 {(p) => <TextInput id={p.id} value={subject} maxLength={300} onChange={(ev) => setSubject(ev.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} data-autofocus={prefill.clientId ? true : undefined} />}
               </Field>
               <Field label="Body" error={e.body}>
-                {(p) => <TextArea id={p.id} value={body} onChange={(ev) => setBody(ev.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} />}
+                {(p) => <RichTextEditor id={p.id} initialHtml={body} onChange={setBody} invalid={p.invalid} describedBy={p.describedBy} />}
               </Field>
               <Field label="Action items" error={e.action_items}>
                 {(p) => <TextArea id={p.id} value={actions} onChange={(ev) => setActions(ev.target.value)} invalid={p.invalid} aria-describedby={p.describedBy} />}

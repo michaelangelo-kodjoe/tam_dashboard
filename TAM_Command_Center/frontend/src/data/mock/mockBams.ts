@@ -4,7 +4,7 @@
 // not poll in mock mode (the frozen BAMS mock clock is the "latest poll"); values never change.
 // `?mockProvider=unavailable` simulates the PROD stub: every value is No Data and nothing is shown.
 import type {
-  AlertListStatus, AlertStatus, BamsAlertEvent, BamsAlertItem, BamsAlertList, BamsConfig, BamsConfigApplied, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
+  AlertListStatus, AlertStatus, BamsAlertEvent, BamsAlertItem, BamsAlertList, BamsConfig, BamsConfigApplied, BamsConfigInput, BamsMetricCatalogItem, BamsConfigPreview, BamsDeletePreview, BamsDeleteResult,
   BamsFreshness, BamsMetricDetail, BamsMetricInput, BamsMonitor, BamsNotifications, BamsObjectInput, BamsObjectSaved, BamsProvider, BamsRow, BamsRule, BamsRuleInput,
   BamsSettings, BamsState, BamsStateQuery, BamsSummary, BamsTrend, BamsView, DisplayStatus, Severity, TrendRange,
 } from '../../bamsTypes';
@@ -231,25 +231,37 @@ export class MockBams {
     };
   }
 
-  getTrend(id: string, range: TrendRange): BamsTrend {
+  /** Mock of contract 17.5: raw samples in [from, to], thinned above 2000; same validation as the API. */
+  getTrendWindow(id: string, fromIso: string, toIso: string): BamsTrend {
+    const from = Date.parse(fromIso); const to = Date.parse(toIso); const now = this.c.clock.getTime();
+    const bad = (field: string, msg: string) => fail('validation_error', 'Fix the highlighted fields.', { [field]: msg });
+    if (Number.isNaN(from)) throw bad('from', 'Not a valid time.');
+    if (Number.isNaN(to)) throw bad('to', 'Not a valid time.');
+    if (from >= to) throw bad('from', 'from must be before to.');
+    if (to - from > 7 * DAY) throw bad('to', 'The window can be at most 7 days.');
+    if (from < now - 100 * DAY || from > now) throw bad('from', 'from must be within the last 100 days.');
+    return this.getTrend(id, '24h', { from, to });
+  }
+  getTrend(id: string, range: TrendRange, win?: { from: number; to: number }): BamsTrend {
     const m = this.findMetric(id);
     const row = this.row(m, false);
-    const to = this.c.clock.getTime();
-    const from = to - ({ '24h': 1, '7d': 7, '30d': 30, '90d': 90 }[range]) * DAY;
+    const to = win?.to ?? this.c.clock.getTime();
+    const from = win?.from ?? to - ({ '24h': 1, '7d': 7, '30d': 30, '90d': 90 }[range]) * DAY;
+    const cap = win ? 2000 : 500;
     const raw = this.c.unavailable ? [] : this.t.bams_metric_samples.filter((s) => s.metric_id === id && Date.parse(s.sampled_at) >= from && Date.parse(s.sampled_at) <= to).sort((a, b) => a.sampled_at.localeCompare(b.sampled_at));
     const vals = raw.map((s) => s.value as number);
     let points = raw.map((s) => ({ t: s.sampled_at as string, v: s.value as number }));
-    const downsampled = points.length > 500;
+    const downsampled = points.length > cap;
     if (downsampled) {
-      const size = points.length / 500;
-      points = Array.from({ length: 500 }, (_, i) => {
+      const size = points.length / cap;
+      points = Array.from({ length: cap }, (_, i) => {
         const part = raw.slice(Math.floor(i * size), Math.floor((i + 1) * size) || undefined);
         return { t: part[0].sampled_at as string, v: part.reduce((a, s) => a + (s.value as number), 0) / part.length };
       });
     }
     const hl = (id: string, label: string, h: { value: number | null; date: string | null }) => ({ id, label, value: h.value, date: h.date });
     return {
-      metric_id: id, range, from: new Date(from).toISOString(), to: new Date(to).toISOString(), points, downsampled,
+      metric_id: id, range: win ? 'custom' : range, from: new Date(from).toISOString(), to: new Date(to).toISOString(), points, downsampled, ...(win ? { sample_interval_seconds: 60 } : {}),
       text: { min: vals.length ? Math.min(...vals) : null, max: vals.length ? Math.max(...vals) : null, last: vals.length ? vals[vals.length - 1] : null, count: vals.length, from: raw[0]?.sampled_at ?? null, to: raw[raw.length - 1]?.sampled_at ?? null },
       reference_lines: [hl('high_30', '30D high', row.highs.d30), hl('high_60', '60D high', row.highs.d60), hl('high_90', '90D high', row.highs.d90)],
       rule_lines: this.t.bams_alert_rules.filter((r) => r.metric_id === id && r.enabled).flatMap((r) => {
@@ -500,10 +512,42 @@ export class MockBams {
     const metrics = this.enabledMetrics(false);
     return this.t.bams_alert_configs.map((c) => ({
       id: c.id, name: c.name, metric_match: c.metric_match, rule_type: c.rule_type, operator: c.operator, threshold: c.threshold ?? null, reference_period: c.reference_period ?? null,
-      consecutive_updates: c.consecutive_updates, severity: c.severity, cooldown_minutes: c.cooldown_minutes, enabled: !!c.enabled, starter: !!c.starter, row_version: c.row_version,
+      consecutive_updates: c.consecutive_updates, severity: c.severity, cooldown_minutes: c.cooldown_minutes, enabled: !!c.enabled, starter: !!c.starter, auto_apply: !!c.auto_apply, row_version: c.row_version,
       preview: rulePreview('a matching metric', c as never),
       matches: metrics.filter((m) => globMatch(c.metric_match, m.metric_name)).length,
     }));
+  }
+  metricCatalog(): BamsMetricCatalogItem[] {
+    const by = new Map<string, { name: string; metrics: number; appl: Set<string>; acc: Set<string> }>();
+    for (const m of this.enabledMetrics(false)) {
+      const o = this.t.bams_objects.find((x) => x.id === m.object_id)!;
+      const k = String(m.metric_name).toLowerCase();
+      const e = by.get(k) ?? { name: m.metric_name as string, metrics: 0, appl: new Set<string>(), acc: new Set<string>() };
+      e.metrics++; e.appl.add(o.id as string); e.acc.add(o.client_id as string); by.set(k, e);
+    }
+    return [...by.values()].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())).map((e) => ({ metric_name: e.name, metric_count: e.metrics, appliance_count: e.appl.size, account_count: e.acc.size }));
+  }
+  /** Mock of POST /bams/configs/save: a persistent policy also creates the managed rules on matching metrics once. */
+  saveConfig(i: BamsConfigInput): BamsConfig {
+    let c = i.id ? this.t.bams_alert_configs.find((x) => x.id === i.id) : undefined;
+    if (i.id && !c) throw fail('not_found', 'Policy not found.');
+    if (c && i.expected_row_version != null && c.row_version !== i.expected_row_version) throw fail('conflict', 'This policy changed. Reload and try again.');
+    if (!c) {
+      if (!i.metric_match) throw fail('validation_error', 'Metric is required.', { metric_match: 'Choose a metric.' });
+      c = { id: this.c.uuid(), name: i.name ?? i.metric_match, metric_match: i.metric_match, rule_type: 'fixed_threshold', operator: '>', threshold: null, reference_period: null, consecutive_updates: 1, severity: 'Warning', cooldown_minutes: 15, enabled: true, starter: false, auto_apply: false, row_version: 0 };
+      this.t.bams_alert_configs.push(c);
+    }
+    const { id: _id, expected_row_version: _v, ...patch } = i;
+    Object.assign(c, patch, { row_version: (c.row_version as number) + 1 });
+    if (c.auto_apply && c.enabled) {
+      const plan = this.configPlan(c.id as string, null);
+      this.applyConfig(c.id as string, plan.hash, null);
+    }
+    return this.getConfigs().find((x) => x.id === c!.id)!;
+  }
+  deleteConfig(id: string): void {
+    if (!this.t.bams_alert_configs.some((x) => x.id === id)) throw fail('not_found', 'Policy not found.');
+    this.t.bams_alert_configs = this.t.bams_alert_configs.filter((x) => x.id !== id);
   }
   private configPlan(configId: string, metricIds: string[] | null | undefined) {
     const c = this.t.bams_alert_configs.find((x) => x.id === configId);

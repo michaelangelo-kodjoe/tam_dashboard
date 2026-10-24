@@ -1,4 +1,4 @@
-import { Suspense, lazy, useId, useState } from 'react';
+import { Suspense, lazy, useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, X } from 'lucide-react';
 import { Overlay } from '../../components/ui/Overlay';
@@ -9,6 +9,7 @@ import { FreshnessBadge, SeverityTag, SimulatedBadge, StatusBadge } from '../../
 import { useApp, useQuery } from '../../store/DataContext';
 import { TREND_RANGES, type BamsAlertEvent, type BamsRow, type TrendRange } from '../../bamsTypes';
 import { formatAge, formatHighDate, formatStamp, formatValue, ruleCondition } from '../../lib/bams';
+import { useMediaQuery } from '../../lib/hooks';
 import { REFRESH_MS } from './common';
 const TrendChart = lazy(() => import('./TrendChart').then((m) => ({ default: m.TrendChart })));
 import { CloseAlertDialog, type CloseTarget } from './CloseAlertDialog';
@@ -23,8 +24,15 @@ export function MetricDrawer({ id, onClose, onEdit }: { id: string; onClose: () 
   const [closing, setClosing] = useState<CloseTarget | null>(null);
   const detail = useQuery(`bams-metric:${id}`, (d) => d.getBamsMetric(id), { refreshMs: REFRESH_MS });
   const trend = useQuery(`bams-trend:${id}:${range}`, (d) => d.getBamsTrend(id, range), { refreshMs: REFRESH_MS });
+  const [zoomWin, setZoomWin] = useState<[number, number] | null>(null);
+  useEffect(() => { setZoomWin(null); }, [id, range]);
+  const fromIso = zoomWin ? new Date(zoomWin[0]).toISOString() : '';
+  const toIso = zoomWin ? new Date(zoomWin[1]).toISOString() : '';
+  // finer samples for the zoom window; cached per window, the previous window's data stays up while the next one loads
+  const winQ = useQuery(`bams-trend-win:${id}:${fromIso}:${toIso}`, (d) => d.getBamsTrendWindow(id, fromIso, toIso), { enabled: !!zoomWin, keepPrevious: true });
   const row: BamsRow | undefined = detail.data?.row;
   const tz = settings.time_display;
+  const tall = useMediaQuery('(min-height: 760px)');
 
   return (
     <>
@@ -36,7 +44,7 @@ export function MetricDrawer({ id, onClose, onEdit }: { id: string; onClose: () 
             {row && (
               <div className="bm-badges">
                 {row.simulated && <SimulatedBadge />}
-                {row.alert && <StatusBadge status={row.alert.status === 'open' ? 'open' : 'recovered'} />}
+                {row.alert && <StatusBadge status={row.alert.status === 'open' ? 'open' : 'recovered'} severity={row.alert.severity} label={`${row.alert.status === 'open' ? 'Open alert' : 'Recovered, awaiting close'} · ${row.alert.severity}`} />}
                 <FreshnessBadge freshness={row.freshness} />
                 <span className="muted num">{row.age_seconds == null ? 'never updated' : `${formatAge(row.age_seconds)} ago`}</span>
               </div>
@@ -71,7 +79,7 @@ export function MetricDrawer({ id, onClose, onEdit }: { id: string; onClose: () 
               {trend.error ? <ErrorBanner error={trend.error} onRetry={trend.reload} title="Could not load the trend" /> : null}
               {trend.data && (
                 <>
-                  <Suspense fallback={<SkeletonRows rows={3} label="Loading chart" />}><TrendChart trend={trend.data} /></Suspense>
+                  <Suspense fallback={<SkeletonRows rows={3} label="Loading chart" />}><TrendChart trend={trend.data} rules={detail.data?.rules ?? []} height={tall ? 420 : 300} onZoom={setZoomWin} windowFetch={{ data: zoomWin ? winQ.data : null, loading: !!zoomWin && (winQ.loading || winQ.refreshing), error: zoomWin ? winQ.error : null }} /></Suspense>
                   <p className="muted sm bm-textequiv">
                     {trend.data.text.count === 0
                       ? `Text equivalent: no values stored for the last ${RANGE_TEXT[range]}.`

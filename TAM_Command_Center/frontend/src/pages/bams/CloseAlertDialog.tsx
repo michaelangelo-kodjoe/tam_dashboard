@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Dialog } from '../../components/ui/Dialog';
 import { Button } from '../../components/ui/Button';
 import { TextArea } from '../../components/ui/Fields';
+import { SeverityTag } from '../../components/bams/BamsBits';
 import { useToast } from '../../components/ui/Toast';
 import { useApp, useData } from '../../store/DataContext';
 import type { BamsAlertEvent } from '../../bamsTypes';
@@ -59,7 +60,7 @@ export function CloseAlertDialog({ target, onClose, onClosed }: { target: CloseT
     >
       <dl className="bm-kv">
         <dt>Appliance</dt><dd>{target.appliance}</dd>
-        <dt>Metric</dt><dd>{e.message} ({e.severity})</dd>
+        <dt>Metric</dt><dd>{e.message} <SeverityTag severity={e.severity} /></dd>
         <dt>Opened</dt><dd className="num">{formatStamp(e.opened_at, settings.time_display)}, peak {formatValue(e.peak_value)}</dd>
       </dl>
       {e.still_breaching && (
