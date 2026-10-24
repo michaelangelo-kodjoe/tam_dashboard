@@ -2,6 +2,11 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## Unreleased 0.2.0-rc2 - B-5/B-6 Overview 30-day timeline (backend-dev-agent)
+- Fix: upgrades shown in Operations were missing from the Overview 30-day widget. New `upgrades_30d` key on the account infrastructure payload (`server/ops/effective.py`, built on `ops/derive.build_row`): Operations-effective upgrades (record override, else quarter date) dated today..today+30, not Completed/Deferred. Nothing is written.
+- Scope narrowed (B-6): `server_upgrades`, `next_upgrade`, account counts and Today are unchanged (saved records only); no `not_in_bams`, no `derived` on Today items. Contract: `docs/04_API_CONTRACT.md` 13.1a.
+- Tests: `server/tests/test_effective_upgrades.py` (5: seeded parity with Operations, saved-only baseline for the rest, no writes, labelling/edges, override/closed).
+
 ## 0.2.0-rc1 (2026-10-23) - Release packaged (deployment-agent, task D-1)
 - Version bump to 0.2.0-rc1 (VERSION.txt, server DEFAULT_VERSION so /api/health reports it; QA-W1-5 closed). Schema 3. Channel prod in the archive. UNVALIDATED on Windows/Bloomberg.
 - Gate before build: 734 pytest (server db), 575 Vitest; build:api left web/ unchanged. blpapi stays in the release requirements. Archive TAM_Command_Center_0.2.0-rc1_win.zip not committed.
@@ -34,6 +39,9 @@ All notable changes to the TAM Command Center rebuild. New work goes under **Unr
 
 ## 0.2.0-rc1 (2026-10-23) - frontend F-5 (frontend-dev-agent)
 - Note editor A- / A+ now work like Word and like the colour palette: with a selection only the selection is resized; at a bare caret a pending size (stepped from the current value, 11..20 px) applies to the text typed next, and the px readout shows it immediately, then follows the caret or selection. No whole-body fallback for size or Clear formatting (Clear at a caret makes the next text plain). Size and colour combine on one span ("font-size: Npx; color:#HEX"); Default colour keeps a pending size.
+
+## Unreleased - 0.2.0-rc2 frontend F-6 (frontend-dev-agent)
+- Account Overview > Infrastructure panel: server tiles removed; summary line "N Servers · P PROD · D DEV" (no regions, no alerts text); "Upgrades, Next 30 Days" timeline from the new `upgrades_30d` payload key (contract 13.1a), one marker per (date, polarity), colour only (West accent, East info, DEV new `--purple` token, unknown PROD grey), tooltip and aria-label per marker, legend West/East/DEV on its own line, empty state "No Upgrades In The Next 30 Days"; close dates stagger. Title Case wording in this panel. Dead code removed (ServerTiles, TimelineTrack, timelineMarkers, their CSS and tests). Mock adapter derives `upgrades_30d` and PROD/DEV counts.
 
 ## Unreleased - Cleanup (post rc6, no behavior change)
 - Removed only provably dead code (vulture/pyflakes/tsc --noUnused*, plus whole-repo grep): unused imports and locals in server/, unused functions `bams.lifecycle.preview_sentence` and `dupes.order_key`, unused frontend exports (CountStat, FieldRow, applianceLabel, isNoteType, nowInstant, types ImportField and SimilarChoice), and the stray backup docs/qa/OPEN_ITEMS.md-E. CSS, mockups, docs, migrations, web/ untouched. Rollback tag: rc6-working.

@@ -8,7 +8,7 @@
 import type {
   Account, AccountInput, AccountSummary, ActivityEntry, ActivityPage, AppState, BackupInfo, BamsObject, Contact,
   ContactInput, Freshness, Infrastructure, InfrastructureSummary, MutationResult, Note, NoteInput, QueueItem, RecentChange,
-  Runtime, ServerTile, ServerUpgrade, Settings, Task, TaskInput, TaskQuery, TodayData, TodayProgress,
+  Runtime, ServerTile, ServerUpgrade, Settings, Task, TaskInput, TaskQuery, TodayData, TodayProgress, Upgrade30,
 } from '../types';
 import type {
   CandidateRef, DownloadedFile, ImportApplyInput, ImportFormat, ImportPlan, ImportResult, ImportRow, ImportValues, ReasonText, SimilarCandidate, SimilarCheck,
@@ -38,6 +38,7 @@ interface WireInfra {
   environment_summary: Record<string, number | string[]>;
   bams_objects: (Omit<BamsObject, 'active_alerts'> & { alerts?: { status: string }[] })[];
   server_upgrades: ServerUpgrade[];
+  upgrades_30d?: Upgrade30[];
   next_upgrade: { date: string; server: string } | null;   // FE-AC-4: server-computed
 }
 interface WireServerTile {
@@ -86,6 +87,8 @@ export function mapInfraSummary(w: WireInfra): InfrastructureSummary {
     active_alerts: w.active_alerts,
     next_upgrade: w.next_upgrade ?? null,
     env_summary: parts.join(' · '),
+    prod: typeof env.PROD === 'number' ? env.PROD : 0,
+    dev: typeof env.DEV === 'number' ? env.DEV : 0,
     regions: Array.isArray(env.regions) ? (env.regions as string[]) : [],
   };
 }
@@ -98,6 +101,7 @@ export function mapInfra(w: WireInfra & { client_id: string }): Infrastructure {
       enabled: !!o.enabled, worst_status: o.worst_status as Freshness, metric_count: o.metric_count, active_alerts: o.alerts?.length ?? 0,
     })),
     upgrades: w.server_upgrades,
+    upgrades_30d: w.upgrades_30d ?? [],
     summary: mapInfraSummary(w),
     servers: mapServers(w),
   };

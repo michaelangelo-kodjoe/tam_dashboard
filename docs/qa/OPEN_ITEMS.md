@@ -123,3 +123,4 @@ New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `t
 | QA-W2-4 | Low | backend-dev | Simulator limitation: percent-only simulator vs seeded Mbps NET metrics; test narrowed to percent metrics | Extend simulator or seed |
 
 - QA-W3-1 (Low, frontend): one non-reproducible keyboard palette Enter did not apply colour (see ERROR_LOG_W1 W3).
+- QA-W4-1 (Low, frontend): Overview marker tooltips are native title attributes only; no styled tooltip.

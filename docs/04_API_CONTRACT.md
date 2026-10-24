@@ -846,6 +846,14 @@ Query (all optional): `year`+`quarter` (together; omitted = default quarter rule
 ```
 `empty`: `"no_quarters"` (then `selected` null) or `"no_appliances"`. `summary` and group `summary` count the **filtered** rows (`by_status` may also hold legacy `Validation Required`/`Exception` keys when present). `appliance_total` is unfiltered. Groups sorted by account name; rows by effective date ascending, empty dates last, then appliance name. `can_record: false` (PROD without East/West, or no Environment) means a record cannot be created; `record_problem` says why. `quarters[].records` = appliances with a record (delete is blocked while > 0).
 
+### 13.1a `upgrades_30d` on the account infrastructure payload (0.2.0-rc2, B-6)
+`GET /api/client/{id}/infrastructure` and `/api/state` `infrastructure[cid]` gain a separate key `upgrades_30d` for the Overview "30 days" timeline. It is what Operations would show for that account: for every BAMS appliance x quarter window, the saved record if present, else the derived row (same rules as `ops/derive.py build_row`: record date override, else the quarter-window date; status `Planned` without a record). Kept: effective date in `[today, today+30]` (both ends inclusive), status not `Completed`/`Deferred`. Dateless rows are excluded. Ordered by date, then server (case-insensitive). Read-only; nothing is stored.
+```json
+"upgrades_30d": [{"server_name":"cpg-mfa-ldn-03","date":"2026-11-11","status":"Planned","environment":"PROD",
+  "polarity":"West","object_id":"…","release":{"year":2026,"quarter":"Q4"}}]
+```
+`environment` `PROD|DEV`; `polarity` `East|West|DEV` (`null` only for a PROD appliance with no East/West that still carries a dated record). `server_upgrades`, `next_upgrade`, account `counts` and the Today queue are saved-records-only, exactly as before; `/api/operations` lists BAMS appliances only.
+
 ### 13.2 `POST /api/operations/quarter/save`
 Fields: **`year`** (2000-2100), **`quarter`** (`Q1..Q4`), `apics_version` (the quarter Target version, <= 50, blank -> null), `dev_upgrade_date`, `east_prod_date`, `west_prod_date` (`YYYY-MM-DD` or null), `expected_row_version`. **Create** when `expected_row_version` is absent (existing year+quarter -> 409 `conflict` "2026 Q4 already exists. Edit it instead."); **update** when present (404 if missing, 409 `stale_write` if stale; year/quarter cannot change; the full set of value fields is written, so resend the unchanged ones). `source_sync_method = 'manual'`. Response `item` = the quarter shape of 13.1. Saving a new `apics_version` immediately changes `version.effective` of every appliance without its own version (derived on read).
 

@@ -8,10 +8,10 @@ import { Timeline } from '../../components/activity/Timeline';
 import { taskDrawerLink } from '../../lib/links';
 import { topOpenTasks } from '../../lib/tasks';
 import { useApp, useQuery } from '../../store/DataContext';
-import { TimelineTrack } from '../../components/ui/Instruments';
 import { TopItem } from './TopItem';
-import { ServerTiles } from './ServerTiles';
-import { serverSummary, timelineMarkers, topItemFor } from '../../lib/instruments';
+import { UpgradeTimeline } from './UpgradeTimeline';
+import { topItemFor } from '../../lib/instruments';
+import { serverWord } from '../../lib/upgradeTimeline';
 import type { QueryResult } from '../../store/DataContext';
 import type { AccountSummary, Infrastructure, Task, TodayData } from '../../types';
 import { accountPath } from '../../lib/links';
@@ -23,9 +23,6 @@ export function OverviewTab({ account, infra, todayQ }: { account: AccountSummar
   const mine = state.tasks.filter((t) => t.client_id === account.id);
   const top = topOpenTasks(mine, today, 8);
   const topItem = todayQ.data ? topItemFor(todayQ.data.queue, account.id) : null;
-  const tiles = infra.data?.servers ?? [];
-  const sum = serverSummary(tiles);
-  const markers = infra.data ? timelineMarkers(infra.data.upgrades, today) : [];
 
   const cols: Column<Task>[] = [
     { key: 'mark', header: 'Urgency', hideHeader: true, className: 'tmark-cell', cell: (t) => <i className={`rowmark ${t.due != null && t.due < today ? 'rowmark--danger' : t.due === today ? 'rowmark--accent' : ''}`} aria-hidden="true" /> },
@@ -55,15 +52,19 @@ export function OverviewTab({ account, infra, todayQ }: { account: AccountSummar
       </Panel>
       <Panel
         title="Infrastructure"
-        actions={<><span className="muted sm">{[sum.prod ? `PROD ${sum.prod}` : '', sum.dev ? `DEV ${sum.dev}` : ''].filter(Boolean).join(' · ')}</span><Link className="more-link" to={accountPath(account.id, 'infrastructure')}>Open tab <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" /></Link></>}
+        actions={<Link className="more-link" to={accountPath(account.id, 'infrastructure')}>Open Tab <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" /></Link>}
       >
         {infra.loading && <SkeletonRows rows={3} label="Loading infrastructure" />}
         {infra.error ? <ErrorBanner error={infra.error} onRetry={infra.reload} title="Could not load infrastructure" /> : null}
         {infra.data && (
           <>
-            <ServerTiles tiles={tiles} />
-            <div className="subsec"><h3 className="label">Upgrades, next 30 days</h3></div>
-            <TimelineTrack markers={markers} today={today} />
+            <p className="infra-sum" aria-label="Infrastructure summary">
+              <span><b>{infra.data.summary.servers}</b> {serverWord(infra.data.summary.servers)}</span>
+              <span aria-hidden="true">{' · '}</span><span><b>{infra.data.summary.prod}</b> PROD</span>
+              <span aria-hidden="true">{' · '}</span><span><b>{infra.data.summary.dev}</b> DEV</span>
+            </p>
+            <div className="subsec"><h3 className="label">Upgrades, Next 30 Days</h3></div>
+            <UpgradeTimeline items={infra.data.upgrades_30d} today={today} />
           </>
         )}
       </Panel>

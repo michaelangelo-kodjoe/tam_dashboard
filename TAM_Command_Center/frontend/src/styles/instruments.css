@@ -20,24 +20,6 @@
 .spark--info polyline { stroke: var(--info); }
 .spark--cell { width: 64px; height: 20px; }
 
-/* ---- timeline track ---- */
-.timeline-track { padding: var(--sp-3) var(--sp-5) var(--sp-3); }
-.timeline-track__line { position: relative; margin: 0 var(--sp-5); }
-.timeline-track__line::before { content: ''; position: absolute; left: 0; right: 0; top: 11px; border-top: 2px solid var(--border-strong); }
-.timeline-track__today { position: absolute; left: 0; top: 4px; width: 2px; height: 16px; background: var(--accent); }
-.tmark { position: absolute; top: 3px; transform: translateX(-50%); width: 0; }
-.tmark--left { transform: none; }
-.tmark--right { transform: none; }
-.tmark__ring { position: absolute; left: -8px; top: 0; display: block; width: 16px; height: 16px; border-radius: var(--r-round); border: 2px solid var(--border-strong); background: var(--surface-1); }
-.tmark__ring--danger { border-color: var(--danger); }
-.tmark__ring--warning { border-color: var(--warning); }
-.tmark__ring--info { border-color: var(--info); }
-.tmark__ring--accent { border-color: var(--accent); }
-.tmark__label { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; font-size: var(--fs-sm); line-height: 16px; color: var(--muted); }
-.tmark--left .tmark__label { transform: none; left: -8px; }
-.tmark--right .tmark__label { transform: translateX(-100%); left: 8px; }
-.timeline-track__axis { display: flex; justify-content: space-between; margin-top: 2px; font-size: var(--fs-label); color: var(--subtle); }
-
 /* ---- progress ring ---- */
 .ring { width: var(--ring-size); height: var(--ring-size); flex: none; }
 .ring__track { fill: none; stroke: var(--surface-3); stroke-width: 4; }

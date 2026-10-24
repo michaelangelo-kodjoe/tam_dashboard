@@ -54,10 +54,10 @@ describe('guards', () => {
   // Scoped to the Run 2 files: the Run 1 overlay entrance, skeleton pulse and refresh spinner predate §15 and are
   // already disabled under prefers-reduced-motion; QA decides whether to retire them.
   const run2Css = ['instruments.css', 'today.css', 'refresh.css'].map((f) => join(SRC, 'styles', f));
-  const run2Tsx = files.filter((x) => /(components\/ui\/Instruments|pages\/today\/|pages\/workspace\/(HeaderBand|TopItem|ServerTiles)|pages\/AccountsPage)[^/]*\.tsx$/.test(x) && !/\.test\./.test(x));
+  const run2Tsx = files.filter((x) => /(components\/ui\/Instruments|pages\/today\/|pages\/workspace\/(HeaderBand|TopItem|UpgradeTimeline)|pages\/AccountsPage)[^/]*\.tsx$/.test(x) && !/\.test\./.test(x));
 
   it('Run 2 files: no animation, keyframes, gradients, blur or shadows; radii only from tokens', () => {
-    expect(run2Tsx.length).toBeGreaterThanOrEqual(8);
+    expect(run2Tsx.length).toBeGreaterThanOrEqual(7);
     for (const f of [...run2Css, ...run2Tsx, join(SRC, 'lib/triage.ts'), join(SRC, 'lib/instruments.ts')]) {
       const t = readFileSync(f, 'utf8');
       const name = relative(SRC, f);

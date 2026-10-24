@@ -12,10 +12,11 @@ import type {
   Note,
   ServerSpark,
   ServerTile,
+  Upgrade30,
   ServerUpgrade,
   Task,
 } from '../../types';
-import { formatDate } from '../../lib/dates';
+import { addDays, formatDate } from '../../lib/dates';
 import type { Row, Tables } from './rebase';
 
 export const toAccount = (r: Row): Account => ({
@@ -198,6 +199,8 @@ export function infrastructureSummary(t: Tables, clientId: string, today: string
     active_alerts: activeAlertCount(t, clientId),
     next_upgrade: next ? { date: next.scheduled_date, server: next.server_name } : null,
     env_summary: keys.map((k) => `${k} ${counts.get(k)}`).join(' · '),
+    prod: counts.get('PROD') ?? 0,
+    dev: counts.get('DEV') ?? 0,
     regions: [...new Set(objs.map((o) => o.region).filter(Boolean) as string[])].sort(),
   };
 }
@@ -286,6 +289,26 @@ export function serverTiles(t: Tables, clientId: string, clock: Date): ServerTil
   return tiles.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Mock of contract 13.1a: dated, open upgrade records of this account's appliances in [today, today+30], one per appliance. */
+export function upgrades30d(t: Tables, clientId: string, today: string): Upgrade30[] {
+  const end = addDays(today, 30);
+  const objs = t.bams_objects.filter((o) => o.client_id === clientId);
+  const out: Upgrade30[] = [];
+  for (const u of t.server_upgrades) {
+    if (u.client_id !== clientId || !u.scheduled_date || u.scheduled_date < today || u.scheduled_date > end) continue;
+    if (u.status === 'Completed' || u.status === 'Deferred') continue;
+    const o = objs.find((x) => norm(x.name) === norm(u.server_name));
+    const env = (o?.environment ?? u.environment) === 'DEV' ? 'DEV' : 'PROD';
+    const region = String(o?.region ?? '').toLowerCase();
+    out.push({
+      server_name: u.server_name, date: u.scheduled_date, status: u.status, environment: env,
+      polarity: env === 'DEV' ? 'DEV' : region === 'east' ? 'East' : region === 'west' ? 'West' : null,
+      object_id: o?.id ?? '', release: u.schedule_year && u.schedule_quarter ? { year: u.schedule_year, quarter: u.schedule_quarter } : null,
+    });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || a.server_name.localeCompare(b.server_name));
+}
+
 export function infrastructure(t: Tables, clientId: string, today: string, clock: Date): Infrastructure {
   const objs = t.bams_objects.filter((o) => o.client_id === clientId);
   const bams: BamsObject[] = objs
@@ -313,7 +336,7 @@ export function infrastructure(t: Tables, clientId: string, today: string, clock
     .filter((u) => u.client_id === clientId)
     .map(toUpgrade)
     .sort((a, b) => (b.scheduled_date ?? '').localeCompare(a.scheduled_date ?? '') || a.server_name.localeCompare(b.server_name));
-  return { client_id: clientId, bams_objects: bams, upgrades, summary: infrastructureSummary(t, clientId, today), servers: serverTiles(t, clientId, clock) };
+  return { client_id: clientId, bams_objects: bams, upgrades, upgrades_30d: upgrades30d(t, clientId, today), summary: infrastructureSummary(t, clientId, today), servers: serverTiles(t, clientId, clock) };
 }
 
 // ------------------------------------------------------------------ sentences

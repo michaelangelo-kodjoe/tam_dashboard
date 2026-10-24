@@ -2,13 +2,11 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Avatar, DatePill, DotRow, ProgressRing, Sparkline, StackBar, SummaryChips, TimelineTrack } from './Instruments';
-import { timelineMarkers } from '../../lib/instruments';
+import { Avatar, DatePill, DotRow, ProgressRing, Sparkline, StackBar, SummaryChips } from './Instruments';
 import { buildChips, type Show } from '../../lib/triage';
 import type { QueueItem } from '../../types';
 
 afterEach(() => cleanup());
-const T = '2026-10-13';
 
 describe('instruments carry text equivalents and no inline colours', () => {
   it('StackBar states the numbers and only omits empty segments', () => {
@@ -31,13 +29,6 @@ describe('instruments carry text equivalents and no inline colours', () => {
     render(<Sparkline values={[5]} label="x" />);
     expect(screen.getByText('No trend data')).toBeInTheDocument();
     expect(screen.queryByRole('img')).toBeNull();
-  });
-
-  it('TimelineTrack lists every marker in a hidden table and prints the date of pinned markers', () => {
-    const m = timelineMarkers([{ id: 'u', client_id: 'a', server_name: 'srv-1', environment: 'PROD', polarity: 'E', schedule_year: 2026, schedule_quarter: 'Q3', current_version: '1', target_version: '2', scheduled_date: '2026-07-26', maintenance_window: null, status: 'Exception', validation_status: 'Pending', waiting_on: null, reference: null, notes: null, updated_at: '', row_version: 1 }], T);
-    render(<TimelineTrack markers={m} today={T} />);
-    expect(screen.getByRole('table', { name: 'Upgrades in the next 30 days' })).toHaveTextContent('srv-1 to 2');
-    expect(document.querySelector('.tmark__label')!.textContent).toContain('26 Jul');
   });
 
   it('ProgressRing is decorative (aria-hidden) and draws the fraction', () => {

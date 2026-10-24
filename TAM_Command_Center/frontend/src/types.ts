@@ -155,7 +155,22 @@ export interface InfrastructureSummary {
   active_alerts: number;
   next_upgrade: { date: ISODate; server: string } | null;
   env_summary: string; // e.g. "PROD 4 · DEV 1"
+  /** PROD and DEV appliance counts from environment_summary */
+  prod: number;
+  dev: number;
   regions: string[];
+}
+
+/** One appliance's upgrade due in the next 30 days (contract 13.1a, `upgrades_30d`). */
+export interface Upgrade30 {
+  server_name: string;
+  date: ISODate;
+  status: string;
+  environment: 'PROD' | 'DEV';
+  /** null only for a PROD appliance with no East/West */
+  polarity: 'East' | 'West' | 'DEV' | null;
+  object_id: string;
+  release: { year: number; quarter: string } | null;
 }
 
 /** One metric series for a server tile (PM-AC-3). `points` are [ISO UTC instant, value], oldest first, at most 28. */
@@ -179,6 +194,8 @@ export interface Infrastructure {
   client_id: string;
   bams_objects: BamsObject[];
   upgrades: ServerUpgrade[];
+  /** today..today+30 inclusive, one item per appliance (server-computed) */
+  upgrades_30d: Upgrade30[];
   summary: InfrastructureSummary;
   servers: ServerTile[];
 }

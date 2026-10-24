@@ -33,54 +33,6 @@ export function meterByClient(tasks: Task[], today: string): Map<string, Meter> 
   return new Map([...by].map(([id, l]) => [id, meterOf(l, today)]));
 }
 
-// ------------------------------------------------------------------ upgrade timeline (#8)
-
-export const TIMELINE_DAYS = 30;
-export interface TimelineMarker {
-  id: string;
-  server: string;
-  label: string;
-  status: string;
-  date: string | null;
-  /** 0..100 along the track, clamped; pinned markers are at an edge */
-  pct: number;
-  pinned: 'left' | 'right' | null;
-  /** the date is always printed when pinned */
-  showDate: boolean;
-}
-
-/** Upgrades T..T+30 not Completed/Deferred, plus any Exception at any date. Out-of-window markers pin to an edge. */
-export function timelineMarkers(upgrades: ServerUpgrade[], today: string): TimelineMarker[] {
-  const out: TimelineMarker[] = [];
-  for (const u of upgrades) {
-    if (u.status === 'Completed' || u.status === 'Deferred') continue;
-    const d = u.scheduled_date ? diffDays(u.scheduled_date, today) : null;
-    const inWindow = d != null && d >= 0 && d <= TIMELINE_DAYS;
-    if (!inWindow && u.status !== 'Exception') continue;
-    let pct = d == null ? 100 : (Math.max(0, Math.min(TIMELINE_DAYS, d)) / TIMELINE_DAYS) * 100;
-    let pinned: TimelineMarker['pinned'] = null;
-    if (d != null && d < 0) { pinned = 'left'; pct = 0; }
-    else if (d == null || d > TIMELINE_DAYS) { pinned = 'right'; pct = 100; }
-    out.push({
-      id: u.id, server: u.server_name, status: u.status, date: u.scheduled_date, pct, pinned,
-      showDate: pinned != null || u.status === 'Exception',
-      label: `${u.server_name}${u.target_version ? ` to ${u.target_version}` : ''}`,
-    });
-  }
-  return out.sort((a, b) => a.pct - b.pct || a.server.localeCompare(b.server));
-}
-
-/** Assign label rows (0,1,2..) so markers whose labels would overlap stack vertically. */
-export function stackRows(markers: TimelineMarker[], minGapPct = 22): number[] {
-  const lastPctByRow: number[] = [];
-  return markers.map((m) => {
-    let row = 0;
-    while (lastPctByRow[row] !== undefined && m.pct - lastPctByRow[row] < minGapPct) row++;
-    lastPctByRow[row] = m.pct;
-    return row;
-  });
-}
-
 // ------------------------------------------------------------------ header cells (#2, #3, #4)
 
 export interface ServerSummary { total: number; prod: number; dev: number; unknown: number; warning: number; critical: number }

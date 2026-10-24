@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from .dbkit import load_query, migrate, rows_to_dicts
+from .ops.effective import upgrades_30d
 
 _RANK = {"Stale": 4, "No Data": 3, "Delayed": 2, "Live": 1}
 
@@ -179,7 +180,7 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
     clients = [client_id] if client_id else [r[0] for r in conn.execute("SELECT id FROM clients")]
     for cid in clients:
         out[cid] = {"client_id": cid, "bams_objects": [], "server_upgrades": [], "active_alerts": 0,
-                    "next_upgrade": None}
+                    "next_upgrade": None, "upgrades_30d": []}
     objs_by_client: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for o in objects:
         states = [f["freshness"] for f in fresh_by_obj.get(o["id"], [])]
@@ -194,6 +195,7 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
                                 "freshness": f["freshness"], "enabled": enabled_by_metric.get(f["metric_id"], False)}
                                for f in fresh_by_obj.get(o["id"], [])]
         objs_by_client[o["client_id"]].append(item)
+    soon = upgrades_30d(conn, today, client_id)     # Operations-derived timeline for the Overview only
     ups_by_client: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for u in upgrades:
         ups_by_client[u["client_id"]].append(_upgrade_row(u))
@@ -205,6 +207,7 @@ def build_infrastructure(conn: sqlite3.Connection, channel: str, *, client_id: O
         payload["active_alerts"] = sum(len(o["alerts"]) for o in objs)
         payload.update(_env_summary(objs, ups))
         payload["next_upgrade"] = _next_upgrade(ups, today)
+        payload["upgrades_30d"] = soon.get(cid, [])
         if server_tiles:
             payload["server_tiles"] = _server_tiles(conn, objects_raw.get(cid, []), ups, alerts_by_obj, metrics, now)
     return out

@@ -334,11 +334,15 @@ describe('Accounts and Workspace', () => {
     expect(screen.getByRole('article', { name: 'Top item for this account' }).textContent).not.toMatch(/Mark complete|What to do/);
     expect(screen.queryByRole('img', { name: /open tasks over 20 days/ })).toBeNull(); // no due-date histogram
     expect(document.querySelector('.duehist')).toBeNull();
-    const tiles = await screen.findByRole('list', { name: 'Servers' });
-    expect(within(tiles).getAllByRole('listitem')).toHaveLength(3);
-    expect(within(tiles).getAllByText('No trend data').length).toBeGreaterThan(0); // a server with no samples: no sparkline
-    expect(within(tiles).getAllByRole('img').length).toBeGreaterThan(0); // and at least one with a series
-    expect(screen.getByRole('table', { name: 'Upgrades in the next 30 days' })).toBeInTheDocument();
+    // Overview > Infrastructure: summary line, no server tiles, no regions or alerts text, Title Case wording
+    const panel = (await screen.findByText('Upgrades, Next 30 Days')).closest('section')!;
+    expect(screen.queryByRole('list', { name: 'Servers' })).toBeNull();
+    expect(panel.querySelector('.srvgrid, .srvtile')).toBeNull();
+    const sum = await within(panel).findByLabelText('Infrastructure summary');
+    expect(sum.textContent).toMatch(/^\d+ Servers? · \d+ PROD · \d+ DEV$/);
+    expect(sum.textContent).not.toMatch(/East|West|alert|region/i);
+    expect(within(panel).getByRole('link', { name: /Open Tab/ })).toBeInTheDocument();
+    expect(within(panel).getByText('Upgrades, Next 30 Days')).toBeInTheDocument();
   });
 
   it('Overview shows up to 8 open tasks sorted overdue first, then priority, then due (US-5.3)', async () => {

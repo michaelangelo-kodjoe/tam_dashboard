@@ -87,3 +87,22 @@ Not verified: Cmd/Ctrl+Z (tool key events do not trigger native undo); real exte
 Test notes (2) deleted from DEV DB via API.
 
 VERDICT: PASS (0 open Blocker/High)
+
+## W4: 0.2.0-rc2 Overview upgrade timeline (Infrastructure panel)
+
+Gates: pytest 739 passed; tsc --noEmit exit 0; vitest 580 passed (49 files); sql_safety_scan 0 violations. Served bundle (index-pHTJBJOd.js, index-D7LXE1_l.css) matches web/index.html; no references to ServerTiles/TimelineTrack/timelineMarkers in frontend/src, server, tests or API contract. No raw colours outside tokens.css (only pre-existing richText.ts palette, guard test green).
+
+Parity (script, all 12 accounts, DEV DB): upgrades_30d dates/envs/polarity/servers equal Operations (Q3, Q4, 2027 Q1) rows with effective date in [today, today+30], Completed/Deferred and dateless excluded: 12/12 OK. On a scratch copy (scratchpad only): quarter date today+30 included, today+31 excluded; record date override used (DEV 24 Oct derived vs override 10 Nov shows 10 Nov, override 24 Dec excluded); appliances without a record use the new quarter's date (West null => West rows absent); DEV marker purple with DEV legend; East+West+DEV on one account; unknown-polarity PROD grey single marker (Ostrava Lane, 5 Nov); empty state "No Upgrades In The Next 30 Days" (Pinecrest Shoal). Only difference in my script was the polarity label for DEV rows (API "DEV", Operations null), by design.
+
+Nothing else changed: git HEAD worktree vs current tree, both on copies of the DEV DB, compared /api/state (accounts, counts, server_upgrades, next_upgrade; upgrades_30d stripped), /api/today, /api/operations (3 quarters), and /api/client/{id}/infrastructure for all 12 accounts: all identical.
+
+UI: summary "N Servers · P PROD · D DEV" without regions/alerts text; title "Upgrades, Next 30 Days"; legend West/East/DEV, no overlap at pane width (577px); stacked date labels remain readable; aria/title "East PROD Upgrade, 29 Oct", markers focusable with focus-visible outline; Operations Target Version shows plain "7.2.0" (no "default"); no console errors. Dark-only theme, purple #b48cff has strong contrast.
+
+Items
+- QA-W4-1 (Low, owner frontend): marker tooltip is a native title attribute only; not verified visually (headless hover shows none). Acceptable per mockup; no action required unless a styled tooltip is wanted.
+
+Not verified: 1440px rendering (viewport emulation scaled the screenshot to unreadable size; legend CSS reviewed instead); visual hover tooltip; Windows packaged build.
+
+Scratch servers/DBs removed; DEV DB not written.
+
+VERDICT: PASS (0 open Blocker/High)

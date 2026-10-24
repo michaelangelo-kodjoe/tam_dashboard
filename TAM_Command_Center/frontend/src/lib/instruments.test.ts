@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { AccountSummary, QueueItem, ServerUpgrade, Task } from '../types';
+import type { AccountSummary, QueueItem, Task } from '../types';
 import {
   initials, loadLeaders, meterOf, needsAttention, nextDays, portfolio, proximityPct, serverSummary, shortMetric, signalsFromQueue,
-  sparkWindowLabel, stackRows, timelineMarkers, topItemFor, upgradeDatesFromQueue, worstAlert, type AccountSignals,
+  sparkWindowLabel, topItemFor, upgradeDatesFromQueue, worstAlert, type AccountSignals,
 } from './instruments';
 
 const T = '2026-10-13';
@@ -10,10 +10,6 @@ const task = (o: Partial<Task>): Task => ({ id: Math.random().toString(), task: 
 const acct = (o: Partial<AccountSummary> & { id: string }): AccountSummary => ({
   name: o.id, status: 'Active', bpid: null, products: null, last_contact: null, next_contact: null, notes: null, created_at: '', updated_at: '', row_version: 1,
   open_tasks: 0, overdue: 0, waiting: 0, active_alerts: 0, next_upgrade: null, upcoming_upgrades: 0, servers: 0, ...o,
-});
-const upg = (o: Partial<ServerUpgrade>): ServerUpgrade => ({
-  id: Math.random().toString(), client_id: 'a', server_name: 's1', environment: 'PROD', polarity: 'East', schedule_year: 2026, schedule_quarter: 'Q4', current_version: '1', target_version: '2',
-  scheduled_date: T, maintenance_window: null, status: 'Scheduled', validation_status: 'Pending', waiting_on: null, reference: null, notes: null, updated_at: '', row_version: 1, ...o,
 });
 
 describe('meterOf (exclusive segments, §10.4 #1)', () => {
@@ -27,32 +23,6 @@ describe('meterOf (exclusive segments, §10.4 #1)', () => {
   });
   it('a task due today is not overdue', () => {
     expect(meterOf([task({ due: T })], T)).toMatchObject({ overdue: 0, other: 1 });
-  });
-});
-
-describe('timelineMarkers (§10.4 #8)', () => {
-  it('keeps T..T+30 not Completed/Deferred, plus Exceptions at any date; pins out-of-window to the edges', () => {
-    const m = timelineMarkers([
-      upg({ id: 'in', scheduled_date: '2026-10-28' }),
-      upg({ id: 'done', scheduled_date: '2026-10-20', status: 'Completed' }),
-      upg({ id: 'def', scheduled_date: '2026-10-20', status: 'Deferred' }),
-      upg({ id: 'far', scheduled_date: '2026-12-25' }),
-      upg({ id: 'exc-past', scheduled_date: '2026-07-26', status: 'Exception' }),
-      upg({ id: 'exc-far', scheduled_date: '2027-03-01', status: 'Exception' }),
-      upg({ id: 'edge', scheduled_date: '2026-11-12' }),
-    ], T);
-    const ids = m.map((x) => x.id);
-    expect(ids.sort()).toEqual(['edge', 'exc-far', 'exc-past', 'in']);
-    const by = Object.fromEntries(m.map((x) => [x.id, x]));
-    expect(by['exc-past']).toMatchObject({ pinned: 'left', pct: 0, showDate: true });
-    expect(by['exc-far']).toMatchObject({ pinned: 'right', pct: 100, showDate: true });
-    expect(by['in'].pct).toBeCloseTo((15 / 30) * 100);
-    expect(by['edge'].pct).toBe(100);
-    expect(by['edge'].pinned).toBeNull();
-  });
-  it('stacks labels of markers that would overlap', () => {
-    const m = timelineMarkers([upg({ id: 'a', scheduled_date: '2026-10-20' }), upg({ id: 'b', scheduled_date: '2026-10-21' }), upg({ id: 'c', scheduled_date: '2026-11-10' })], T);
-    expect(stackRows(m)).toEqual([0, 1, 0]);
   });
 });
 

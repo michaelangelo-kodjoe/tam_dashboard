@@ -42,7 +42,7 @@ function VersionCell({ r }: { r: OpsRow }) {
   const v = r.version;
   if (!v.effective) return <span className="ops-notset">Not set</span>;
   if (v.source === 'appliance') return <span className="num">{v.effective}<span className="ops-ovr" title="This appliance's own version" role="img" aria-label="Own version" /></span>;
-  return <span className="ops-dflt">default <span className="num">{v.effective}</span></span>;
+  return <span className="ops-dflt num" title="Follows the quarter's target version">{v.effective}</span>;
 }
 
 export function EnvCell({ r }: { r: OpsRow }) {

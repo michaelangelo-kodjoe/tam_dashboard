@@ -2,8 +2,7 @@
 // no chart library. Every instrument carries a text equivalent. Colours come only from CSS classes (tokens).
 import { useRef, type KeyboardEvent } from 'react';
 import { cx } from '../../lib/cx';
-import { formatDate, formatDateLong } from '../../lib/dates';
-import { initials, meterLabel, stackRows, type Meter, type TimelineMarker } from '../../lib/instruments';
+import { initials, meterLabel, type Meter } from '../../lib/instruments';
 import type { ChipDef } from '../../lib/triage';
 
 export type InstrumentTone = 'danger' | 'warning' | 'info' | 'accent' | 'neutral';
@@ -49,44 +48,6 @@ export function Sparkline({ values, label, tone = 'neutral', width = 120, height
       <title>{label}</title>
       <polyline points={pts.join(' ')} fill="none" vectorEffect="non-scaling-stroke" />
     </svg>
-  );
-}
-
-// ------------------------------------------------------------------ timeline track
-
-const STATUS_TONE: Record<string, InstrumentTone> = {
-  Exception: 'danger', 'Validation Required': 'warning', 'Awaiting Client': 'warning', 'In Progress': 'info', Scheduled: 'info', Planned: 'neutral',
-};
-
-export function TimelineTrack({ markers, today }: { markers: TimelineMarker[]; today: string }) {
-  const rows = stackRows(markers);
-  const depth = Math.max(0, ...rows) + 1;
-  return (
-    <div className="timeline-track">
-      <div className="timeline-track__line" style={{ height: 28 + depth * 18 }}>
-        <span className="timeline-track__today" title="Today" />
-        {markers.map((m, i) => (
-          <span key={m.id} className={cx('tmark', m.pinned && `tmark--${m.pinned}`)} style={{ left: `${m.pct}%` }}>
-            <i className={`tmark__ring tmark__ring--${STATUS_TONE[m.status] ?? 'neutral'}`} />
-            <span className="tmark__label" style={{ top: 22 + rows[i] * 18 }}>
-              <span className="mono">{m.server}</span>
-              {m.showDate && m.date ? ` · ${formatDate(m.date, today)}` : ''}
-            </span>
-          </span>
-        ))}
-      </div>
-      <div className="timeline-track__axis" aria-hidden="true"><span>Today</span><span>+30d</span></div>
-      {markers.length === 0 && <p className="subtle sm">No upgrades in the next 30 days.</p>}
-      <table className="sr-only">
-        <caption>Upgrades in the next 30 days</caption>
-        <thead><tr><th>Server</th><th>Status</th><th>Scheduled</th></tr></thead>
-        <tbody>
-          {markers.map((m) => (
-            <tr key={m.id}><td>{m.label}</td><td>{m.status}</td><td>{m.date ? formatDateLong(m.date) : 'No date'}</td></tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 
