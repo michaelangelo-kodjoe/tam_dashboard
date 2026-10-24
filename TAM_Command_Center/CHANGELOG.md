@@ -2,7 +2,13 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
-## Unreleased 0.2.0-rc2 - B-5/B-6 Overview 30-day timeline (backend-dev-agent)
+## 0.2.0-rc2 (2026-10-24) - Release packaged (deployment-agent, task D-2)
+- Version bump to 0.2.0-rc2 (VERSION.txt, server DEFAULT_VERSION). Schema 3, channel prod in the archive, UNVALIDATED on Windows/Bloomberg. Archive TAM_Command_Center_0.2.0-rc2_win.zip not committed; the rc1 archive is untouched.
+- Gate before build: 739 pytest (server db), 580 Vitest, tsc clean, sql_safety_scan 0; build:api left web/ unchanged. QA-W1..W4 PASS, 0 open Blocker/High.
+- rc1 -> rc2 delta: Overview "Upgrades, Next 30 Days" panel (frontend, replaces server tiles), `upgrades_30d` API key, Operations 'default' target-version display removed, new purple token, removed server tiles (ServerTiles). Everything else is as rc1.
+- Included in rc2: Overview panel (frontend-dev-agent, QA-W4) and the backend item below.
+
+### rc2 backend - B-5/B-6 Overview 30-day timeline (backend-dev-agent)
 - Fix: upgrades shown in Operations were missing from the Overview 30-day widget. New `upgrades_30d` key on the account infrastructure payload (`server/ops/effective.py`, built on `ops/derive.build_row`): Operations-effective upgrades (record override, else quarter date) dated today..today+30, not Completed/Deferred. Nothing is written.
 - Scope narrowed (B-6): `server_upgrades`, `next_upgrade`, account counts and Today are unchanged (saved records only); no `not_in_bams`, no `derived` on Today items. Contract: `docs/04_API_CONTRACT.md` 13.1a.
 - Tests: `server/tests/test_effective_upgrades.py` (5: seeded parity with Operations, saved-only baseline for the rest, no writes, labelling/edges, override/closed).

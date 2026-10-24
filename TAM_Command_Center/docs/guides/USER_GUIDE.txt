@@ -1,13 +1,13 @@
-TAM COMMAND CENTER - SHORT USER GUIDE (0.2.0-rc1)
+TAM COMMAND CENTER - SHORT USER GUIDE (0.2.0-rc2)
 =================================================
 Status: UNVALIDATED. Not tested on Windows or against Bloomberg BLPAPI/TEAM/BSSO.
 This is a short guide, not the full CRM guide (see "Missing" at the end).
 
-*** UPGRADE WARNING (0.2.0-rc1) ***
-  The first start of 0.2.0-rc1 migrates an existing database to schema 3. A
+*** UPGRADE WARNING (0.2.0-rc2) ***
+  The first start of 0.2.0-rc2 migrates an existing database to schema 3. A
   pre-migration backup is taken automatically. An older build CANNOT open the upgraded
   database afterwards. Keep the previous zip to roll back, and take a manual backup
-  (Settings > Data > Create backup) before the first 0.2.0-rc1 start.
+  (Settings > Data > Create backup) before the first 0.2.0-rc2 start.
 
 NEW IN RC6
   - Settings > Audit log: records changes; entries older than 14 days are pruned automatically.
