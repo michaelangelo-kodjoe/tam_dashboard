@@ -8,7 +8,7 @@ import { useQuery } from '../../store/DataContext';
 import type { BamsRow } from '../../bamsTypes';
 import { formatAge } from '../../lib/bams';
 import { cx } from '../../lib/cx';
-import { REFRESH_MS } from '../bams/common';
+import { INFRA_REFRESH_MS } from '../bams/common';
 
 /**
  * Appliances (BAMS) show live status and active alert counts per appliance with an Open in BAMS link (mockup 08);
@@ -19,8 +19,8 @@ export function InfrastructureTab({ clientId }: { clientId: string }) {
   const server = params.get('server')?.trim().toLowerCase() ?? null;
   const rootRef = useRef<HTMLDivElement>(null);
   const match = (name: string) => !!server && name.trim().toLowerCase() === server;
-  const bams = useQuery(`bams-infra:${clientId}`, (d) => d.getBamsState({ account: clientId, include_disabled: true, spark: false, sort: 'appliance' }), { refreshMs: REFRESH_MS });
-  const alerts = useQuery(`bams-infra-alerts:${clientId}`, (d) => d.getBamsAlerts({ status: 'active', account: clientId }), { refreshMs: REFRESH_MS });
+  const bams = useQuery(`bams-infra:${clientId}`, (d) => d.getBamsState({ account: clientId, include_disabled: true, spark: false, sort: 'appliance' }), { refreshMs: INFRA_REFRESH_MS });
+  const alerts = useQuery(`bams-infra-alerts:${clientId}`, (d) => d.getBamsAlerts({ status: 'active', account: clientId }), { refreshMs: INFRA_REFRESH_MS });
 
   const groups = useMemo(() => {
     const by = new Map<string, { object: BamsRow['object']; rows: BamsRow[] }>();

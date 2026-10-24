@@ -127,3 +127,8 @@ New QA tests: `TAM_Command_Center/tests/e2e/test_gate_run4_bams_e2e.py` (43), `t
 
 ## OI (2026-10-24): slow /api/state and /api/bams/state with the Terminal off
 - rc5 caches the Bloomberg reachability probe (10 s) and logs each real probe. Root cause of why the slowness was perceived as new in rc4 is UNPROVEN: the probe code and call sites are identical to the workstation zip; suspected cause is more frequent frontend polling. Verify on the workstation using the new `tam.bams.provider` log line ("Bloomberg reachability probe ... ms") and /api request timings.
+
+## OI (2026-10-24): rc6 performance work (docs/qa/PERF_AUDIT.md)
+- DONE in rc6: #2 server tiles, #4 cold-start probe warm-up, #5 monitor stop, #6 alerts_list, #8 frontend fan-out. Behaviour: cold start with the Terminal up may show "not reachable" for about 1 s until the warm-up probe lands.
+- OPEN/deferred: #1 daily prune write lock; #3 delete backup + integrity_check cost on large DBs (user DB is 40 MB, low risk; revisit if the DB grows beyond 100 MB); #7 trend polling; bump() still refetches every mounted query.
+- rc6 is UNVALIDATED on Windows/Bloomberg; perf gain not measured on the target machine.

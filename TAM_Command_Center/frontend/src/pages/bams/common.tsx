@@ -3,6 +3,8 @@ import { DataSourceError } from '../../data/DataSource';
 import { cx } from '../../lib/cx';
 
 export const REFRESH_MS = 15_000;
+/** Infrastructure tab runs two BAMS queries; at half the rate it costs the same (4/min) as the dashboard's one. */
+export const INFRA_REFRESH_MS = REFRESH_MS * 2;
 
 /** One-line message for toasts and inline errors. */
 export function errText(e: unknown, fallback = 'Something went wrong. Nothing was changed.'): string {

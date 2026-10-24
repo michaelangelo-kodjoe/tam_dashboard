@@ -690,3 +690,41 @@ def test_trend_zoom_downsamples_over_the_cap_keeping_first_and_last(b):
     assert it["points"][0]["t"] == fmt(start) and it["points"][-1]["t"] == fmt(start + dt.timedelta(seconds=2 * 2999))
     ts = [p["t"] for p in it["points"]]
     assert ts == sorted(set(ts))
+
+
+def test_monitor_stop_does_not_join_a_hung_poll_thread(b):
+    """PERF-5: Stop signals and returns; a poll hung on Bloomberg must not hold the request for 5 s."""
+    import threading
+    import time
+    post(b, "/api/bams/monitor/start")
+    hang = threading.Event()
+    t = threading.Thread(target=hang.wait, args=(30,), daemon=True)
+    t.start()
+    b.rt.bams._thread = t
+    t0 = time.monotonic()
+    r = post(b, "/api/bams/monitor/stop")["item"]["monitor"]
+    assert time.monotonic() - t0 < 2 and r["state"] == "stopped" and r["desired_running"] is False
+    assert b.rt.bams.active is False and b.rt.bams._stop.is_set()
+    hang.set()
+
+
+def test_alerts_list_pages_closed_history_in_sql_with_exact_counts(b):
+    cid, o, mid, rid = setup_metric(b, consecutive_updates=1)
+    tick(b, mid, 90)
+    b.ok(f"/api/bams/alert/{events(b)[0]['id']}/close", {})
+    base = [e for e in events(b) if e["status"] == "closed"][0]
+    cols = list(base)
+    for i in range(12):
+        row = dict(base, id=f"clone-{i:02d}", opened_at=f"2026-01-{i + 1:02d}T00:00:00.000Z")
+        b.exec(f"INSERT INTO bams_alert_events ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+               tuple(row[c] for c in cols))
+    j = b.get("/api/bams/alerts", status="all", limit=5).json()
+    assert j["counts"] == {"active": 0, "open": 0, "recovered": 0, "closed": 13}
+    assert len(j["items"]) == 5 and j["next_before"] == j["items"][-1]["event"]["opened_at"]
+    closed = b.get("/api/bams/alerts", status="closed", limit=5).json()
+    opened = [i["event"]["opened_at"] for i in closed["items"]]
+    assert len(opened) == 5 and opened == sorted(opened, reverse=True) and closed["next_before"] == opened[-1]
+    nxt = b.get("/api/bams/alerts", status="closed", limit=5, before=closed["next_before"]).json()
+    assert [i["event"]["opened_at"] for i in nxt["items"]] == sorted(
+        (i["event"]["opened_at"] for i in nxt["items"]), reverse=True) and len(nxt["items"]) == 5
+    assert b.get("/api/bams/alerts", status="closed", limit=5, account="nope").json()["counts"]["closed"] == 0

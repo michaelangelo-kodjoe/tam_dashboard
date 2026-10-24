@@ -270,8 +270,10 @@ def _upg(api, cid, server, status="Scheduled", date="2026-10-24", cur="7.1.4", t
 
 
 def _tiles(api, cid):
-    j = api.get(f"/api/client/{cid}/infrastructure").json()
-    assert j["ok"] is True and isinstance(j["servers"], int)         # frozen count unchanged
+    # The endpoint no longer computes tiles (PERF-2); the builder is exercised directly.
+    with api.rt.db() as conn:
+        j = infra.build_infrastructure(conn, "dev", client_id=cid, server_tiles=True)[cid]
+    assert isinstance(j["servers"], int)                             # frozen count unchanged
     return {t["name"]: t for t in j["server_tiles"]}, j
 
 
@@ -394,7 +396,8 @@ def test_tiles_on_seed_and_state_unchanged(seeded):
     state = seeded.get("/api/state").json()
     seen_spark = seen_null = 0
     for cid in state["infrastructure"]:
-        j = seeded.get(f"/api/client/{cid}/infrastructure").json()
+        with seeded.rt.db() as conn:
+            j = infra.build_infrastructure(conn, "dev", client_id=cid, server_tiles=True)[cid]
         assert len(j["server_tiles"]) == j["servers"]
         for t in j["server_tiles"]:
             if t["spark"]:
@@ -434,3 +437,11 @@ def test_dev_reseed_route_progress_equals_cli_seed(seeded, tmp_path):
     p = seeded.get("/api/today").json()["progress"]
     assert p == _cli_seeded_progress(tmp_path, dt.date.today())
     assert (p["total"], p["done"]) == (27, 8)
+
+
+def test_infrastructure_endpoint_returns_empty_tiles_and_skips_the_work(api):
+    c = api.mk_client("NoTiles")["id"]
+    _, ids = _obj(api, c, "srv-x", metrics=("CPU",))
+    _samples(api, ids["CPU"], 10, 60)
+    j = api.get(f"/api/client/{c}/infrastructure").json()
+    assert j["ok"] is True and j["server_tiles"] == [] and j["servers"] == 1

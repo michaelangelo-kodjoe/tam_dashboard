@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DataSource } from '../data/DataSource';
-import { cacheGet, cacheSet, shareStructure } from '../lib/queryCache';
+import { cacheGet, cacheSet, shareStructure, sharedFetch } from '../lib/queryCache';
 import type { AppState, AccountSummary, Settings } from '../types';
 
 interface DataCtx {
@@ -13,7 +13,13 @@ const Ctx = createContext<DataCtx | null>(null);
 
 export function DataProvider({ ds, children }: { ds: DataSource; children: ReactNode }) {
   const [version, setVersion] = useState(0);
-  const bump = useCallback(() => setVersion((v) => v + 1), []);
+  // Several bump() calls in the same tick (a save that bumps in more than one handler) coalesce into one refetch.
+  const pending = useRef(false);
+  const bump = useCallback(() => {
+    if (pending.current) return;
+    pending.current = true;
+    queueMicrotask(() => { pending.current = false; setVersion((v) => v + 1); });
+  }, []);
   const value = useMemo(() => ({ ds, version, bump }), [ds, version, bump]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -66,7 +72,7 @@ export function useQuery<T>(key: string, fetcher: (ds: DataSource) => Promise<T>
     if (!enabled) return;
     const id = ++seq.current;
     setSt((s) => (s.key === key ? { ...s, inflight: true } : seed(key)));
-    fetcherRef.current(ds).then(
+    sharedFetch(ds, key, version, () => fetcherRef.current(ds)).then(
       (data) => {
         if (id !== seq.current) return;
         const lastOk = new Date();

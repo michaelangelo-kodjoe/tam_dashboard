@@ -387,29 +387,45 @@ def alerts_list(conn: sqlite3.Connection, ctx: Ctx, status: str, account: Option
                 limit: int, before: Optional[str]) -> Dict[str, Any]:
     if status not in ("active", "open", "recovered", "closed", "all"):
         raise _bad("status", "unknown status")
-    sql = ("SELECT e.*, m.metric_name, m.ticker, m.enabled AS m_enabled, o.id AS object_id, o.name AS object_name,"
-           " o.client_id, o.location, o.enabled AS o_enabled, c.name AS client_name FROM bams_alert_events e"
-           " JOIN bams_metrics m ON m.id = e.metric_id JOIN bams_objects o ON o.id = m.object_id"
-           " JOIN clients c ON c.id = o.client_id")
-    rows = [dict(r) for r in conn.execute(sql)]
-    ids = {a for a in (account or "").split(",") if a}
-    rows = [r for r in rows if (not ids or r["client_id"] in ids) and (not metric_id or r["metric_id"] == metric_id)]
-    visible = lambda r: r["status"] == "closed" or (r["m_enabled"] and r["o_enabled"])  # noqa: E731
-    rows = [r for r in rows if visible(r)]
+    base = (" FROM bams_alert_events e JOIN bams_metrics m ON m.id = e.metric_id JOIN bams_objects o ON o.id = m.object_id"
+            " JOIN clients c ON c.id = o.client_id")
+    # Visibility and filters are applied in SQL; closed history is counted with GROUP BY and only one page is read.
+    where = ["(e.status = 'closed' OR (m.enabled = 1 AND o.enabled = 1))"]
+    params: Dict[str, Any] = {}
+    ids = sorted({a for a in (account or "").split(",") if a})
+    if ids:
+        names = [f"a{i}" for i in range(len(ids))]
+        where.append("o.client_id IN (" + ",".join(":" + n for n in names) + ")")
+        params.update(zip(names, ids))
+    if metric_id:
+        where.append("e.metric_id = :metric_id")
+        params["metric_id"] = metric_id
+    flt = " WHERE " + " AND ".join(where)
+    cols = ("SELECT e.*, m.metric_name, m.ticker, m.enabled AS m_enabled, o.id AS object_id, o.name AS object_name,"
+            " o.client_id, o.location, o.enabled AS o_enabled, c.name AS client_name")
     counts = {"active": 0, "open": 0, "recovered": 0, "closed": 0}
-    for r in rows:
-        counts[r["status"]] += 1
-        if r["status"] != "closed":
-            counts["active"] += 1
+    for st, n in conn.execute("SELECT e.status, count(*)" + base + flt + " GROUP BY e.status", params):
+        counts[st] += n
+        if st != "closed":
+            counts["active"] += n
     want = {"active": ("open", "recovered"), "open": ("open",), "recovered": ("recovered",), "closed": ("closed",),
             "all": ("open", "recovered", "closed")}[status]
-    sel = [r for r in rows if r["status"] in want]
-    act = sorted((r for r in sel if r["status"] != "closed"),
-                 key=lambda r: (0 if r["status"] == "open" else 1, -SEV[r["severity"]], r["opened_at"], r["id"]))
-    clo = sorted((r for r in sel if r["status"] == "closed"), key=lambda r: (r["opened_at"], r["id"]), reverse=True)
+    act: List[Dict[str, Any]] = []
+    act_want = [s_ for s_ in want if s_ != "closed"]
+    if act_want and not before:                     # active events are few (open/recovered only), so read them all
+        marks = ",".join(f":w{i}" for i in range(len(act_want)))
+        p = {**params, **{f"w{i}": v for i, v in enumerate(act_want)}}
+        act = sorted((dict(r) for r in conn.execute(cols + base + flt + f" AND e.status IN ({marks})", p)),
+                     key=lambda r: (0 if r["status"] == "open" else 1, -SEV[r["severity"]], r["opened_at"], r["id"]))
+    clo: List[Dict[str, Any]] = []
+    room = limit + 1 - len(act)
+    if "closed" in want and room > 0:
+        q = cols + base + flt + " AND e.status = 'closed'"
+        if before:
+            q += " AND e.opened_at < :before"
+            params["before"] = before
+        clo = [dict(r) for r in conn.execute(q + " ORDER BY e.opened_at DESC, e.id DESC LIMIT :lim", {**params, "lim": room})]
     ordered = act + clo
-    if before:
-        ordered = [r for r in ordered if r["status"] == "closed" and r["opened_at"] < before]
     page = ordered[:limit]
     nxt = page[-1]["opened_at"] if len(ordered) > limit and page else None
     rule_cache: Dict[str, Optional[Dict[str, Any]]] = {}

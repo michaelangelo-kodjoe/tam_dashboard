@@ -69,11 +69,12 @@ class Monitor:
             self._thread = threading.Thread(target=self._loop, name="bams-monitor", daemon=True)
             self._thread.start()
 
-    def deactivate(self) -> None:
+    def deactivate(self, wait: bool = True) -> None:
+        """Stop the loop. wait=False (the Stop route) only signals: a poll hung on Bloomberg must not hold the request."""
         self.active = False
         self._stop.set()
         t = self._thread
-        if t is not None and t is not threading.current_thread():
+        if wait and t is not None and t is not threading.current_thread():
             t.join(timeout=5)
         self._thread = None
 

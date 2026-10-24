@@ -41,14 +41,26 @@ export function parseQuery(sp: URLSearchParams): BamsStateQuery {
   };
 }
 
+/** Server query key: every URL param except `open`, with the (debounced) search text substituted. */
+export function bamsStateKey(sp: URLSearchParams, q: string | undefined): string {
+  const parts = [...sp.entries()].filter(([k]) => k !== 'open' && k !== 'q').map(([k, v]) => `${k}=${v}`);
+  if (q) parts.push(`q=${q}`);
+  return `bams-state:${parts.join('&')}`;
+}
+
 export function DashboardPage() {
   useDocumentTitle('BAMS');
   const { settings } = useApp();
   const { ds, bump } = useData();
   const toast = useToast();
   const [sp, setSp] = useSearchParams();
-  const query = useMemo(() => parseQuery(sp), [sp]);
-  const key = `bams-state:${[...sp.entries()].filter(([k]) => k !== 'open').map(([k, v]) => `${k}=${v}`).join('&')}`;
+  const live = useMemo(() => parseQuery(sp), [sp]);
+  // The search text reaches the server only after it settles (300 ms), so typing does not refetch per keystroke.
+  // Clearing applies immediately. Other filters apply at once.
+  const settledQ = useDebounced(live.q ?? '', 300);
+  const serverQ = live.q ? settledQ || undefined : undefined;
+  const query = useMemo(() => ({ ...live, q: serverQ }), [live, serverQ]);
+  const key = bamsStateKey(sp, serverQ);
   const q = useQuery(key, (d) => d.getBamsState(query), { refreshMs: REFRESH_MS, keepPrevious: true });
   const [dialog, setDialog] = useState<null | { objectId?: string }>(null);
   const [busy, setBusy] = useState(false);
@@ -62,10 +74,10 @@ export function DashboardPage() {
     if (!opts.keepOpen) next.delete('open');
     setSp(next, { replace: true });
   };
-  const [search, setSearch] = useState(query.q ?? '');
+  const [search, setSearch] = useState(live.q ?? '');
   const debounced = useDebounced(search, 250);
-  useEffect(() => { if ((debounced || null) !== (query.q ?? null)) patch({ q: debounced.trim() || null }, { keepOpen: true }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [debounced]);
-  useEffect(() => { setSearch(query.q ?? ''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [query.q]);
+  useEffect(() => { if ((debounced || null) !== (live.q ?? null)) patch({ q: debounced.trim() || null }, { keepOpen: true }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [debounced]);
+  useEffect(() => { setSearch(live.q ?? ''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [live.q]);
 
   const data = q.data;
   const listId = useId();

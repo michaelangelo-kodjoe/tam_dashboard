@@ -65,7 +65,7 @@ def _set_running(rt: Any, want: bool) -> Dict[str, Any]:
                 repo.meta_set(conn, repo.DESIRED_KEY, "1" if want else "0")
                 _audit(conn, "setting", "monitor_started" if want else "monitor_stopped", "bams.monitor", "BAMS monitor",
                        old={"desired_running": old}, new={"desired_running": want})
-            rt.bams.activate() if want else rt.bams.deactivate()
+            rt.bams.activate() if want else rt.bams.deactivate(wait=False)   # PERF-5: never join on the request
         return _ok({"monitor": monitor_block(rt, conn)})
 
 

@@ -217,6 +217,9 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):  # type: ignore[no-untyped-def]
+        warm = getattr(rt.bams.provider, "warm", None)
+        if callable(warm):
+            warm()                                                          # first Bloomberg reachability probe, off-request
         if monitor_thread:
             rt.bams.resume()
             threading.Thread(target=_backup_loop, name="weekly-backup", daemon=True).start()
@@ -444,9 +447,11 @@ def create_app(config: Config, *, acquire_lock: bool = True, clock: Any = None, 
     def infrastructure(client_id: str) -> Dict[str, Any]:
         with rt.db() as conn:
             reads.require_client(conn, client_id)
-            return {"ok": True, **infra.build_infrastructure(conn, config.channel, client_id=client_id,
-                                                             today=rt.today(), server_tiles=True,
-                                                             provider_available=rt.bams.provider.availability()[0])[client_id]}
+            out = infra.build_infrastructure(conn, config.channel, client_id=client_id, today=rt.today(),
+                                             server_tiles=False,
+                                             provider_available=rt.bams.provider.availability()[0])[client_id]
+            # PERF-2: the UI no longer shows server tiles; the key stays (empty) so the contract shape is unchanged.
+            return {"ok": True, **out, "server_tiles": []}
 
     # ------------------------------------------------------------ writes
     @api.post("/client/save")

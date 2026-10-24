@@ -320,6 +320,8 @@ Query: `days` (optional, default and only accepted value **14**; any other value
 `series` has one key per Active account (all accounts with `include_inactive=true`), each an array of exactly `days` non-negative integers, **oldest first**: index 0 is `today - 13`, index 13 is `today`. A point is the number of Activity-timeline entries on that local day (since 2026-10-16: manual notes only, section 18.1). Accounts with no activity return 14 zeros. Deleted notes and objects behave as in the Activity timeline. Executed via `db/queries/activity_trend.sql` unmodified; each of the 15 bucket edges is a separately converted local midnight (DST-exact). Series keys are not ordered; use the account list for order.
 
 ### 9.3 `server_tiles` on `GET /api/client/{id}/infrastructure` (PM-AC-3, D-31)
+**Update (PERF-2, 0.2.0-rc6):** the UI no longer shows server tiles, so the endpoint no longer computes them: `server_tiles` is always `[]` (key kept; `servers` count unchanged). The shape below is historical and still produced by `infra.build_infrastructure(..., server_tiles=True)`.
+
 **Naming note:** PM-AC-3 proposed the key `servers`, but `servers` is already a frozen integer (the distinct server count) on this payload, so the array is published as **`server_tiles`**. `servers` (integer) is unchanged. `/api/state` `infrastructure` does **not** carry `server_tiles` (it stays light, §42); only this per-account endpoint does.
 ```json
 "server_tiles": [

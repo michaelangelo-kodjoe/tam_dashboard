@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import type { DataSource } from '../data/DataSource';
-import { DataProvider, useQuery } from './DataContext';
+import { DataProvider, useData, useQuery } from './DataContext';
 import { cacheGet, shareStructure } from '../lib/queryCache';
 
 function Probe({ k, fetcher, cache }: { k: string; fetcher: () => Promise<{ n: number }>; cache?: boolean }) {
@@ -83,5 +83,61 @@ describe('useQuery keepPrevious', () => {
     await waitFor(() => expect(screen.getByTestId('kp').textContent).toBe('n=1'));
     r.rerender(<DataProvider ds={ds}><Keep k="kp-b" /></DataProvider>);
     expect(screen.getByTestId('kp').textContent).toBe('n=1 refreshing');
+  });
+});
+
+describe('useQuery in-flight dedupe and bump coalescing (PERF-8)', () => {
+  function Two({ k, fetcher }: { k: string; fetcher: () => Promise<{ n: number }> }) {
+    const a = useQuery(k, fetcher, { refreshMs: 1000 });
+    const b = useQuery(k, fetcher);
+    return <div data-testid="o">{a.data?.n ?? '-'}/{b.data?.n ?? '-'}</div>;
+  }
+  it('two callers of one key share a single request', async () => {
+    const fetcher = vi.fn(async () => ({ n: 1 }));
+    render(<DataProvider ds={{} as DataSource}><Two k="dd1" fetcher={fetcher} /></DataProvider>);
+    await waitFor(() => expect(screen.getByTestId('o').textContent).toBe('1/1'));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips poll ticks while the previous request is still in flight, then retries after an error', async () => {
+    vi.useFakeTimers();
+    try {
+      let release!: () => void;
+      const fetcher = vi.fn(() => new Promise<{ n: number }>((r) => { release = () => r({ n: 1 }); }));
+      render(<DataProvider ds={{} as DataSource}><Probe k="dd2" fetcher={fetcher} /></DataProvider>);
+      for (let i = 0; i < 4; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      await act(async () => { release(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      const bad = vi.fn(async () => { throw new Error('x'); });
+      render(<DataProvider ds={{} as DataSource}><Probe k="dd3" fetcher={bad} /></DataProvider>);
+      for (let i = 0; i < 3; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(bad.mock.calls.length).toBeGreaterThanOrEqual(3);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('coalesces bumps in one tick into one refetch and a bump during a request starts a fresh one', async () => {
+    let bumpFn!: () => void;
+    function B() { bumpFn = useData().bump; return null; }
+    const fetcher = vi.fn(async () => ({ n: 1 }));
+    render(<DataProvider ds={{} as DataSource}><B /><Probe k="dd4" fetcher={fetcher} /></DataProvider>);
+    await waitFor(() => expect(screen.getByTestId('o').textContent).toBe('n=1'));
+    await act(async () => { bumpFn(); bumpFn(); bumpFn(); });
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('a slow superseded response cannot overwrite newer data', async () => {
+    const rel: Array<(n: number) => void> = [];
+    const fetcher = vi.fn(() => new Promise<{ n: number }>((r) => { rel.push((n) => r({ n })); }));
+    let bumpFn!: () => void;
+    function B() { bumpFn = useData().bump; return null; }
+    render(<DataProvider ds={{} as DataSource}><B /><Probe k="dd5" fetcher={fetcher} /></DataProvider>);
+    await act(async () => { bumpFn(); });
+    await waitFor(() => expect(rel.length).toBe(2));
+    await act(async () => { rel[1](2); });
+    await act(async () => { rel[0](1); });
+    await waitFor(() => expect(screen.getByTestId('o').textContent).toBe('n=2'));
   });
 });

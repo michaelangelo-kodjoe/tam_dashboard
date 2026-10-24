@@ -138,24 +138,85 @@ def test_prod_never_simulated():
     assert not hasattr(prov, "value_at")
 
 
-def test_real_reachability_probe_is_cached_between_requests(monkeypatch, caplog):
+def test_real_reachability_probe_is_cached_and_refreshed_in_the_background(monkeypatch, caplog):
     """A closed Desktop API port is slow to refuse on Windows; /api/bams/state asks availability several times per request."""
     import socket
+    import threading
+    import time as _t
     calls = []
+    gate = threading.Event()
+    up = {"v": False}
 
-    def refuse(addr, timeout=None):
+    def connect(addr, timeout=None):
         calls.append(timeout)
-        raise OSError("refused")
+        if len(calls) > 1:
+            gate.wait(5)                                 # the background refresh is slow; requests must not wait for it
+        if not up["v"]:
+            raise OSError("refused")
+        import contextlib
+        return contextlib.nullcontext()
 
-    monkeypatch.setattr(socket, "create_connection", refuse)
+    monkeypatch.setattr(socket, "create_connection", connect)
     caplog.set_level("INFO", logger="tam.bams.provider")
     p = BlpapiProvider(blpapi_module=object())
+    p.warm()
+    p._probe_thread and p._probe_thread.join(5)          # the startup warm-up lands off the request path
     for _ in range(5):
         assert p.availability()[0] is False
     assert len(calls) == 1 and calls[0] <= 0.5
-    logs = [r for r in caplog.records if "reachability probe" in r.getMessage()]
-    assert len(logs) == 1 and "unreachable" in logs[0].getMessage() and "cached for 10s" in logs[0].getMessage()
-    p._probe_at -= p.PROBE_TTL_S + 1                    # TTL elapsed -> probe again
-    p.availability()
-    assert len(calls) == 2
-    assert len([r for r in caplog.records if "reachability probe" in r.getMessage()]) == 2
+    msgs = lambda: [r.getMessage() for r in caplog.records if "reachability probe" in r.getMessage()]  # noqa: E731
+    assert len(msgs()) == 1 and "unreachable" in msgs()[0]
+    p._probe_at -= p.PROBE_TTL_S + 1                     # TTL elapsed
+    up["v"] = True
+    t0 = _t.monotonic()
+    assert p.availability()[0] is False                  # stale answer returned at once, refresh runs in the background
+    assert p.availability()[0] is False and _t.monotonic() - t0 < 1
+    gate.set()
+    p._probe_thread and p._probe_thread.join(5)
+    assert len(calls) == 2                               # one refresh only, however many callers
+    assert p.availability()[0] is True
+    assert len(msgs()) == 2 and "reachable" in msgs()[1]
+
+
+def test_cold_availability_never_waits_for_the_first_probe(monkeypatch):
+    """Before warm() finishes, availability() answers 'not reachable yet' at once; the result then lands."""
+    import socket
+    import threading
+    import time as _t
+    gate = threading.Event()
+
+    def connect(addr, timeout=None):
+        gate.wait(5)
+        import contextlib
+        return contextlib.nullcontext()
+
+    monkeypatch.setattr(socket, "create_connection", connect)
+    p = BlpapiProvider(blpapi_module=object())
+    t0 = _t.monotonic()
+    p.warm()
+    p.warm()                                             # idempotent: one probe thread
+    ok, msg = p.availability()
+    assert _t.monotonic() - t0 < 1 and ok is False and "not reachable" in msg
+    gate.set()
+    p._probe_thread and p._probe_thread.join(5)
+    assert p.availability()[0] is True
+
+
+def test_create_app_lifespan_warms_the_provider(tmp_path):
+    from fastapi.testclient import TestClient
+    from server.app import create_app
+    from server.tests.conftest import make_config
+
+    class Prov(P.Provider):
+        warmed = 0
+
+        def warm(self):
+            Prov.warmed += 1
+
+        def availability(self):
+            return False, "x"
+
+    app = create_app(make_config(tmp_path), provider=Prov())
+    with TestClient(app):
+        pass
+    assert Prov.warmed == 1

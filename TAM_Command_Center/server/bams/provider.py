@@ -65,6 +65,7 @@ class BlpapiProvider(Provider):
         self._probe_lock = threading.Lock()
         self._probe_at: Optional[float] = None
         self._probe_ok = False
+        self._probe_thread: Optional[threading.Thread] = None
         self._last: Dict[str, float] = {}        # ticker -> last value seen
         self._changed: Dict[str, _dt.datetime] = {}   # ticker -> when the value last changed (our source_update)
         self.last_problems: Dict[str, str] = {}  # ticker -> reason, for the latest poll (no values logged)
@@ -82,24 +83,47 @@ class BlpapiProvider(Provider):
     def _reachable(self) -> bool:
         if self._probe is not None:
             return bool(self._probe(self.host, self.port))
-        # A closed Desktop API port can cost up to PROBE_TIMEOUT_S per resolved address (localhost = IPv6 then IPv4),
-        # and several requests ask per call, so the real socket probe is cached briefly and shared by concurrent callers.
+        # A closed Desktop API port can cost PROBE_TIMEOUT_S per resolved address (localhost = IPv6 then IPv4) and
+        # several requests ask per call. The first ever call probes inline; afterwards the last answer is returned
+        # immediately and, once older than PROBE_TTL_S, refreshed on a background thread, so no request waits on it.
+        # Before the first result lands (warm() runs at app startup) the answer is "not reachable yet" without waiting.
         with self._probe_lock:
-            now = time.monotonic()
-            if self._probe_at is not None and now - self._probe_at < self.PROBE_TTL_S:
-                return self._probe_ok
-            import socket
-            t0 = time.monotonic()
-            try:
-                with socket.create_connection((self.host, self.port), timeout=self.PROBE_TIMEOUT_S):
-                    ok = True
-            except OSError:
-                ok = False
-            logging.getLogger("tam.bams.provider").info(
-                "Bloomberg reachability probe %s:%s -> %s (%d ms, cached for %ds)", self.host, self.port,
-                "reachable" if ok else "unreachable", int((time.monotonic() - t0) * 1000), int(self.PROBE_TTL_S))
+            if self._probe_at is None or time.monotonic() - self._probe_at >= self.PROBE_TTL_S:
+                self._start_probe_locked()
+            return self._probe_ok
+
+    def warm(self) -> None:
+        """Start the first reachability probe on a daemon thread (app startup); never blocks."""
+        if self._probe is not None:
+            return
+        with self._probe_lock:
+            if self._probe_at is None:
+                self._start_probe_locked()
+
+    def _start_probe_locked(self) -> None:
+        if self._probe_thread is None:
+            self._probe_thread = threading.Thread(target=self._refresh_probe, name="bloomberg-probe", daemon=True)
+            self._probe_thread.start()
+
+    def _refresh_probe(self) -> None:
+        try:
+            ok = self._socket_ok()
             self._probe_ok, self._probe_at = ok, time.monotonic()
-            return ok
+        finally:
+            self._probe_thread = None
+
+    def _socket_ok(self) -> bool:
+        import socket
+        t0 = time.monotonic()
+        try:
+            with socket.create_connection((self.host, self.port), timeout=self.PROBE_TIMEOUT_S):
+                ok = True
+        except OSError:
+            ok = False
+        logging.getLogger("tam.bams.provider").info(
+            "Bloomberg reachability probe %s:%s -> %s (%d ms, refreshed in the background every %ds)", self.host, self.port,
+            "reachable" if ok else "unreachable", int((time.monotonic() - t0) * 1000), int(self.PROBE_TTL_S))
+        return ok
 
     def environment(self) -> Dict[str, Any]:
         """Installed/version/reachability facts (never raises, opens no Bloomberg session)."""

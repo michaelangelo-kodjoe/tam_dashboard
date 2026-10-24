@@ -2,6 +2,9 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## 0.2.0-rc6 (2026-10-24) - Performance fixes (deployment-agent, task D-6)
+- rc6 = rc5 + fixes from docs/qa/PERF_AUDIT.md: #2 infra endpoint no longer computes server tiles (`server_tiles: []`); #4 BlpapiProvider probe cached, refreshed in a background thread, warmed at startup (`provider.warm()` in lifespan), never probes inline; #5 POST monitor/stop returns without joining (`deactivate(wait=False)`); #6 `alerts_list` bounded in SQL; #8 frontend in-flight request dedupe, coalesced bump, skipped overlapping polls, BAMS search key debounce, Infrastructure poll 30 s. web/ rebuilt. Behaviour: on a cold start with the Terminal up, the first request(s) may show "not reachable" for about 1 s until the warm-up probe lands. Deferred: audit #1, #3, #7, and bump() still refetches every mounted query (see OPEN_ITEMS). UNVALIDATED on Windows/Bloomberg. rc1-rc5 archives untouched.
+
 ## 0.2.0-rc5 (2026-10-24) - Cached Bloomberg reachability probe (deployment-agent, task D-5)
 - rc5 = rc4 + `BlpapiProvider._reachable` caches the real socket probe for 10 s behind a lock and the probe timeout drops 1.0 s to 0.5 s. Fixes slow `/api/state` (about 2 s) and `/api/bams/state` (about 8 s, four availability calls) on the Windows workstation with the Terminal off. New INFO log line (logger `tam.bams.provider`) after each real probe: host:port, reachable|unreachable, ms, cache seconds. Test extended (caplog). Frontend unchanged (web/ not rebuilt). UNVALIDATED on Windows/Bloomberg. rc1-rc4 archives untouched.
 
