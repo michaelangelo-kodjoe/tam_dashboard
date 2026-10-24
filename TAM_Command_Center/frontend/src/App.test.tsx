@@ -434,16 +434,17 @@ describe('Accounts and Workspace', () => {
     await waitFor(() => expect(screen.queryByRole('article', { name: /Call with desk head/ })).not.toBeInTheDocument());
   });
 
-  it('Infrastructure tab: BAMS appliance panels with Open in BAMS, upgrade table, ?server= highlights matching rows (US-9.1)', async () => {
+  it('Infrastructure tab: BAMS appliance panels with Open in BAMS, no upgrade table, ?server= highlights the matching appliance (US-9.1)', async () => {
     const ds = newMock();
     const id = (await ds.getState()).accounts.find((a) => a.name.startsWith('Halvorsen'))!.id;
-    await boot(`/accounts/${id}/infrastructure?server=hfa-bpipe-dev-01`, ds);
-    const upgrades = await screen.findByRole('table', { name: 'Server upgrades' });
+    const appliance = (await ds.getBamsState({ account: id, include_disabled: true, spark: false, sort: 'appliance' })).rows[0].object.name;
+    await boot(`/accounts/${id}/infrastructure?server=${encodeURIComponent(appliance)}`, ds);
     expect((await screen.findAllByRole('link', { name: /Open in BAMS/ })).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('table', { name: / metrics$/ }).length).toBeGreaterThan(0);
-    const hi = upgrades.querySelectorAll('tr.is-highlight');
+    expect(screen.queryByRole('table', { name: 'Server upgrades' })).toBeNull();
+    const hi = document.querySelectorAll('.is-highlight');
     expect(hi.length).toBeGreaterThan(0);
-    expect([...hi].every((r) => /hfa-bpipe-dev-01/.test(r.textContent ?? ''))).toBe(true);
+    expect([...hi].every((r) => (r.textContent ?? '').includes(appliance))).toBe(true);
     expect(screen.queryByRole('button', { name: /^(add|edit|new)/i })).toBeNull();
   });
 

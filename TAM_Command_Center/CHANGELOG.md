@@ -2,6 +2,9 @@
 
 All notable changes to the TAM Command Center rebuild. New work goes under **Unreleased** until a DEV release is cut. Nothing moves to a Production section until DEV validation explicitly passes (spec §50).
 
+## 0.2.0-rc4 (2026-10-24) - Infrastructure tab without server upgrades (deployment-agent, task D-4)
+- rc4 = rc3 + the account Infrastructure tab no longer lists the "Server upgrades" table (InfrastructureTab.tsx, WorkspacePage.tsx; tests updated: 579 Vitest). Upgrades remain in Operations and the Overview 30-day panel. web/ rebuilt. Lean package layout as rc3. UNVALIDATED on Windows/Bloomberg. rc1-rc3 archives untouched.
+
 ## 0.2.0-rc3 (2026-10-24) - Lean package (deployment-agent, task D-3)
 - Same application code as rc2; only the packaging changed. The archive no longer ships CHANGELOG.md, TAM_PROJECT_STATE.md, README.txt, VALIDATION.txt or docs/guides (these stay in the repo). Version bump in VERSION.txt and server DEFAULT_VERSION. Header comments in the two launch .bat files and START_HERE.txt now point to VERSION.txt for the validation status (VERSION.txt and BUILD_MANIFEST.txt still state UNVALIDATED on the Bloomberg Windows machine). `tools/build_release.py` and `tools/smoke_release.py` updated. rc1/rc2 archives untouched; rc3 archive not committed.
 

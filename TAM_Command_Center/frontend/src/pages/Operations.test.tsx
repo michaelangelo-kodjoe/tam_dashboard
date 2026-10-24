@@ -148,14 +148,4 @@ describe('Operations page', () => {
     const g = (await ds.getOperations({})).groups[0];
     expect(g.rows.some((x) => x.version.own === '6.6.6')).toBe(true);
   });
-
-  it('the Workspace Infrastructure tab links to Operations filtered by the account name', async () => {
-    const ds = newMock();
-    const d = await ds.getOperations({});
-    const g = d.groups[0];
-    window.history.pushState({}, '', `/accounts/${g.client_id}/infrastructure`);
-    render(<App ds={ds} />);
-    const link = await screen.findByRole('link', { name: /Open in Operations/ });
-    expect(link).toHaveAttribute('href', `/operations?q=${encodeURIComponent(g.client_name)}`);
-  });
 });

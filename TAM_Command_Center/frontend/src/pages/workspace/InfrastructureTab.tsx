@@ -2,12 +2,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ExternalLink, ShieldAlert } from 'lucide-react';
 import { Panel } from '../../components/ui/Panel';
-import { DataTable, cmpStr, type Column } from '../../components/ui/DataTable';
-import { DateCell, StatusBadge as UpgradeBadge } from '../../components/ui/Badges';
 import { EmptyState, ErrorBanner, SkeletonRows } from '../../components/ui/Feedback';
 import { FreshnessBadge, RowStatus, SimulatedBadge, StatusBadge, Value } from '../../components/bams/BamsBits';
-import { useApp, useQuery, type QueryResult } from '../../store/DataContext';
-import type { Infrastructure, ServerUpgrade } from '../../types';
+import { useQuery } from '../../store/DataContext';
 import type { BamsRow } from '../../bamsTypes';
 import { formatAge } from '../../lib/bams';
 import { cx } from '../../lib/cx';
@@ -15,11 +12,9 @@ import { REFRESH_MS } from '../bams/common';
 
 /**
  * Appliances (BAMS) show live status and active alert counts per appliance with an Open in BAMS link (mockup 08);
- * upgrades stay read-only here (Operations owns them). `?server=` highlights and scrolls to a matching appliance or upgrade.
+ * upgrades are not listed here (Operations owns them; the Overview shows the next 30 days). `?server=` highlights and scrolls to a matching appliance.
  */
-export function InfrastructureTab({ q, clientId }: { q: QueryResult<Infrastructure>; clientId: string }) {
-  const { today, accountById } = useApp();
-  const accountName = accountById(clientId)?.name ?? '';
+export function InfrastructureTab({ clientId }: { clientId: string }) {
   const [params] = useSearchParams();
   const server = params.get('server')?.trim().toLowerCase() ?? null;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -37,19 +32,10 @@ export function InfrastructureTab({ q, clientId }: { q: QueryResult<Infrastructu
   }, [bams.data]);
 
   useEffect(() => {
-    if (!server || !(q.data || bams.data)) return;
+    if (!server || !bams.data) return;
     rootRef.current?.querySelector<HTMLElement>('.is-highlight')?.scrollIntoView({ block: 'center' });
-  }, [q.data, bams.data, server]);
+  }, [bams.data, server]);
 
-  const upCols: Column<ServerUpgrade>[] = [
-    { key: 'server', header: 'Server', sort: (a, b) => cmpStr(a.server_name, b.server_name), cell: (u) => <span className="mono">{u.server_name}</span> },
-    { key: 'env', header: 'Environment', cell: (u) => `${u.environment} · ${u.polarity}` },
-    { key: 'version', header: 'Version', mono: true, cell: (u) => `${u.current_version ?? '?'} → ${u.target_version ?? '?'}` },
-    { key: 'date', header: 'Scheduled', align: 'right', sort: (a, b) => cmpStr(a.scheduled_date, b.scheduled_date), cell: (u) => <DateCell date={u.scheduled_date} today={today} kind="plain" /> },
-    { key: 'status', header: 'Status', cell: (u) => <UpgradeBadge value={u.status} /> },
-    { key: 'validation', header: 'Validation', cell: (u) => <UpgradeBadge value={u.validation_status} /> },
-    { key: 'waiting', header: 'Waiting on', cell: (u) => u.waiting_on ?? <span className="subtle">-</span> },
-  ];
   const ac = alerts.data?.counts;
 
   return (
@@ -106,13 +92,6 @@ export function InfrastructureTab({ q, clientId }: { q: QueryResult<Infrastructu
           </Panel>
         );
       })}
-      {q.loading && <SkeletonRows rows={3} label="Loading upgrades" />}
-      {q.error ? <ErrorBanner error={q.error} onRetry={q.reload} title="Could not load infrastructure" /> : null}
-      {q.data && (
-        <Panel title="Server upgrades" count={q.data.upgrades.length} actions={<Link to={`/operations?q=${encodeURIComponent(accountName)}`} className="btn btn--ghost btn--sm"><span className="btn__label">Open in Operations</span><span className="btn__icon"><ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" /></span></Link>}>
-          <DataTable caption="Server upgrades" columns={upCols} rows={q.data.upgrades} rowKey={(u) => u.id} highlight={(u) => match(u.server_name)} empty={<EmptyState>No server upgrade records for this account.</EmptyState>} defaultSort={{ key: 'date', dir: 'desc' }} />
-        </Panel>
-      )}
     </div>
   );
 }
